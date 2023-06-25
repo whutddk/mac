@@ -67,7 +67,7 @@ abstract class MacTxBase extends Module{
 
   val UnderRun              = Wire(Bool())
   val TooBig                = Wire(Bool())
-  val Crc                   = Wire(UInt(32.W))
+
   val CrcError              = Wire(Bool())
 
 
@@ -99,7 +99,7 @@ abstract class MacTxBase extends Module{
   val NibCntEq7  = NibCnt === 7.U
   val NibCntEq15 = NibCnt === 15.U
 
-  val RetryCnt = RegInit(0.U(4.W))
+  val RetryCnt = RegInit(0.U(4.W)); io.RetryCnt := RetryCnt
 }
 
 
@@ -107,7 +107,7 @@ abstract class MacTxBase extends Module{
 trait MacTxFSM { this: MacTxBase =>
 
   // Defining the next state
-  io.StartIPG := StateDefer & ~ExcessiveDefer & ~io.CarrierSense
+  StartIPG := StateDefer & ~ExcessiveDefer & ~io.CarrierSense
 
   val StartIdle = StateIPG & (Rule1 & NibCnt(6,0) >= io.IPGT | ~Rule1 & NibCnt(6,0) >= io.IPGR2)
 
@@ -118,26 +118,29 @@ trait MacTxFSM { this: MacTxBase =>
 
   val StartPAD = ~io.Collision & StateData(1) & io.TxEndFrm & io.Pad & ~NibbleMinFl
 
-  val StartFCS = ~io.Collision & StateData(1) & io.TxEndFrm & (~io.Pad | io.Pad & NibbleMinFl) & io.CrcEn
-                  | ~io.Collision & StatePAD & NibbleMinFl & io.CrcEn
+  StartFCS :=
+    (~io.Collision & StateData(1) & io.TxEndFrm & (~io.Pad | io.Pad & NibbleMinFl) & io.CrcEn) |
+    (~io.Collision & StatePAD & NibbleMinFl & io.CrcEn)
 
   StartJam := (io.Collision | UnderRun) & ((StatePreamble & NibCntEq15) | (StateData(1) | StateData(0)) | StatePAD | StateFCS)
 
   StartBackoff := StateJam & ~RandomEq0 & ColWindow & ~RetryMax & NibCntEq7 & ~io.NoBckof
 
-  StartDefer := StateIPG & ~Rule1 & io.CarrierSense & NibCnt(6,0) <= io.IPGR1 & NibCnt(6,0) =/= io.IPGR2
-                    | StateIdle & io.CarrierSense 
-                    | StateJam & NibCntEq7 & (io.NoBckof | RandomEq0 | ~ColWindow | RetryMax)
-                    | StateBackOff & (io.TxUnderRun | RandomEqByteCnt)
-                    | io.StartTxDone | TooBig;
+  StartDefer :=
+    (StateIPG & ~Rule1 & io.CarrierSense & NibCnt(6,0) <= io.IPGR1 & NibCnt(6,0) =/= io.IPGR2) |
+    (StateIdle & io.CarrierSense) |
+    (StateJam & NibCntEq7 & (io.NoBckof | RandomEq0 | ~ColWindow | RetryMax)) |
+    (StateBackOff & (io.TxUnderRun | RandomEqByteCnt)) |
+    io.StartTxDone |
+    TooBig
 
-  io.DeferIndication := StateIdle & io.CarrierSense;
+  io.DeferIndication := StateIdle & io.CarrierSense
 
 
 
   when(StartDefer | StartIdle){
     StateIPG := false.B
-  }.elsewhen(io.StartIPG){
+  }.elsewhen(StartIPG){
     StateIPG := true.B
   }
 
@@ -177,7 +180,7 @@ trait MacTxFSM { this: MacTxBase =>
     StateBackOff := true.B
   }
 
-  when(io.StartIPG){
+  when(StartIPG){
     StateDefer := false.B
   } .elsewhen(StartDefer){
     StateDefer := true.B
@@ -208,7 +211,7 @@ trait MacTxCounter { this: MacTxBase =>
     (StateDefer & ExcessiveDefer & ~io.TxStartFrm) |
     (StatePreamble & NibCntEq15) |
     (StateJam & NibCntEq7) |
-    StateIdle | StartDefer | io.StartIPG | StartFCS | StartJam
+    StateIdle | StartDefer | StartIPG | StartFCS | StartJam
 
 
   when(ResetNibCnt){
@@ -217,7 +220,7 @@ trait MacTxCounter { this: MacTxBase =>
     NibCnt := NibCnt + 1.U
   }
 
-  NibbleMinFl := NibCnt >= (((MinFL-4.U)<<1) - 1.U)  // FCS should not be included in NibbleMinFl
+  NibbleMinFl := NibCnt >= (((io.MinFL-4.U)<<1) - 1.U)  // FCS should not be included in NibbleMinFl
 
   ExcessiveDefer := NibCnt(13,0) === "h17b7".U & ~io.ExDfrEn;   // 6071 nibbles
 
@@ -258,10 +261,12 @@ trait MacTxCRC{ this: MacTxBase =>
 
   val Data_Crc = 
     Mux1H(Seq(
-      StateData(0) -> Cat( TxData(3), TxData(2), TxData(1), TxData(0) ),
-      StateData(1) -> Cat( TxData(7), TxData(6), TxData(5), TxData(4) ),
+      StateData(0) -> Cat( io.TxData(0), io.TxData(1), io.TxData(2), io.TxData(3) ),
+      StateData(1) -> Cat( io.TxData(4), io.TxData(5), io.TxData(6), io.TxData(7) ),
     ))
 
+  val Crc = RegInit("hFFFFFFFF".U(32.W))
+  
   when( Initialize_Crc ){
     Crc := "hFFFFFFFF".U
   } .otherwise{
@@ -337,25 +342,25 @@ trait MacTxRandom{ this: MacTxBase =>
 }
 
 class MacTx extends MacTxBase with MacTxFSM with MacTxCounter with MacTxCRC with MacTxRandom{
-  val MTxD = RegInit(UInt(4.W)); io.MTxD := MTxD
+  val MTxD = RegInit(0.U(4.W)); io.MTxD := MTxD
   val StopExcessiveDeferOccured = RegInit(false.B)
 
   val StatusLatch = RegInit(false.B)
-  val TxUsedData  = RegNext(StartData.orR, false.B)
-  val TxDone = RegInit(false.B)
-  val TxRetry = RegInit(false.B)
-  val TxAbort = RegInit(false.B)
+  val TxUsedData  = RegNext(StartData(0) | StartData(1), false.B); io.TxUsedData := TxUsedData
+  val TxDone = RegInit(false.B); io.TxDone := TxDone
+  val TxRetry = RegInit(false.B); io.TxRetry := TxRetry
+  val TxAbort = RegInit(false.B); io.TxAbort := TxAbort
 
   val MTxEn = RegNext(StatePreamble | (StateData(0) | StateData(1)) | StatePAD | StateFCS | StateJam, false.B); io.MTxEn := MTxEn
-  val MTxErr = RegNext( TooBig | UnderRun, false.B) // Transmit error
+  val MTxErr = RegNext( TooBig | UnderRun, false.B); io.MTxErr := MTxErr// Transmit error
 
-  val WillTransmit = RegNext(StartPreamble | StatePreamble | (StateData(0) | StateData(1)) | StatePAD | StateFCS | StateJam, false.B) // WillTransmit
+  val WillTransmit = RegNext(StartPreamble | StatePreamble | (StateData(0) | StateData(1)) | StatePAD | StateFCS | StateJam, false.B); io.WillTransmit := WillTransmit// WillTransmit
 
 
 
   io.ResetCollision := ~(StatePreamble | (StateData(0) | StateData(1)) | StatePAD | StateFCS)
   val ExcessiveDeferOccured = io.TxStartFrm & StateDefer & ExcessiveDefer & ~StopExcessiveDeferOccured
-  io.StartTxDone = ~io.Collision & (StateFCS & NibCntEq7 | StateData(1) & io.TxEndFrm & (~io.Pad | io.Pad & NibbleMinFl) & ~io.CrcEn)
+  io.StartTxDone := ~io.Collision & (StateFCS & NibCntEq7 | StateData(1) & io.TxEndFrm & (~io.Pad | io.Pad & NibbleMinFl) & ~io.CrcEn)
   UnderRun := StateData(0) & io.TxUnderRun & ~io.Collision
   TooBig := ~io.Collision & MaxFrame & (StateData(0) & ~io.TxUnderRun | StateFCS);
   val StartTxRetry = StartJam & (ColWindow & ~RetryMax) & ~UnderRun;
@@ -424,8 +429,8 @@ class MacTx extends MacTxBase with MacTxFSM with MacTxCounter with MacTxCRC with
   when( true.B ){
     MTxD := // Transmit nibble
       Mux(
-        StateData(0), TxData(3,0),     // Lower nibble
-        Mux(StateData(1), TxData(7,4), // Higher nibble
+        StateData(0), io.TxData(3,0),     // Lower nibble
+        Mux(StateData(1), io.TxData(7,4), // Higher nibble
           Mux( StateFCS, Cat(~Crc.extract(28), ~Crc.extract(29), ~Crc.extract(30), ~Crc.extract(31)), // Crc
             Mux(StateJam, 9.U, // Jam pattern
               Mux(
