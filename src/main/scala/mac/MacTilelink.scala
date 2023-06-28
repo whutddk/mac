@@ -1,0 +1,1634 @@
+package MAC
+
+import chisel3._
+import chisel3.util._
+
+
+class MacTileLinkIO extends Bundle{
+
+// WISHBONE common
+val WB_DAT_I = Input(UInt(32.W))       // WISHBONE data input
+
+val WB_DAT_O = Output(UInt(32.W))       // WISHBONE data output
+
+// WISHBONE slave
+val WB_ADR_I = Input(UInt(8.W))       // WISHBONE address input
+val WB_WE_I  = Input(Bool())        // WISHBONE write enable input
+val BDCs     = Input(UInt(4.W))          // Buffer descriptors are selected
+val WB_ACK_O = Output(Bool())       // WISHBONE acknowledge output
+
+// WISHBONE master
+output  [29:0]  m_wb_adr_o;     // 
+output   [3:0]  m_wb_sel_o;     // 
+output          m_wb_we_o;      // 
+output  [31:0]  m_wb_dat_o;     // 
+output          m_wb_cyc_o;     // 
+output          m_wb_stb_o;     // 
+input   [31:0]  m_wb_dat_i;     // 
+input           m_wb_ack_i;     // 
+input           m_wb_err_i;     // 
+
+output   [2:0]  m_wb_cti_o;     // Cycle Type Identifier
+output   [1:0]  m_wb_bte_o;     // Burst Type Extension
+
+
+
+// Rx Status signals
+input           InvalidSymbol;    // Invalid symbol was received during reception in 100 Mbps mode
+input           LatchedCrcError;  // CRC error
+input           RxLateCollision;  // Late collision occured while receiving frame
+input           ShortFrame;       // Frame shorter then the minimum size
+                                  // (r_MinFL) was received while small
+                                  // packets are enabled (r_RecSmall)
+input           DribbleNibble;    // Extra nibble received
+input           ReceivedPacketTooBig;// Received packet is bigger than r_MaxFL
+input    [15:0] RxLength;         // Length of the incoming frame
+input           LoadRxStatus;     // Rx status was loaded
+input           ReceivedPacketGood;  // Received packet's length and CRC are
+                                     // good
+input           AddressMiss;      // When a packet is received AddressMiss
+                                  // status is written to the Rx BD
+input           r_RxFlow;
+input           r_PassAll;
+input           ReceivedPauseFrm;
+
+// Tx Status signals
+input     [3:0] RetryCntLatched;  // Latched Retry Counter
+input           RetryLimit;       // Retry limit reached (Retry Max value +1
+                                  // attempts were made)
+input           LateCollLatched;  // Late collision occured
+input           DeferLatched;     // Defer indication (Frame was defered
+                                  // before sucessfully sent)
+output          RstDeferLatched;
+input           CarrierSenseLost; // Carrier Sense was lost during the
+                                  // frame transmission
+
+// Tx
+input           MTxClk;         // Transmit clock (from PHY)
+input           TxUsedData;     // Transmit packet used data
+input           TxRetry;        // Transmit packet retry
+input           TxAbort;        // Transmit packet abort
+input           TxDone;         // Transmission ended
+output          TxStartFrm;     // Transmit packet start frame
+output          TxEndFrm;       // Transmit packet end frame
+output  [7:0]   TxData;         // Transmit packet data byte
+output          TxUnderRun;     // Transmit packet under-run
+output          PerPacketCrcEn; // Per packet crc enable
+output          PerPacketPad;   // Per packet pading
+
+// Rx
+input           MRxClk;         // Receive clock (from PHY)
+input   [7:0]   RxData;         // Received data byte (from PHY)
+input           RxValid;        // 
+input           RxStartFrm;     // 
+input           RxEndFrm;       // 
+input           RxAbort;        // This signal is set when address doesn't
+                                // match.
+output          RxStatusWriteLatched_sync2;
+
+//Register
+input           r_TxEn;         // Transmit enable
+input           r_RxEn;         // Receive enable
+input   [7:0]   r_TxBDNum;      // Receive buffer descriptor number
+
+  // Interrupts
+  val TxB_IRQ  = Output(Bool())
+  val TxE_IRQ  = Output(Bool())
+  val RxB_IRQ  = Output(Bool())
+  val RxE_IRQ  = Output(Bool())
+  val Busy_IRQ = Output(Bool())
+}
+
+
+class MacTileLinkBase extends Module{
+
+
+
+val TxB_IRQ = RegInit(false.B); io.TxB_IRQ := TxB_IRQ
+val TxE_IRQ = RegInit(false.B); io.TxE_IRQ := TxE_IRQ
+val RxB_IRQ = RegInit(false.B); io.RxB_IRQ := RxB_IRQ
+val RxE_IRQ = RegInit(false.B); io.RxE_IRQ := RxE_IRQ
+
+val TxStartFrm = Reg(Bool());   io.TxStartFrm := TxStartFrm
+val TxEndFrm   = Reg(Bool());   io.TxEndFrm   := TxEndFrm
+val TxData     = Reg(UInt(8.W)) io.TxData := TxData
+
+val TxUnderRun = Reg(Bool()); io.TxUnderRun := TxUnderRun
+val TxUnderRun_wb RegInit(false.B)
+
+  val TxBDRead = RegInit(true.B)
+  val TxStatusWrite = Wire(Bool())
+
+
+val  TxValidBytesLatched = RegInit(0.U(2.W))
+
+val TxLength = RegInit(0.U(16.W))
+val LatchedTxLength = RegInit(0.U(16.W))
+val TxStatus = RegInit(0.U(4.W)) //[14:11]
+
+val RxStatus = RegInit(0.U(2.W)) //[14:13]
+
+  // Synchronizing TxRetry signal (synchronized to WISHBONE clock)
+  // Synchronized TxDone_wb signal (synchronized to WISHBONE clock)
+  // Synchronizing TxAbort signal (synchronized to WISHBONE clock)
+  val TxRetrySync1 = RegNext(io.TxRetry, false.B)
+  val TxAbortSync1 = RegNext(io.TxAbort false.B)
+  val TxDoneSync1  = RegNext(io.TxDone, false.B)
+
+  val TxStartFrm_wb = RegInit(false.B)
+  val TxRetry_wb = RegNext(TxRetrySync1, false.B)
+  val TxAbort_wb = RegNext(TxAbortSync1, false.B)
+  val TxDone_wb  = RegNext(TxDoneSync1,  false.B)
+
+  // Generating delayed signals
+  val TxDone_wb_q  = RegNext(TxDone_wb,  false.B)
+  val TxAbort_wb_q = RegNext(TxAbort_wb, false.B)
+  val TxRetry_wb_q = RegNext(TxRetry_wb, false.B)
+  val TxRetryPacket = RegInit(false.B)
+  val TxRetryPacket_NotCleared = RegInit(false.B)
+  val TxDonePacket = RegInit(false.B)
+  val TxDonePacket_NotCleared = RegInit(false.B)
+  val  TxAbortPacket = RegInit(false.B)
+  val TxAbortPacket_NotCleared = RegInit(false.B)
+  val RxBDReady = RegInit(false.B)
+  val RxReady = RegInit(false.B)
+  val TxBDReady = RegInit(false.B)
+
+  val RxBDRead = RegInit(false.B)
+
+  val TxDataLatched = Reg(UInt(32.W))
+  val TxByteCnt = Reg(UInt(2.W))
+  val LastWord = Reg(Bool())
+  val ReadTxDataFromFifo_tck = Reg(Bool())
+
+  val BlockingTxStatusWrite = RegInit(false.B)
+  val BlockingTxBDRead = RegInit(false.B)
+
+  val Flop = Reg(Bool())
+
+  val RxBDAddress = RegInit(0.U(7.W))   //[7:1]
+  val TxBDAddress = RegInit(0.U(7.W))   //[7:1]
+
+
+
+  val TxAbort_q    = Reg(Bool())
+  val TxRetry_q    = Reg(Bool())
+  val TxUsedData_q = Reg(Bool())
+
+  val RxDataLatched2 = Reg(UInt(32.W))
+
+  val RxDataLatched1 = Reg(UInt(24.W))     // Big Endian Byte Ordering[31:8] 
+
+  val RxValidBytes = Reg(UInt(2.W))
+  val RxByteCnt    = Reg(UInt(2.W))
+  val LastByteIn   = Reg(Bool())
+  val ShiftWillEnd = Reg(Bool())
+
+  val WriteRxDataToFifo = Reg(Bool())
+  val LatchedRxLength = Reg(UInt(16.W))
+  val RxAbortLatched = Reg(Bool())
+
+  val ShiftEnded = RegInit(false.B)
+  val RxOverrun  = RegInit(false.B)
+
+  val BDWrite = RegInit(0.U(4.W))                  // BD Write Enable for access from WISHBONE side
+  val BDRead  = RegInit(false.B)                     // BD Read access from WISHBONE side
+  val RxBDDataIn = Wire(UInt(32.W))   // Rx BD data in
+  val TxBDDataIn = Wire(UInt(32.W))   // Tx BD data in
+
+  val TxEndFrm_wb = RegInit(false.B)
+
+  val TxRetryPulse = Wire(Bool())
+  val TxDonePulse  = Wire(Bool())
+  val TxAbortPulse = Wire(Bool())
+
+  val StartRxBDRead Wire(Bool())
+
+  val StartTxBDRead = Wire(Bool())
+
+  val TxIRQEn = Wire(Bool())
+  val WrapTxStatusBit = Wire(Bool())
+
+  val RxIRQEn = Wire(Bool())
+  val WrapRxStatusBit = Wire(Bool())
+
+  val TxValidBytes = Wire(UInt(2.W))
+
+  val TempTxBDAddress = Wire(UInt(7.W)) //[7:1]
+  val TempRxBDAddress = Wire(UInt(7.W)) //[7:1]
+
+  val RxStatusWrite = Wire(Bool())
+  val RxBufferFull = Wire(Bool())
+  val RxBufferAlmostEmpty = Wire(Bool())
+  val RxBufferEmpty = Wire(Bool())
+
+  val WB_ACK_O = Reg(Bool())
+
+val RxStatusIn = Wire(UInt(9.W))
+val RxStatusInLatched = Reg(UInt(9.W))
+
+  // Delayed stage signals
+  val WbEn    = RegInit(true.B)
+  val WbEn_q  = RegNext(WbEn, false.B)
+  val RxEn   = RegInit(false.B)
+  val RxEn_q = RegNext(RxEn, false.B)
+  val TxEn   = RegInit(false.B)
+  val TxEn_q = RegNext(TxEn, false.B)
+  val r_TxEn_q = RegNext(io.r_TxEn, false.B) 
+  val r_RxEn_q = RegNext(io.r_RxEn, false.B)
+
+  val ram_ce = true.B
+  val ram_we = Wire(UInt(4.W))
+  val ram_oe = Wire(Bool())
+  val ram_addr = RegInit(0.U(8.W))
+  val ram_di = RegInit(0.U(32.W))
+  val ram_do = Wire(UInt(32.W))
+
+  val StartTxPointerRead = Wire(Bool())
+  val TxPointerRead = RegInit(false.B)
+  val TxEn_needed = RegInit(false.B)
+  val RxEn_needed = RegInit(false.B)
+
+val StartRxPointerRead = Wire(Bool())
+val RxPointerRead = RegInit(false.B)
+
+// RX shift ending signals
+val ShiftEnded_rck = Reg(Bool)
+val ShiftEndedSync1 = RegNext( ShiftEnded_rck, false.B)
+val ShiftEndedSync2 = RegNext( ShiftEndedSync1, false.B)
+val ShiftEndedSync3 = RegInit(false.B)
+val ShiftEndedSync_c1 = Reg(Bool())
+val ShiftEndedSync_c2 = Reg(Bool())
+
+val StartShiftWillEnd = Wire(Bool())
+
+val StartOccured      = RegInit(false.B)
+val TxStartFrm_sync1  = Reg(Bool())
+val TxStartFrm_sync2  = Reg(Bool())
+val TxStartFrm_syncb1 = RegInit(false.B)
+val TxStartFrm_syncb2 = RegInit(false.B)
+
+val TxFifoClear = Wire(Bool())
+val TxBufferAlmostFull = Wire(Bool())
+val TxBufferFull  = Wire(Bool())
+val TxBufferEmpty = Wire(Bool())
+val TxBufferAlmostEmpty = Wire(Bool())
+val SetReadTxDataFromMemory = Wire(Bool())
+val BlockReadTxDataFromMemory = RegInit(false.B)
+
+val tx_burst_en = RegInit(true.B)
+val rx_burst_en = RegInit(false.B)
+val tx_burst_cnt = RegInit(0.U(3.W))
+
+val ReadTxDataFromMemory_2 = Wire(Bool())
+val tx_burst = Wire(Bool())
+val m_wb_cti_o = RegInit(0.U(3.W)); io.m_wb_cti_o := m_wb_cti_o    // Cycle Type Identifier
+
+val TxData_wb = Wire(UInt(32.W))
+val ReadTxDataFromFifo_wb = Wire(Bool())
+
+val txfifo_cnt = Wire(UInt(5.W))
+val rxfifo_cnt = Wire(UInt(5.W))
+
+val rx_burst_cnt = RegInit(0.U(3.W))
+
+val rx_burst = Wire(Bool())
+val enough_data_in_rxfifo_for_burst = Wire(Bool())
+val enough_data_in_rxfifo_for_burst_plus1 = Wire(Bool())
+
+val ReadTxDataFromMemory = RegInit(false.B)
+val WriteRxDataToMemory = Wire(Bool())
+
+val MasterWbTX = RegInit(false.B)
+val MasterWbRX = RegInit(false.B)
+
+val m_wb_adr_o = RegInit(0.U(30.W))
+val m_wb_cyc_o = RegInit(false.B)
+val m_wb_sel_o = RegInit(0.U(4.W))
+val m_wb_we_o  = RegInit(false.B)
+
+val TxLengthEq0 = Wire(Bool())
+val TxLengthLt4 = Wire(Bool())
+
+val BlockingIncrementTxPointer = RegInit(false.B)
+val TxPointerMSB = RegInit(0.U(30.W)) //[31:2]
+val TxPointerLSB = RegInit(0.U(2.W))
+val TxPointerLSB_rst = RegInit(0.U(2.W))
+val RxPointerMSB = RegInit(0.U(30.W)) //[31:2]
+val RxPointerLSB_rst = RegInit(0.U(2.W))
+
+
+
+
+val ResetTxBDReady = Wire(Bool())
+val BlockingTxStatusWrite_sync1 = Reg(Bool())
+val BlockingTxStatusWrite_sync2 = Reg(Bool())
+val BlockingTxStatusWrite_sync3 = Reg(Bool())
+
+val cyc_cleared = RegInit(false.B)
+val IncrTxPointer = RegInit(false.B)
+
+val RxByteSel = Wire(UInt(4.W))
+val MasterAccessFinished = Wire(Bool())
+
+val LatchValidBytes   = RegInit(false.B)
+val LatchValidBytes_q = RegNext(LatchValidBytes, false.B)
+
+// Start: Generation of the ReadTxDataFromFifo_tck signal and synchronization to the WB_CLK_I
+// Synchronizing TxStartFrm_wb to MTxClk
+val ReadTxDataFromFifo_sync1 = RegNext(ReadTxDataFromFifo_tck, false.B)
+val ReadTxDataFromFifo_sync2 = RegNext(ReadTxDataFromFifo_sync1, false.B)
+val ReadTxDataFromFifo_sync3 = RegNext(ReadTxDataFromFifo_sync2, false.B)
+val ReadTxDataFromFifo_syncb1 = Reg(Bool())
+val ReadTxDataFromFifo_syncb2 = Reg(Bool())
+val ReadTxDataFromFifo_syncb3 = Reg(Bool())
+
+val RxAbortSync1 = RegNext( RxAbortLatched, false.B )
+val RxAbortSync2 = RegNext( RxAbortSync1, false.B )
+val RxAbortSync3 = RegNext( RxAbortSync2, false.B )
+val RxAbortSync4 = RegNext( RxAbortSync3, false.B )
+val RxAbortSyncb1 = Reg(Bool())
+val RxAbortSyncb2 = Reg(Bool())
+
+val RxEnableWindow = Reg(Bool)
+
+val SetWriteRxDataToFifo = Wire(Bool())
+
+val WriteRxDataToFifoSync1 = RegNext( WriteRxDataToFifo, false.B)
+val WriteRxDataToFifoSync2 = RegNext( WriteRxDataToFifoSync1, false.B)
+val WriteRxDataToFifoSync3 = RegNext( WriteRxDataToFifoSync2, false.B)
+
+val WriteRxDataToFifo_wb = Wire(Bool())
+
+val LatchedRxStartFrm = Reg(Bool())
+val SyncRxStartFrm    = RegNext( LatchedRxStartFrm, false.B)
+val SyncRxStartFrm_q  = RegNext( SyncRxStartFrm, false.B)
+val SyncRxStartFrm_q2 = RegNext( SyncRxStartFrm_q, false.B)
+val RxFifoReset = Wire(Bool())
+
+val TxError = Wire(Bool())
+val RxError = Wire(Bool())
+
+val RxStatusWriteLatched = RegInit(false.B)
+val RxStatusWriteLatched_sync1 = Reg(Bool())
+val RxStatusWriteLatched_sync2 = Reg(Bool())
+val RxStatusWriteLatched_syncb1 = RegNext(RxStatusWriteLatched_sync2, false.B)
+val RxStatusWriteLatched_syncb2 = RegNext(RxStatusWriteLatched_syncb1, false.B)
+
+
+io.m_wb_bte_o := "b00".U    // Linear burst
+io.m_wb_stb_o := m_wb_cyc_o
+
+  when(true.B){
+    io.WB_ACK_O := (BDWrite.orR & WbEn & WbEn_q) | (BDRead & WbEn & ~WbEn_q)
+  }
+
+
+
+  io.WB_DAT_O := ram_do
+
+  // Generic synchronous single-port RAM interface
+  val mem = SyncReadMem( 256, Vec( 4, UInt(8.W) ) )  // Generic synchronous single-port RAM interface
+
+  val data_i = Wire( Vec( 4, UInt(8.W) ) )
+  val mask   = Wire( Vec( 4, Bool() ) )
+
+  for ( i <- 0 until 4 ) data_i(i) := ram_di(8*i+7, 8*i) 
+  for ( i <- 0 until 4 ) mask(i) := ram_we(i).asBool
+
+
+  when( ram_ce ) {
+    mem.write( ram_addr, data_i, mask )
+  }
+  when( ram_ce & ram_oe ){
+    ram_do := mem.read(ram_addr)
+  } .otherwise{
+    ram_do := DontCare
+  }
+
+  ram_we :=
+    (BDWrite & Fill(4,(WbEn & WbEn_q)) ) |
+    Fill(4, (TxStatusWrite | RxStatusWrite) )
+
+  ram_oe :=
+    (BDRead & WbEn & WbEn_q) |
+    (TxEn & TxEn_q & (TxBDRead | TxPointerRead)) |
+    (RxEn & RxEn_q & (RxBDRead | RxPointerRead))
+
+
+  when(~TxBDReady & io.r_TxEn & WbEn & ~WbEn_q){
+    TxEn_needed := true.B
+  } .elsewhen(TxPointerRead & TxEn & TxEn_q){
+    TxEn_needed := false.B
+  }
+
+  
+
+  // Enabling access to the RAM for three devices.
+  val RAMAccessEnable = 
+    Cat(WbEn_q, RxEn_q, TxEn_q, RxEn_needed, TxEn_needed)
+
+    // Switching between three stages depends on enable signals
+    when( RAMAccessEnable === "b10010".U | RAMAccessEnable === "b10011".U ){  // synopsys parallel_case
+      WbEn := false.B
+      RxEn := true.B  // wb access stage and r_RxEn is enabled
+      TxEn := false.B
+      ram_addr := Cat(RxBDAddress, RxPointerRead)
+      ram_di := RxBDDataIn
+    } .elsewhen( RAMAccessEnable === "b10001".U ){
+      WbEn := false.B
+      RxEn := false.B
+      TxEn := true.B  // wb access stage, r_RxEn is disabled but r_TxEn is enabled
+      ram_addr := Cat(TxBDAddress, TxPointerRead)
+      ram_di := TxBDDataIn;
+    } .elsewhen( RAMAccessEnable === "b01000".U | RAMAccessEnable === "b01010".U ){
+      WbEn := true.B  // RxEn access stage and r_TxEn is disabled
+      RxEn := false.B
+      TxEn := false.B
+                  ram_addr := io.WB_ADR_I // [9:2];
+                  ram_di  := io.WB_DAT_I;
+                  BDWrite := io.BDCs & Fill(4,io.WB_WE_I)
+                  BDRead  := io.BDCs.orR & ~io.WB_WE_I
+    } .elsewhen( RAMAccessEnable === "b01001".U | RAMAccessEnable === "b01011".U ){
+      WbEn := false.B
+      RxEn := false.B
+      TxEn := true.B  // RxEn access stage and r_TxEn is enabled
+      ram_addr := Cat(TxBDAddress, TxPointerRead)
+      ram_di := TxBDDataIn;      
+    } .elsewhen( RAMAccessEnable === "b00100".U | RAMAccessEnable === "b00101".U | RAMAccessEnable === "b00110".U | RAMAccessEnable === "b00111".U ){
+      WbEn := true.B  // TxEn access stage (we always go to wb access stage)
+      RxEn := false.B
+      TxEn := false.B
+      ram_addr := io.WB_ADR_I //[9:2]
+      ram_di  := io.WB_DAT_I
+      BDWrite := io.BDCs & Fill(4,io.WB_WE_I)
+      BDRead  := io.BDCs.orR & ~io.WB_WE_I
+    } .elsewhen( RAMAccessEnable === " b10000".U ){
+      WbEn := false.B // WbEn access stage and there is no need for other stages. WbEn needs to be switched off for a bit
+    } .elsewhen( RAMAccessEnable === " b00000".U ){
+      WbEn := true.B  // Idle state. We go to WbEn access stage.
+      RxEn := false.B
+      TxEn := false.B
+      ram_addr := io.WB_ADR_I //[9:2]
+      ram_di  := io.WB_DAT_I
+      BDWrite := io.BDCs & Fill(4,io.WB_WE_I)
+      BDRead  := io.BDCs.orR & ~io.WB_WE_I   
+    }
+
+
+
+  withClockAndReset( io.MTxClk.asClock, reset ) {
+    // Changes for tx occur every second clock. Flop is used for this manner.
+    when(reset.asBool){
+      Flop := false.B
+    } .elsewhen( io.TxDone | io.TxAbort | TxRetry_q){
+      Flop := false.B
+    } .elsewhen ( io.TxUsedData ){
+      Flop := ~Flop
+    }
+  }
+
+
+  ResetTxBDReady := TxDonePulse | TxAbortPulse | TxRetryPulse
+
+  // Latching READY status of the Tx buffer descriptor
+  when(TxEn & TxEn_q & TxBDRead){ // TxBDReady is sampled only once at the beginning.
+    TxBDReady := ram_do.extract(15) & (ram_do(31,16) > 4.U)
+  } .elsewhen(ResetTxBDReady){ // Only packets larger then 4 bytes are transmitted.
+    TxBDReady := false.B
+  }
+
+
+  StartTxBDRead := (TxRetryPacket_NotCleared | TxStatusWrite) & ~BlockingTxBDRead & ~TxBDReady // Reading the Tx buffer descriptor
+
+  when(StartTxBDRead){
+    TxBDRead := true.B
+  } .elsewhen(TxBDReady){
+    TxBDRead := false.B
+  }
+
+  StartTxPointerRead := TxBDRead & TxBDReady  // Reading Tx BD pointer
+
+  // Reading Tx BD Pointer
+  when(StartTxPointerRead){
+    TxPointerRead := true.B
+  } .elsewhen(TxEn_q){
+    TxPointerRead := false.B
+  }
+
+
+
+  // Writing status back to the Tx buffer descriptor
+  TxStatusWrite := (TxDonePacket_NotCleared | TxAbortPacket_NotCleared) & TxEn & TxEn_q & ~BlockingTxStatusWrite
+
+
+// Status writing must occur only once. Meanwhile it is blocked.
+  when(~TxDone_wb & ~TxAbort_wb){
+    BlockingTxStatusWrite := false.B
+  } .elsewhen(TxStatusWrite){
+    BlockingTxStatusWrite := true.B
+  }
+
+
+  withClockAndReset( io.MTxClk.asClock, reset ) {
+    // Synchronizing BlockingTxStatusWrite to MTxClk
+    when(reset){
+      BlockingTxStatusWrite_sync1 := false.B
+      BlockingTxStatusWrite_sync2 := false.B
+      BlockingTxStatusWrite_sync3 := false.B
+    } .otherwise{
+      BlockingTxStatusWrite_sync1 := BlockingTxStatusWrite;
+      BlockingTxStatusWrite_sync2 := BlockingTxStatusWrite_sync1;
+      BlockingTxStatusWrite_sync3 := BlockingTxStatusWrite_sync2;
+    }
+
+  }
+
+
+  io.RstDeferLatched := BlockingTxStatusWrite_sync2 & ~BlockingTxStatusWrite_sync3
+
+  // TxBDRead state is activated only once. 
+  when(StartTxBDRead){
+    BlockingTxBDRead := true.B
+  } .elsewhen(~StartTxBDRead & ~TxBDReady){
+    BlockingTxBDRead := false.B
+  }
+
+
+
+// Latching status from the tx buffer descriptor
+// Data is avaliable one cycle after the access is started (at that time
+// signal TxEn is not active)
+  when(TxEn & TxEn_q & TxBDRead){
+    TxStatus <= ram_do(14,11)    
+  }
+
+
+
+
+  //Latching length from the buffer descriptor;
+  when(TxEn & TxEn_q & TxBDRead){
+    TxLength := ram_do(31,16)    
+  } .elsewhen(MasterWbTX & io.m_wb_ack_i){
+    when(TxLengthLt4){
+      TxLength := 0.U
+    } .elsewhen(TxPointerLSB_rst === 0.U){
+      TxLength := TxLength - 4.U    // Length is subtracted at the data request
+    } .elsewhen(TxPointerLSB_rst === 1.U){
+      TxLength := TxLength - 3.U    // Length is subtracted at the data request
+    } .elsewhen(TxPointerLSB_rst === 2.U){
+      TxLength := TxLength - 2.U    // Length is subtracted at the data request
+    } .elsewhen(TxPointerLSB_rst === 3.U){
+      TxLength := TxLength - 1.U    // Length is subtracted at the data request
+    }
+  }
+
+
+  //Latching length from the buffer descriptor;
+  when(TxEn & TxEn_q & TxBDRead){
+    LatchedTxLength <= ram_do(31,16)    
+  }
+
+
+
+  TxLengthEq0 := TxLength === 0.U
+  TxLengthLt4 := TxLength < 4.U
+
+
+  // Latching Tx buffer pointer from buffer descriptor. Only 30 MSB bits are
+  // latched because TxPointerMSB is only used for word-aligned accesses.
+  when(TxEn & TxEn_q & TxPointerRead){
+    TxPointerMSB := ram_do(31,2)    
+  } .elsewhen(IncrTxPointer & ~BlockingIncrementTxPointer){
+    TxPointerMSB := TxPointerMSB + 1.U // TxPointer is word-aligned
+  }
+      
+
+
+
+  // Latching 2 MSB bits of the buffer descriptor. Since word accesses are performed, valid data does not necesserly start at byte 0 (could be byte 0, 1, 2 or 3). This signals are used for proper selection of the star byte (TxData and TxByteCnt) are set by this two bits.
+  when(TxEn & TxEn_q & TxPointerRead){
+    TxPointerLSB := ram_do(1,0)    
+  }
+
+
+
+  // Latching 2 MSB bits of the buffer descriptor.  After the read access, TxLength needs to be decremented for the number of the valid bytes (1 to 4 bytes are valid in the first word). After the first read all bytes are valid so this two bits are reset to zero. 
+  when(TxEn & TxEn_q & TxPointerRead){
+    TxPointerLSB_rst := ram_do(1,0)    
+  } .elsewhen(MasterWbTX & io.m_wb_ack_i){ // After first access pointer is word alligned
+    TxPointerLSB_rst := 0.U
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  when(MasterAccessFinished){
+    BlockingIncrementTxPointer := false.B
+  } .elsewhen(IncrTxPointer){
+    BlockingIncrementTxPointer := true.B
+  }
+
+
+  SetReadTxDataFromMemory := TxEn & TxEn_q & TxPointerRead;
+
+  when(TxLengthEq0 | TxAbortPulse | TxRetryPulse){
+    ReadTxDataFromMemory := false.B
+  } .elsewhen(SetReadTxDataFromMemory){
+    ReadTxDataFromMemory := true.B
+  }
+
+
+  ReadTxDataFromMemory_2 := ReadTxDataFromMemory & ~BlockReadTxDataFromMemory
+
+  tx_burst := ReadTxDataFromMemory_2 & tx_burst_en
+
+
+
+  when((TxBufferAlmostFull | TxLength <= 4.U) & MasterWbTX & (~cyc_cleared) & (~(TxAbortPacket_NotCleared | TxRetryPacket_NotCleared))){
+    BlockReadTxDataFromMemory := true.B
+  } .elsewhen(ReadTxDataFromFifo_wb | TxDonePacket | TxAbortPacket | TxRetryPacket){
+    BlockReadTxDataFromMemory := false.B
+  }
+
+  MasterAccessFinished := io.m_wb_ack_i | m_wb_err_i
+
+
+
+// Enabling master wishbone access to the memory for two devices TX and RX.
+
+val masterStage = Cat(MasterWbTX, MasterWbRX, ReadTxDataFromMemory_2, WriteRxDataToMemory, MasterAccessFinished, cyc_cleared, tx_burst, rx_burst)
+
+      // Switching between two stages depends on enable signals
+
+
+  when(
+    masterStage === BitPat("b00100010") | // Idle and MRB needed
+    masterStage === BitPat("b101?101?") | // MRB continues
+    masterStage === BitPat("b10100110") | // Clear (previously MR) and MRB needed
+    masterStage === BitPat("b011?011?")
+  ){ // Clear (previously MW) and MRB needed
+    MasterWbTX    := true.B  // tx burst
+    MasterWbRX    := false.B
+    m_wb_cyc_o    := true.B
+    m_wb_we_o     := false.B
+    m_wb_sel_o    := "hf".U
+    cyc_cleared   := false.B
+    IncrTxPointer := true.B
+    tx_burst_cnt  := tx_burst_cnt + 1.U
+    when(tx_burst_cnt === 0.U){
+      m_wb_adr_o := TxPointerMSB
+    } .otherwise{
+      m_wb_adr_o <= m_wb_adr_o + 1.U
+    }
+
+    when(tx_burst_cnt === 3.U) {
+      tx_burst_en := false.B
+      m_wb_cti_o  := "b111".U
+    } .otherwise{
+      m_wb_cti_o  := "b010".U
+    }
+  } .elsewhen(
+    masterStage === BitPat("b00?100?1") |            // Idle and MWB needed
+    masterStage === BitPat("b01?110?1") |            // MWB continues
+    masterStage === BitPat("b01010101") |            // Clear (previously MW) and MWB needed
+    masterStage === BitPat("b10?101?1")              // Clear (previously MR) and MWB needed
+  ){
+    MasterWbTX    := false.B  // rx burst
+    MasterWbRX    := true.B
+    m_wb_cyc_o    := true.B
+    m_wb_we_o     := true.B
+    m_wb_sel_o    := RxByteSel
+    IncrTxPointer := false.B
+    cyc_cleared   := false.B
+    rx_burst_cnt  := rx_burst_cnt + 1.U
+
+    when(rx_burst_cnt === 0.U ){
+      m_wb_adr_o := RxPointerMSB
+    } .otherwise{
+      m_wb_adr_o := m_wb_adr_o + 1.U
+    }
+
+    when(rx_burst_cnt === 3.U ){
+      rx_burst_en := false.B
+      m_wb_cti_o  := "b111".U
+    } .otherwise{
+       m_wb_cti_o := "b010".U
+    }       
+  }.elsewhen( masterStage === BitPat("b00?100?0") ){ // idle and MW is needed (data write to rx buffer)
+    MasterWbTX    := false.B
+    MasterWbRX    := true.B
+    m_wb_adr_o    := RxPointerMSB
+    m_wb_cyc_o    := true.B
+    m_wb_we_o     := true.B
+    m_wb_sel_o    := RxByteSel
+    IncrTxPointer := false.B
+  }.elsewhen( masterStage === BitPat("b00100000") ){ // idle and MR is needed (data read from tx buffer)
+    MasterWbTX    := true.B
+    MasterWbRX    := false.B
+    m_wb_adr_o    := TxPointerMSB;
+    m_wb_cyc_o    := true.B
+    m_wb_we_o     := false.B
+    m_wb_sel_o    := "hf".U
+    IncrTxPointer := true.B
+  }.elsewhen( 
+    masterStage === BitPat("b10100100") | // MR and MR is needed (data read from tx buffer)
+    masterStage === BitPat("b011?010?")   // MW and MR is needed (data read from tx buffer)
+  ){
+    MasterWbTX    := true.B
+    MasterWbRX    := false.B
+    m_wb_adr_o    := TxPointerMSB;
+    m_wb_cyc_o    := true.B
+    m_wb_we_o     := false.B
+    m_wb_sel_o    := "hf".U
+    cyc_cleared   := false.B
+    IncrTxPointer := true.B
+  }.elsewhen( 
+    masterStage === BitPat("b01010100") | // MW and MW needed (data write to rx buffer)
+    masterStage === BitPat("b10?101?0")   // MR and MW is needed (data write to rx buffer)
+  ){
+    MasterWbTX    := false.B
+    MasterWbRX    := true.B
+    m_wb_adr_o    := RxPointerMSB;
+    m_wb_cyc_o    := true.B
+    m_wb_we_o     := true.B
+    m_wb_sel_o    := RxByteSel;
+    cyc_cleared   := false.B
+    IncrTxPointer := false.B
+  }.elsewhen( 
+    masterStage === BitPat("b01011000") | // MW and MW needed (cycle is cleared between previous and next access)
+    masterStage === BitPat("b011?10?0") | // MW and MW or MR or MRB needed (cycle is cleared between previous and next access)
+    masterStage === BitPat("b10101000") | // MR and MR needed (cycle is cleared between previous and next access)
+    masterStage === BitPat("b10?1100?")   // MR and MR or MW or MWB (cycle is cleared between previous and next access)
+  ){
+    m_wb_cyc_o    := false.B// whatever and master read or write is needed. We need to clear m_wb_cyc_o before next access is started
+    cyc_cleared   := true.B
+    IncrTxPointer := false.B
+    tx_burst_cnt  := 0.U
+    tx_burst_en   := (txfifo_cnt < 12.U) & (TxLength > 20.U)
+    rx_burst_cnt  := 0.U
+    rx_burst_en   := Mux(MasterWbRX, enough_data_in_rxfifo_for_burst_plus1, enough_data_in_rxfifo_for_burst)  // Counter is not decremented, yet, so plus1 is used.
+    m_wb_cti_o    := 0.U
+  }.elsewhen( 
+    masterStage === BitPat("b??001000") | // whatever and no master read or write is needed (ack or err comes finishing previous access)
+    masterStage === BitPat("b??000100")   // Between cyc_cleared request was cleared
+  ){
+    MasterWbTX    := false.B
+    MasterWbRX    := false.B
+    m_wb_cyc_o    := false.B
+    cyc_cleared   := false.B
+    IncrTxPointer := false.B
+    rx_burst_cnt  := 0.U
+    // Counter is not decremented, yet, so plus1 is used.
+    rx_burst_en   := Mux(MasterWbRX, enough_data_in_rxfifo_for_burst_plus1, enough_data_in_rxfifo_for_burst)
+    m_wb_cti_o    := 0.U
+  }.elsewhen( masterStage === BitPat("b00000000") ){  // whatever and no master read or write is needed (ack or err comes finishing previous access)
+    tx_burst_cnt := 0.U
+    tx_burst_en  := (txfifo_cnt < 12.U) & (TxLength > 20.U)
+  } .otherwise{
+
+  }
+
+
+
+  TxFifoClear := (TxAbortPacket | TxRetryPacket)
+
+  val tx_fifo = Module( new MacFifo(dw = X_FIFO_DATA_WIDTH, dp = 16) )
+  tx_fifo.io.data_in := io.m_wb_dat_i
+  tx_fifo.io.write   := MasterWbTX & io.m_wb_ack_i
+  tx_fifo.io.read    := ReadTxDataFromFifo_wb & ~TxBufferEmpty
+  tx_fifo.io.clear   := TxFifoClear
+  TxData_wb           := tx_fifo.io.data_out
+  TxBufferFull        := tx_fifo.io.full
+  TxBufferAlmostFull  := tx_fifo.io.almost_full
+  TxBufferAlmostEmpty := tx_fifo.io.almost_empty
+  TxBufferEmpty       := tx_fifo.io.empty
+  txfifo_cnt          := tx_fifo.io.cnt
+
+
+
+// Start: Generation of the TxStartFrm_wb which is then synchronized to the MTxClk
+  when(TxBDReady & ~StartOccured & (TxBufferFull | TxLengthEq0)){
+    TxStartFrm_wb := true.B
+  } .elsewhen(TxStartFrm_syncb2){
+    TxStartFrm_wb := false.B
+  }
+
+
+// StartOccured: TxStartFrm_wb occurs only ones at the beginning. Then it's blocked.
+  when(TxStartFrm_wb){
+    StartOccured := true.B
+  } .elsewhen(ResetTxBDReady){
+    StartOccured := false.B
+  }
+
+  withClockAndReset( io.MTxClk.asClock, reset ) {
+    // Synchronizing TxStartFrm_wb to MTxClk
+    when(reset){
+      TxStartFrm_sync1 := false.B
+    } .otherwise{
+      TxStartFrm_sync1 := TxStartFrm_wb;      
+    }
+
+    when(reset){
+      TxStartFrm_sync2 := false.B
+    } .otherwise{
+      TxStartFrm_sync2 := TxStartFrm_sync1;      
+    }
+
+    when(reset){
+      TxStartFrm := false.B
+    } .elsewhen(TxStartFrm_sync2){
+      TxStartFrm := true.B
+    } .elsewhen(TxUsedData_q | ~TxStartFrm_sync2 & (TxRetry & (~TxRetry_q) | TxAbort & (~TxAbort_q))){
+      TxStartFrm := false.B
+    }
+
+  }
+
+  when(true.B){
+    TxStartFrm_syncb1 := TxStartFrm_sync2
+    TxStartFrm_syncb2 := TxStartFrm_syncb1
+  }
+
+
+
+  // TxEndFrm_wb: indicator of the end of frame
+  when(TxLengthEq0 & TxBufferAlmostEmpty & TxUsedData){
+    TxEndFrm_wb := true.B
+  } .elsewhen(TxRetryPulse | TxDonePulse | TxAbortPulse){
+    TxEndFrm_wb := false.B
+  }
+
+
+  // Marks which bytes are valid within the word.
+  TxValidBytes := Mux(TxLengthLt4, TxLength(1,0), 0.U)
+
+
+
+  when(TxLengthLt4 & TxBDReady){
+    LatchValidBytes := true.B
+  }.otherwise{
+    LatchValidBytes := false.B
+  }
+
+
+  // Latching valid bytes
+  when(LatchValidBytes & ~LatchValidBytes_q){
+    TxValidBytesLatched := TxValidBytes
+  } .elsewhen(TxRetryPulse | TxDonePulse | TxAbortPulse){
+    TxValidBytesLatched := 0.U
+  }
+
+
+
+  TxIRQEn         := TxStatus.extract(3) //[14:11]
+  WrapTxStatusBit := TxStatus.extract(2)
+  PerPacketPad    := TxStatus.extract(1)
+  PerPacketCrcEn  := TxStatus.extract(0)
+
+  RxIRQEn         := RxStatus.extract(1) //[14:13]
+  WrapRxStatusBit := RxStatus.extract(0)
+
+
+  // Temporary Tx and Rx buffer descriptor address
+  TempTxBDAddress := Fill(7, TxStatusWrite & ~WrapTxStatusBit) & (TxBDAddress + 1'b1); // Tx BD increment or wrap (last BD)
+
+  TempRxBDAddress := 
+    ( Fill(7, WrapRxStatusBit) & io.r_TxBDNum(6,0)  ) |   // Using first Rx BD
+    ( Fill(7,~WrapRxStatusBit) & (RxBDAddress + 1.U)) // Using next Rx BD
+                                                   // (increment address)
+
+  // Latching Tx buffer descriptor address
+  when(io.r_TxEn & (~r_TxEn_q)){
+    TxBDAddress := 0.U
+  } .elsewhen(TxStatusWrite){
+    TxBDAddress := TempTxBDAddress  
+  }
+
+  // Latching Rx buffer descriptor address
+  when(io.r_RxEn & (~r_RxEn_q)){
+    RxBDAddress := io.r_TxBDNum(6,0)
+  } .elsewhen(RxStatusWrite){
+    RxBDAddress := TempRxBDAddress;    
+  }
+
+
+  val TxStatusInLatched = Cat(TxUnderRun, RetryCntLatched[3:0], RetryLimit, LateCollLatched, DeferLatched, CarrierSenseLost)
+
+  RxBDDataIn := Cat(LatchedRxLength, 0.U(1.W), RxStatus, 0.U(4.W), RxStatusInLatched)
+  TxBDDataIn := Cat(LatchedTxLength, 0.U(1.W), TxStatus, 0.U(2.W), TxStatusInLatched)
+
+
+  // Signals used for various purposes
+  TxRetryPulse := TxRetry_wb   & ~TxRetry_wb_q;
+  TxDonePulse  := TxDone_wb    & ~TxDone_wb_q;
+  TxAbortPulse := TxAbort_wb   & ~TxAbort_wb_q;
+
+  withClockAndReset( io.MTxClk.asClock, reset ) {
+    // Generating delayed signals
+    when(reset.asBool){
+      TxAbort_q    := false.B
+      TxRetry_q    := false.B
+      TxUsedData_q := false.B
+    } .otherwise{
+      TxAbort_q    := TxAbort;
+      TxRetry_q    := TxRetry;
+      TxUsedData_q := TxUsedData;      
+    }
+  }
+
+
+
+
+
+
+  val TxAbortPacketBlocked = RegInit(false.B)
+
+  when(TxAbort_wb & (~tx_burst_en) & MasterWbTX & MasterAccessFinished &
+    (~TxAbortPacketBlocked) | TxAbort_wb & (~MasterWbTX) &
+    (~TxAbortPacketBlocked)){
+    TxAbortPacket := true.B
+  } .otherwise{
+    TxAbortPacket := false.B
+  }
+
+
+  when(TxEn & TxEn_q & TxAbortPacket_NotCleared){
+    TxAbortPacket_NotCleared := false.B
+  } .elsewhen(TxAbort_wb & (~tx_burst_en) & MasterWbTX & MasterAccessFinished &
+     (~TxAbortPacketBlocked) | TxAbort_wb & (~MasterWbTX) &
+     (~TxAbortPacketBlocked)){
+    TxAbortPacket_NotCleared := true.B
+  }
+
+  when(!TxAbort_wb & TxAbort_wb_q){
+    TxAbortPacketBlocked := false.B
+  } .elsewhen(TxAbortPacket){
+    TxAbortPacketBlocked := true.B
+  }
+
+
+
+
+
+
+  val TxRetryPacketBlocked = RegInit(false.B)
+
+  when(
+    TxRetry_wb & ~tx_burst_en & MasterWbTX & MasterAccessFinished & ~TxRetryPacketBlocked |
+    TxRetry_wb & ~MasterWbTX & ~TxRetryPacketBlocked){
+    TxRetryPacket := true.B
+  } .otherwise{
+    TxRetryPacket := false.B
+  }
+
+
+
+
+
+  when(StartTxBDRead){
+    TxRetryPacket_NotCleared := false.B
+  } .elsewhen(
+    TxRetry_wb & ~tx_burst_en & MasterWbTX & MasterAccessFinished & ~TxRetryPacketBlocked |
+    TxRetry_wb & ~MasterWbTX & ~TxRetryPacketBlocked){
+    TxRetryPacket_NotCleared := true.B
+  }
+
+
+  when(~TxRetry_wb & TxRetry_wb_q){
+    TxRetryPacketBlocked := false.B
+  } .elsewhen(TxRetryPacket){
+    TxRetryPacketBlocked := true.B
+  }
+
+
+
+  val TxDonePacketBlocked = RegInit(false.B)
+
+  when(
+    TxDone_wb & ~tx_burst_en & MasterWbTX & MasterAccessFinished & ~TxDonePacketBlocked |
+    TxDone_wb & ~MasterWbTX  & ~TxDonePacketBlocked){
+    TxDonePacket := true.B
+  }.otherwise{
+    TxDonePacket := false.B
+  }
+
+  when(TxEn & TxEn_q & TxDonePacket_NotCleared){
+    TxDonePacket_NotCleared := false.B
+  } .elsewhen(
+    TxDone_wb & ~tx_burst_en & MasterWbTX & MasterAccessFinished & (~TxDonePacketBlocked) |
+    TxDone_wb & ~MasterWbTX & (~TxDonePacketBlocked)){
+    TxDonePacket_NotCleared := true.B
+  }
+
+
+  when(~TxDone_wb & TxDone_wb_q){
+    TxDonePacketBlocked := false.B
+  } .elsewhen(TxDonePacket){
+    TxDonePacketBlocked := true.B
+  }
+
+
+  withClockAndReset( io.MTxClk.asClock, reset ){
+    // Indication of the last word
+    when(reset.asBool){
+      LastWord := false.B
+    } .elsewhen( (TxEndFrm | TxAbort | TxRetry) & Flop ){
+      LastWord := false.B
+    } .elsewhen( TxUsedData & Flop & TxByteCnt === 3.U ){
+      LastWord := TxEndFrm_wb
+    }
+
+    // Tx end frame generation
+    when(reset.asBool){
+      TxEndFrm := false.B
+    } .elsewhen(Flop & TxEndFrm | TxAbort | TxRetry_q){
+      TxEndFrm := false.B
+    } .elsewhen(Flop & LastWord){
+      TxEndFrm := 
+        Mux1H(Seq(
+          (TxValidBytesLatched === 1.U) -> (TxByteCnt === 0.U),
+          (TxValidBytesLatched === 2.U) -> (TxByteCnt === 1.U),
+          (TxValidBytesLatched === 3.U) -> (TxByteCnt === 2.U),
+          (TxValidBytesLatched === 0.U) -> (TxByteCnt === 3.U),
+        ))  
+    }
+
+
+
+    // Tx data selection (latching)
+    when(reset.asBool){
+      TxData := 0.U
+    } .elsewhen( TxStartFrm_sync2 & ~TxStartFrm ){
+      TxData := Mux1H(Seq(
+        ( TxPointerLSB === 0.U ) -> TxData_wb(31,24),// Big Endian Byte Ordering
+        ( TxPointerLSB === 1.U ) -> TxData_wb(23,16),// Big Endian Byte Ordering
+        ( TxPointerLSB === 2.U ) -> TxData_wb(15, 8),// Big Endian Byte Ordering
+        ( TxPointerLSB === 3.U ) -> TxData_wb( 7, 0),// Big Endian Byte Ordering
+      ))     
+    } .elsewhen( TxStartFrm & TxUsedData & TxPointerLSB === 3.U ){
+      TxData := TxData_wb(31,24) // Big Endian Byte Ordering        
+    } .elsewhen(TxUsedData & Flop){
+      TxData := Mux1H(Seq(
+        (TxByteCnt === 0.U) -> TxDataLatched(31,24),// Big Endian Byte Ordering
+        (TxByteCnt === 1.U) -> TxDataLatched(23,16),
+        (TxByteCnt === 2.U) -> TxDataLatched(15, 8),
+        (TxByteCnt === 3.U) -> TxDataLatched( 7, 0),
+      ))
+    }
+
+
+
+    // Latching tx data
+    when(reset.asBool){
+      TxDataLatched := 0.U
+    } .elsewhen(
+      TxStartFrm_sync2 & ~TxStartFrm |
+      TxUsedData & Flop & TxByteCnt === 3.U |
+      TxStartFrm & TxUsedData & Flop & TxByteCnt === 0.U){
+      TxDataLatched := TxData_wb
+    }
+
+
+    val TxUnderRun_sync1 = Reg(Bool())
+
+    // Tx under run
+    when(reset.asBool){
+      TxUnderRun_sync1 := false.B
+    } .elsewhen(TxUnderRun_wb){
+      TxUnderRun_sync1 <= 1'b1;    
+    } .elsewhen(BlockingTxStatusWrite_sync2){
+      TxUnderRun_sync1 := false.B
+    }
+
+
+    // Tx under run
+    when(reset.asBool){
+      TxUnderRun := false.B
+    } .elsewhen(BlockingTxStatusWrite_sync2){
+      TxUnderRun := false.B
+    } .elsewhen(TxUnderRun_sync1){
+      TxUnderRun <= 1'b1
+    }
+
+
+
+    // Tx Byte counter
+    when(reset.asBool){
+      TxByteCnt := 0.U
+    } .elsewhen(TxAbort_q | TxRetry_q){
+      TxByteCnt := 0.U
+    } .elsewhen(TxStartFrm & ~TxUsedData){
+      TxByteCnt := Mux1H(Seq(
+        ( TxPointerLSB === 0.U ) -> 1.U,
+        ( TxPointerLSB === 1.U ) -> 2.U,
+        ( TxPointerLSB === 2.U ) -> 3.U,
+        ( TxPointerLSB === 3.U ) -> 0.U,
+      ))
+    } .elsewhen(TxUsedData & Flop){
+      TxByteCnt <= TxByteCnt + 1.U
+    }
+
+    when(reset.asBool){
+      ReadTxDataFromFifo_tck := false.B
+    } .elsewhen(TxStartFrm_sync2 & ~TxStartFrm | TxUsedData & Flop & TxByteCnt === 3.U &
+      ~LastWord | TxStartFrm & TxUsedData & Flop & TxByteCnt === 0.U ){
+      ReadTxDataFromFifo_tck := true.B
+    } .elsewhen(ReadTxDataFromFifo_syncb2 & ~ReadTxDataFromFifo_syncb3){
+      ReadTxDataFromFifo_tck := false.B
+    }
+
+    when(reset.asBool){
+      ReadTxDataFromFifo_syncb1 := false.B
+      ReadTxDataFromFifo_syncb2 := false.B
+      ReadTxDataFromFifo_syncb3 := false.B
+    }.otherwise{
+      ReadTxDataFromFifo_syncb1 := ReadTxDataFromFifo_sync2;
+      ReadTxDataFromFifo_syncb2 := ReadTxDataFromFifo_syncb1;
+      ReadTxDataFromFifo_syncb3 := ReadTxDataFromFifo_syncb2;      
+    }
+
+
+
+
+  }
+
+
+
+
+  // Tx under run
+  when(TxAbortPulse){
+    TxUnderRun_wb := false.B    
+  } .elsewhen(TxBufferEmpty & ReadTxDataFromFifo_wb){
+    TxUnderRun_wb := true.B
+  }
+
+
+  ReadTxDataFromFifo_wb := ReadTxDataFromFifo_sync2 & ~ReadTxDataFromFifo_sync3
+  // End: Generation of the ReadTxDataFromFifo_tck signal and synchronization to the WB_CLK_I
+
+
+  StartRxBDRead :=
+    RxStatusWrite |
+    RxAbortSync3 & ~RxAbortSync4 |
+    io.r_RxEn & ~r_RxEn_q
+
+  // Reading the Rx buffer descriptor
+  when(StartRxBDRead & ~RxReady){
+    RxBDRead := true.B
+  } .elsewhen(RxBDReady){
+    RxBDRead := false.B
+  }
+
+
+
+// Reading of the next receive buffer descriptor starts after reception status
+// is written to the previous one.
+
+  // Latching READY status of the Rx buffer descriptor
+  when(RxPointerRead){
+    RxBDReady := false.B
+  } .elsewhen(RxEn & RxEn_q & RxBDRead){
+    RxBDReady := ram_do.extract(15)// RxBDReady is sampled only once at the beginning    
+  }
+
+
+  // Latching Rx buffer descriptor status
+  // Data is avaliable one cycle after the access is started (at that time
+  // signal RxEn is not active)
+  when(RxEn & RxEn_q & RxBDRead){
+    RxStatus := ram_do(14,13)    
+  }
+
+
+
+  // RxReady generation
+  when(ShiftEnded | RxAbortSync2 & ~RxAbortSync3 | ~io.r_RxEn & r_RxEn_q){
+    RxReady := false.B
+  } .elsewhen(RxEn & RxEn_q & RxPointerRead){
+    RxReady := true.B
+  }
+
+  // Reading Rx BD pointer
+  StartRxPointerRead := RxBDRead & RxBDReady
+
+  // Reading Tx BD Pointer
+  when(StartRxPointerRead){
+    RxPointerRead := true.B
+  } .elsewhen(RxEn & RxEn_q){
+    RxPointerRead := false.B
+  }
+
+
+
+  //Latching Rx buffer pointer from buffer descriptor;
+  when(RxEn & RxEn_q & RxPointerRead){
+    RxPointerMSB := ram_do(31,2)    
+  } .elsewhen(MasterWbRX & io.m_wb_ack_i){
+    RxPointerMSB := RxPointerMSB + 1.U // Word access (always word access. m_wb_sel_o are used for selecting bytes)
+  }
+
+  //Latching last addresses from buffer descriptor (used as byte-half-word indicator);
+  when(MasterWbRX & io.m_wb_ack_i){// After first write all RxByteSel are active
+    RxPointerLSB_rst := 0.U
+  } .elsewhen(RxEn & RxEn_q & RxPointerRead){
+    RxPointerLSB_rst := ram_do(1,0)    
+  }
+
+  RxByteSel := Mux1H(Seq(
+    (RxPointerLSB_rst === 0.U) -> "hf".U,
+    (RxPointerLSB_rst === 1.U) -> "h7".U,
+    (RxPointerLSB_rst === 2.U) -> "h3".U,
+    (RxPointerLSB_rst === 3.U) -> "h1".U,
+  ))
+
+
+  when(~RxReady & io.r_RxEn & WbEn & ~WbEn_q){
+    RxEn_needed := true.B
+  } .elsewhen(RxPointerRead & RxEn & RxEn_q){
+    RxEn_needed := false.B
+  }
+
+
+
+  // Reception status is written back to the buffer descriptor after the end of frame is detected.
+  RxStatusWrite := ShiftEnded & RxEn & RxEn_q;
+
+
+  withClockAndReset( io.MRxClk.asClock, reset ){
+
+    // Indicating that last byte is being reveived
+
+    when(reset.asBool){
+      LastByteIn <= 1'b0;      
+    } .elsewhen(ShiftWillEnd & RxByteCnt.andR | RxAbort){
+      LastByteIn <= 1'b0;      
+    } .elsewhen(RxValid & RxReady & RxEndFrm & ~(RxByteCnt.andR) & RxEnableWindow){
+      LastByteIn <= 1'b1;      
+    }
+
+    // Indicating that data reception will end
+    when(reset.asBool){
+      ShiftWillEnd <= 1'b0;
+    } .elsewhen(ShiftEnded_rck | RxAbort){
+      ShiftWillEnd <= 1'b0;        
+    } .elsewhen(StartShiftWillEnd){
+      ShiftWillEnd <= 1'b1;        
+    }
+
+    // Receive byte counter
+    when(reset.asBool){
+      RxByteCnt := 0.U
+    } .elsewhen(ShiftEnded_rck | RxAbort){
+      RxByteCnt := 0.U
+    } .elsewhen(RxValid & RxStartFrm & RxReady){
+      RxByteCnt := Mux1H(Seq(
+        ( RxPointerLSB_rst === 0.U ) -> 1.U,
+        ( RxPointerLSB_rst === 1.U ) -> 2.U,
+        ( RxPointerLSB_rst === 2.U ) -> 3.U,
+        ( RxPointerLSB_rst === 3.U ) -> 0.U,
+      ))       
+    } .elsewhen(RxValid & RxEnableWindow & RxReady | LastByteIn){
+      RxByteCnt := RxByteCnt + 1.U
+    }
+
+    // Indicates how many bytes are valid within the last word
+    when(reset.asBool){
+      RxValidBytes := 1.U
+    } .elsewhen(RxValid & RxStartFrm){
+      RxValidBytes := Mux1H(Seq(
+        ( RxPointerLSB_rst === 0.U ) -> 1.U,
+        ( RxPointerLSB_rst === 1.U ) -> 2.U,
+        ( RxPointerLSB_rst === 2.U ) -> 3.U,
+        ( RxPointerLSB_rst === 3.U ) -> 0.U,
+      ))
+    } .elsewhen(RxValid & ~LastByteIn & ~RxStartFrm & RxEnableWindow){
+      RxValidBytes := RxValidBytes + 1.U        
+    }
+
+    when(reset.asBool){
+      RxDataLatched1 := 0.U
+    } .elsewhen(RxValid & RxReady & ~LastByteIn){
+      when(RxStartFrm){
+        RxDataLatched1 := Mux1H(Seq(
+          ( RxPointerLSB_rst === 0.U ) -> Cat(                       io.RxData, RxDataLatched1(15,0)),// Big Endian Byte Ordering
+          ( RxPointerLSB_rst === 1.U ) -> Cat(RxDataLatched1(23,16), io.RxData, RxDataLatched1( 7,0)),
+          ( RxPointerLSB_rst === 2.U ) -> Cat(RxDataLatched1(23, 8), io.RxData),
+          ( RxPointerLSB_rst === 3.U ) -> RxDataLatched1,
+        ))
+      } .elsewhen(RxEnableWindow){
+        RxDataLatched1 = Mux1H(Seq(
+          ( RxByteCnt === 0.U ) -> Cat(                       io.RxData, RxDataLatched1(15,0)),// Big Endian Byte Ordering
+          ( RxByteCnt === 1.U ) -> Cat(RxDataLatched1(23,16), io.RxData, RxDataLatched1( 7,0)),
+          ( RxByteCnt === 2.U ) -> Cat(RxDataLatched1(23, 8), io.RxData),
+          ( RxByteCnt === 3.U ) -> RxDataLatched1,
+        ))
+      }
+    }
+
+
+    // Assembling data that will be written to the rx_fifo
+    when(reset.asBool){
+      RxDataLatched2 := 0.U
+    } .elsewhen(SetWriteRxDataToFifo & ~ShiftWillEnd){
+      RxDataLatched2 := Cat(RxDataLatched1, RxData)// Big Endian Byte Ordering
+    } .elsewhen(SetWriteRxDataToFifo & ShiftWillEnd){
+      RxDataLatched2 := Mux1H(Seq(
+        ( RxValidBytes === 0.U ) -> Cat(RxDataLatched1,        RxData),
+        ( RxValidBytes === 1.U ) -> Cat(RxDataLatched1(23,16), 0.U(24.W)),
+        ( RxValidBytes === 2.U ) -> Cat(RxDataLatched1(23, 8), 0.U(16.W)),
+        ( RxValidBytes === 3.U ) -> Cat(RxDataLatched1,        0.U(8.W)),       
+      ))
+    }
+
+    when(reset.asBool){
+      WriteRxDataToFifo := false.B
+    } .elsewhen(SetWriteRxDataToFifo & ~RxAbort){
+      WriteRxDataToFifo := true.B
+    } .elsewhen(WriteRxDataToFifoSync2 | RxAbort){
+      WriteRxDataToFifo := false.B
+    }
+
+
+    when(reset.asBool){
+      LatchedRxStartFrm := false.B
+    } .elsewhen(RxStartFrm & ~SyncRxStartFrm_q){
+      LatchedRxStartFrm := true.B
+    } .elsewhen(SyncRxStartFrm_q){
+      LatchedRxStartFrm := false.B
+    }
+
+  }
+
+
+  StartShiftWillEnd := LastByteIn | RxValid & RxEndFrm & RxByteCnt.andR & RxEnableWindow
+
+  // Indicating start of the reception process
+  SetWriteRxDataToFifo :=
+    (RxValid & RxReady & ~RxStartFrm & RxEnableWindow & (&RxByteCnt)) |
+    (RxValid & RxReady &  RxStartFrm & (&RxPointerLSB_rst)) |
+    (ShiftWillEnd & LastByteIn & (&RxByteCnt))
+
+
+
+  WriteRxDataToFifo_wb := WriteRxDataToFifoSync2 & ~WriteRxDataToFifoSync3
+
+
+
+  RxFifoReset := SyncRxStartFrm_q & ~SyncRxStartFrm_q2
+
+  val rx_fifo = Module(new MacFifo(dw: = 32, dp = 16))
+
+  rx_fifo.io.data_in := RxDataLatched2
+  rx_fifo.io.write   := WriteRxDataToFifo_wb & ~RxBufferFull
+  rx_fifo.io.read    := MasterWbRX & io.m_wb_ack_i
+  rx_fifo.io.clear   := RxFifoReset
+
+  io.m_wb_dat_o := rx_fifo.io.data_out
+  RxBufferFull := rx_fifo.io.full
+  RxBufferAlmostEmpty := rx_fifo.io.almost_empty
+  RxBufferEmpty := rx_fifo.io.empty
+  rxfifo_cnt := rx_fifo.io.cnt
+
+
+
+  enough_data_in_rxfifo_for_burst       := rxfifo_cnt >= 4.U
+  enough_data_in_rxfifo_for_burst_plus1 := rxfifo_cnt > 4.U
+
+  WriteRxDataToMemory := ~RxBufferEmpty
+  rx_burst            := rx_burst_en & WriteRxDataToMemory
+
+  withClockAndReset( io.MRxClk.asClock, reset ){
+    // Generation of the end-of-frame signal
+    when(reset.asBool){
+      ShiftEnded_rck := false.B
+    } .elsewhen(~RxAbort & SetWriteRxDataToFifo & StartShiftWillEnd){
+      ShiftEnded_rck := true.B
+    } .elsewhen(RxAbort | ShiftEndedSync_c1 & ShiftEndedSync_c2){
+      ShiftEnded_rck := false.B
+    }
+
+
+
+    when(reset.asBool){
+      ShiftEndedSync_c1 := false.B
+      ShiftEndedSync_c2 := false.B
+    } .otherwise{
+      ShiftEndedSync_c1 := ShiftEndedSync2
+      ShiftEndedSync_c2 := ShiftEndedSync_c1
+    }
+
+
+  // Generation of the end-of-frame signal
+    when(reset.asBool){
+      RxEnableWindow := false.B
+    } .elsewhen(RxStartFrm){
+      RxEnableWindow := true.B
+    } .elsewhen(RxEndFrm | RxAbort){
+      RxEnableWindow := false.B
+    }
+
+
+    when(reset.asBool){
+      RxAbortSyncb1 := false.B
+      RxAbortSyncb2 := false.B
+    } .otherwise{
+      RxAbortSyncb1 := RxAbortSync2
+      RxAbortSyncb2 := RxAbortSyncb1
+    }
+
+
+    when(reset.asBool){
+      RxAbortLatched := false.B
+    } .elsewhen(RxAbortSyncb2){
+      RxAbortLatched := false.B
+    } .elsewhen(RxAbort){
+      RxAbortLatched := true.B
+    }
+
+
+    when(reset.asBool){
+      LatchedRxLength := 0.U      
+    } .elsewhen(LoadRxStatus){
+      LatchedRxLength := io.RxLength
+    }
+
+
+    when(reset.asBool){
+      RxStatusInLatched := 0.U
+    } .elsewhen(LoadRxStatus){
+      RxStatusInLatched := RxStatusIn
+    }
+
+
+    when(reset.asBool){
+      RxStatusWriteLatched_sync1 := false.B
+      RxStatusWriteLatched_sync2 := false.B
+    } .otherwise{
+      RxStatusWriteLatched_sync1 := RxStatusWriteLatched;
+      RxStatusWriteLatched_sync2 := RxStatusWriteLatched_sync1;    
+    }
+
+
+
+  }
+
+
+
+  when(ShiftEndedSync1 & ~ShiftEndedSync2){
+    ShiftEndedSync3 := true.B
+  } .elsewhen(ShiftEnded){
+    ShiftEndedSync3 := false.B
+  }
+
+
+  // Generation of the end-of-frame signal
+  when(ShiftEndedSync3 & MasterWbRX & io.m_wb_ack_i & RxBufferAlmostEmpty & ~ShiftEnded){
+    ShiftEnded := true.B
+  } .elsewhen(RxStatusWrite){
+    ShiftEnded := false.B
+  }
+
+
+
+
+
+  RxStatusIn := Cat(ReceivedPauseFrm, AddressMiss, RxOverrun, InvalidSymbol, DribbleNibble, ReceivedPacketTooBig, ShortFrame, LatchedCrcError, RxLateCollision)
+
+
+  // Rx overrun
+  when(RxStatusWrite){
+    RxOverrun := false.B
+  } .elsewhen(RxBufferFull & WriteRxDataToFifo_wb){
+    RxOverrun := true.B
+  }
+
+
+
+
+ TxError := TxUnderRun | RetryLimit | LateCollLatched | CarrierSenseLost;
+
+
+// ShortFrame (RxStatusInLatched[2]) can not set an error because short frames are aborted when signal r_RecSmall is set to 0 in MODER register. 
+// AddressMiss is identifying that a frame was received because of the promiscous mode and is not an error
+ RxError := (RxStatusInLatched(6,3).orR) | (RxStatusInLatched(1,0).orR)
+
+
+  // Latching and synchronizing RxStatusWrite signal. This signal is used for clearing the ReceivedPauseFrm signal
+  when(RxStatusWriteLatched_syncb2){
+    RxStatusWriteLatched := false.B
+  } .elsewhen(RxStatusWrite){
+    RxStatusWriteLatched := true.B
+  }
+
+
+
+
+
+
+  // Tx Done Interrupt
+  when(TxStatusWrite & TxIRQEn){
+    TxB_IRQ := ~TxError
+  } .otherwise{
+    TxB_IRQ := false.B
+  }
+
+  // Tx Error Interrupt
+  when(TxStatusWrite & TxIRQEn){
+    TxE_IRQ := TxError
+  } .otherwise{
+    TxE_IRQ := false.B
+  }
+
+  // Rx Done Interrupt
+  when(RxStatusWrite & RxIRQEn & ReceivedPacketGood & (~ReceivedPauseFrm | ReceivedPauseFrm & r_PassAll & (~r_RxFlow))){
+    RxB_IRQ := (~RxError)
+  } .otherwise{
+    RxB_IRQ := false.B
+  }
+
+  // Rx Error Interrupt
+  when(RxStatusWrite & RxIRQEn & (~ReceivedPauseFrm | ReceivedPauseFrm & r_PassAll & (~r_RxFlow))){
+    RxE_IRQ := RxError
+  } .otherwise{
+    RxE_IRQ := false.B
+  }
+
+
+
+// Busy Interrupt
+val Busy_IRQ_rck = Reg(Bool())
+val Busy_IRQ_sync1 = RegNext(Busy_IRQ_rck)
+val Busy_IRQ_sync2 = RegNext(Busy_IRQ_sync1)
+val Busy_IRQ_sync3 = RegNext(Busy_IRQ_sync2)
+val Busy_IRQ_syncb1 = Reg(Bool())
+val Busy_IRQ_syncb2 = Reg(Bool())
+
+  withClockAndReset( io.MRxClk.asClock, reset ){
+    when(reset.asBool){
+      Busy_IRQ_rck := false.B    
+    } .elsewhen(RxValid & RxStartFrm & ~RxReady){
+      Busy_IRQ_rck := true.B
+    } .elsewhen(Busy_IRQ_syncb2){
+      Busy_IRQ_rck := false.B
+    }
+
+    when(true.B){
+      Busy_IRQ_syncb1 := Busy_IRQ_sync2
+      Busy_IRQ_syncb2 := Busy_IRQ_syncb1
+    }
+
+  }
+
+
+  io.Busy_IRQ := Busy_IRQ_sync2 & ~Busy_IRQ_sync3
+
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+trait MacTileLinkSlave{ this: MacTileLinkBase =>
+
+  val a = Flipped(new DecoupledIO(new TLBundleA(edge.bundle)))
+  val d = new DecoupledIO(new TLBundleD(edge.bundle))
+
+  val tlSlvDValid = RegInit(false.B); io.d.valid := tlSlvDValid
+
+
+}
+
