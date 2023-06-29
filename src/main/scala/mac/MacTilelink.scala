@@ -4,6 +4,41 @@ import chisel3._
 import chisel3.util._
 
 
+class TxBuffDesc extends Bundle{
+  val len = UInt(16.W) //[31.16]
+  val rd = Bool() //[15]
+  val irq  = Bool() //14
+  val wr = Bool()  //13
+  val pad = Bool() //12
+  val crc = Bool() //11
+  val reserved1 = UInt(2.W) //10,9
+  val ur = Bool()  //8
+  val rtry = UInt(4.W)  //7 6 5 4
+  val rl = Bool()  //3
+  val lc = Bool()  //2
+  val df = Bool()  //1
+  val cs = Bool()  //0
+}
+
+class RxBuffDesc extends Bundle{
+  val len = UInt(16.W) //[31.16]
+  val e = Bool() //15
+  val irq = Bool() //14
+  val wrap = Bool() //13
+  val reserved1 = UInt(4.W) //12 11 10 9
+  val cf = Bool() //8
+  val m = Bool() //7
+  val or = Bool() //6
+  val is = Bool() //5
+  val dn = Bool() //4
+  val tl = Bool() //3
+  val sf = Bool() //2
+  val crc = Bool() //1
+  val lc = Bool() //0
+}
+
+
+
 class MacTileLinkIO extends Bundle{
 
   // WISHBONE common
@@ -115,9 +150,7 @@ abstract class MacTileLinkBase extends Module{
   val TxStatus = RegInit(0.U(4.W)) //[14:11]
   val RxStatus = RegInit(0.U(2.W)) //[14:13]
 
-  // Synchronizing TxRetry signal (synchronized to WISHBONE clock)
-  // Synchronized TxDone_wb signal (synchronized to WISHBONE clock)
-  // Synchronizing TxAbort signal (synchronized to WISHBONE clock)
+  // Synchronizing TxRetry TxDone_wb TxAbort signal (synchronized to WISHBONE clock)
   val TxRetrySync1 = RegNext(io.TxRetry, false.B)
   val TxAbortSync1 = RegNext(io.TxAbort, false.B)
   val TxDoneSync1  = RegNext(io.TxDone, false.B)
@@ -211,6 +244,8 @@ abstract class MacTileLinkBase extends Module{
   val ram_addr = RegInit(0.U(8.W))
   val ram_di = RegInit(0.U(32.W))
   val ram_do = Wire(UInt(32.W))
+  val txBuffDesc = ram_do.asTypeOf(new TxBuffDesc)
+  val rxBuffDesc = ram_do.asTypeOf(new RxBuffDesc)
 
   val StartTxPointerRead = Wire(Bool())
   val TxPointerRead = RegInit(false.B)
@@ -299,7 +334,6 @@ abstract class MacTileLinkBase extends Module{
   val LatchValidBytes_q = RegNext(LatchValidBytes, false.B)
 
   // Start: Generation of the ReadTxDataFromFifo_tck signal and synchronization to the WB_CLK_I
-  // Synchronizing TxStartFrm_wb to MTxClk
   val ReadTxDataFromFifo_tck_txclk = Wire(Bool())
   val ReadTxDataFromFifo_sync1 = RegNext(ReadTxDataFromFifo_tck_txclk, false.B)
   val ReadTxDataFromFifo_sync2 = RegNext(ReadTxDataFromFifo_sync1, false.B)
@@ -462,7 +496,7 @@ abstract class MacTileLinkBase extends Module{
 
   // Latching READY status of the Tx buffer descriptor
   when(TxEn & TxEn_q & TxBDRead){ // TxBDReady is sampled only once at the beginning.
-    TxBDReady := ram_do.extract(15) & (ram_do(31,16) > 4.U)
+    TxBDReady := txBuffDesc.rd & (txBuffDesc.len > 4.U)
   } .elsewhen(ResetTxBDReady){ // Only packets larger then 4 bytes are transmitted.
     TxBDReady := false.B
   }
@@ -518,7 +552,7 @@ abstract class MacTileLinkBase extends Module{
 // Data is avaliable one cycle after the access is started (at that time
 // signal TxEn is not active)
   when(TxEn & TxEn_q & TxBDRead){
-    TxStatus := ram_do(14,11)    
+    TxStatus := Cat(txBuffDesc.irq, txBuffDesc.wr, txBuffDesc.pad, txBuffDesc.crc)
   }
 
 
@@ -526,7 +560,7 @@ abstract class MacTileLinkBase extends Module{
 
   //Latching length from the buffer descriptor;
   when(TxEn & TxEn_q & TxBDRead){
-    TxLength := ram_do(31,16)    
+    TxLength := txBuffDesc.len   
   } .elsewhen(MasterWbTX & io.m_wb_ack_i){
     when(TxLengthLt4){
       TxLength := 0.U
@@ -544,7 +578,7 @@ abstract class MacTileLinkBase extends Module{
 
   //Latching length from the buffer descriptor;
   when(TxEn & TxEn_q & TxBDRead){
-    LatchedTxLength := ram_do(31,16)    
+    LatchedTxLength := txBuffDesc.len   
   }
 
 
@@ -990,7 +1024,7 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, ReadTxDataFromMemory_2, WriteRxDat
   when(RxPointerRead){
     RxBDReady := false.B
   } .elsewhen(RxEn & RxEn_q & RxBDRead){
-    RxBDReady := ram_do.extract(15)// RxBDReady is sampled only once at the beginning    
+    RxBDReady := rxBuffDesc.e// RxBDReady is sampled only once at the beginning    
   }
 
 
@@ -998,7 +1032,7 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, ReadTxDataFromMemory_2, WriteRxDat
   // Data is avaliable one cycle after the access is started (at that time
   // signal RxEn is not active)
   when(RxEn & RxEn_q & RxBDRead){
-    RxStatus := ram_do(14,13)    
+    RxStatus := Cat(rxBuffDesc.irq, rxBuffDesc.wrap)
   }
 
 
