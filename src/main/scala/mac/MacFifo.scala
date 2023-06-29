@@ -21,7 +21,7 @@ class MacFifo(dw: Int, dp: Int) extends Module{
   def cntw = log2Ceil(dp)+1
   val io: MacFifoIO = IO(new MacFifoIO(dw, cntw ))
 
-  val fifo = SyncReadMem( dp, UInt(dw.W) )
+  val fifo = Mem( dp, UInt(dw.W) )
   val data_out = Reg(UInt(dw.W)); io.data_out := data_out
 
 
