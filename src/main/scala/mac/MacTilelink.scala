@@ -205,7 +205,6 @@ abstract class MacTileLinkBase extends Module{
   val TxAbortPulse = Wire(Bool())
 
   val StartRxBDRead = Wire(Bool())
-  val StartTxBDRead = Wire(Bool())
 
   val TxIRQEn = Wire(Bool())
   val WrapTxStatusBit = Wire(Bool())
@@ -247,7 +246,7 @@ abstract class MacTileLinkBase extends Module{
   val txBuffDesc = ram_do.asTypeOf(new TxBuffDesc)
   val rxBuffDesc = ram_do.asTypeOf(new RxBuffDesc)
 
-  val StartTxPointerRead = Wire(Bool())
+
   val TxPointerRead = RegInit(false.B)
   val TxEn_needed = RegInit(false.B)
   val RxEn_needed = RegInit(false.B)
@@ -307,9 +306,6 @@ abstract class MacTileLinkBase extends Module{
   val m_wb_cyc_o = RegInit(false.B); io.m_wb_cyc_o := m_wb_cyc_o
   val m_wb_sel_o = RegInit(0.U(4.W)); io.m_wb_sel_o := m_wb_sel_o
   val m_wb_we_o  = RegInit(false.B); io.m_wb_we_o := m_wb_we_o
-
-  val TxLengthEq0 = Wire(Bool())
-  val TxLengthLt4 = Wire(Bool())
 
   val BlockingIncrementTxPointer = RegInit(false.B)
   val TxPointerMSB = RegInit(0.U(30.W)) //[31:2]
@@ -416,33 +412,33 @@ abstract class MacTileLinkBase extends Module{
     Cat(WbEn_q, RxEn_q, TxEn_q, RxEn_needed, TxEn_needed)
 
   // Switching between three stages depends on enable signals
-  when( RAMAccessEnable === "b10010".U | RAMAccessEnable === "b10011".U ){  // synopsys parallel_case
+  when( RAMAccessEnable === BitPat("b1001?")  ){  // synopsys parallel_case
     WbEn := false.B
     RxEn := true.B  // wb access stage and r_RxEn is enabled
     TxEn := false.B
     ram_addr := Cat(RxBDAddress, RxPointerRead)
     ram_di := RxBDDataIn
-  } .elsewhen( RAMAccessEnable === "b10001".U ){
+  } .elsewhen( RAMAccessEnable === BitPat("b10001") ){
     WbEn := false.B
     RxEn := false.B
     TxEn := true.B  // wb access stage, r_RxEn is disabled but r_TxEn is enabled
-    ram_addr := Cat(TxBDAddress, TxPointerRead)
-    ram_di := TxBDDataIn;
-  } .elsewhen( RAMAccessEnable === "b01000".U | RAMAccessEnable === "b01010".U ){
+    ram_addr := Cat(TxBDAddress, TxPointerRead) //[7,1] + [0]
+    ram_di := TxBDDataIn
+  } .elsewhen( RAMAccessEnable === BitPat("b010?0") ){
     WbEn := true.B  // RxEn access stage and r_TxEn is disabled
     RxEn := false.B
     TxEn := false.B
-                ram_addr := io.WB_ADR_I // [9:2];
-                ram_di  := io.WB_DAT_I;
-                BDWrite := io.BDCs & Fill(4,io.WB_WE_I)
-                BDRead  := io.BDCs.orR & ~io.WB_WE_I
-  } .elsewhen( RAMAccessEnable === "b01001".U | RAMAccessEnable === "b01011".U ){
+    ram_addr := io.WB_ADR_I // [9:2];
+    ram_di  := io.WB_DAT_I;
+    BDWrite := io.BDCs & Fill(4,io.WB_WE_I)
+    BDRead  := io.BDCs.orR & ~io.WB_WE_I
+  } .elsewhen( RAMAccessEnable === BitPat("b010?1") ){
     WbEn := false.B
     RxEn := false.B
     TxEn := true.B  // RxEn access stage and r_TxEn is enabled
     ram_addr := Cat(TxBDAddress, TxPointerRead)
     ram_di := TxBDDataIn;      
-  } .elsewhen( RAMAccessEnable === "b00100".U | RAMAccessEnable === "b00101".U | RAMAccessEnable === "b00110".U | RAMAccessEnable === "b00111".U ){
+  } .elsewhen( RAMAccessEnable === BitPat("b001??") ){
     WbEn := true.B  // TxEn access stage (we always go to wb access stage)
     RxEn := false.B
     TxEn := false.B
@@ -450,9 +446,9 @@ abstract class MacTileLinkBase extends Module{
     ram_di  := io.WB_DAT_I
     BDWrite := io.BDCs & Fill(4,io.WB_WE_I)
     BDRead  := io.BDCs.orR & ~io.WB_WE_I
-  } .elsewhen( RAMAccessEnable === "b10000".U ){
+  } .elsewhen( RAMAccessEnable === BitPat("b10000") ){
     WbEn := false.B // WbEn access stage and there is no need for other stages. WbEn needs to be switched off for a bit
-  } .elsewhen( RAMAccessEnable === "b00000".U ){
+  } .elsewhen( RAMAccessEnable === BitPat("b00000") ){
     WbEn := true.B  // Idle state. We go to WbEn access stage.
     RxEn := false.B
     TxEn := false.B
@@ -502,7 +498,7 @@ abstract class MacTileLinkBase extends Module{
   }
 
 
-  StartTxBDRead := (TxRetryPacket_NotCleared | TxStatusWrite) & ~BlockingTxBDRead & ~TxBDReady // Reading the Tx buffer descriptor
+  val StartTxBDRead = (TxRetryPacket_NotCleared | TxStatusWrite) & ~BlockingTxBDRead & ~TxBDReady // Reading the Tx buffer descriptor
 
   when(StartTxBDRead){
     TxBDRead := true.B
@@ -510,7 +506,7 @@ abstract class MacTileLinkBase extends Module{
     TxBDRead := false.B
   }
 
-  StartTxPointerRead := TxBDRead & TxBDReady  // Reading Tx BD pointer
+  val StartTxPointerRead = TxBDRead & TxBDReady  // Reading Tx BD pointer
 
   // Reading Tx BD Pointer
   when(StartTxPointerRead){
@@ -562,7 +558,7 @@ abstract class MacTileLinkBase extends Module{
   when(TxEn & TxEn_q & TxBDRead){
     TxLength := txBuffDesc.len   
   } .elsewhen(MasterWbTX & io.m_wb_ack_i){
-    when(TxLengthLt4){
+    when( TxLength < 4.U ){
       TxLength := 0.U
     } .elsewhen(TxPointerLSB_rst === 0.U){
       TxLength := TxLength - 4.U    // Length is subtracted at the data request
@@ -583,27 +579,14 @@ abstract class MacTileLinkBase extends Module{
 
 
 
-  TxLengthEq0 := TxLength === 0.U
-  TxLengthLt4 := TxLength < 4.U
 
-
-  // Latching Tx buffer pointer from buffer descriptor. Only 30 MSB bits are
-  // latched because TxPointerMSB is only used for word-aligned accesses.
   when(TxEn & TxEn_q & TxPointerRead){
-    TxPointerMSB := ram_do(31,2)    
+    TxPointerMSB := ram_do(31,2)  // Latching Tx buffer pointer from buffer descriptor. Only 30 MSB bits are latched because TxPointerMSB is only used for word-aligned accesses.
+    TxPointerLSB := ram_do(1,0)   // Latching 2 MSB bits of the buffer descriptor. Since word accesses are performed, valid data does not necesserly start at byte 0 (could be byte 0, 1, 2 or 3). This signals are used for proper selection of the star byte (TxData and TxByteCnt) are set by this two bits.
   } .elsewhen(IncrTxPointer & ~BlockingIncrementTxPointer){
     TxPointerMSB := TxPointerMSB + 1.U // TxPointer is word-aligned
   }
     
-
-
-
-  // Latching 2 MSB bits of the buffer descriptor. Since word accesses are performed, valid data does not necesserly start at byte 0 (could be byte 0, 1, 2 or 3). This signals are used for proper selection of the star byte (TxData and TxByteCnt) are set by this two bits.
-  when(TxEn & TxEn_q & TxPointerRead){
-    TxPointerLSB := ram_do(1,0)    
-  }
-
-
 
   // Latching 2 MSB bits of the buffer descriptor.  After the read access, TxLength needs to be decremented for the number of the valid bytes (1 to 4 bytes are valid in the first word). After the first read all bytes are valid so this two bits are reset to zero. 
   when(TxEn & TxEn_q & TxPointerRead){
@@ -623,7 +606,7 @@ abstract class MacTileLinkBase extends Module{
 
   SetReadTxDataFromMemory := TxEn & TxEn_q & TxPointerRead;
 
-  when(TxLengthEq0 | TxAbortPulse | TxRetryPulse){
+  when( (TxLength === 0.U) | TxAbortPulse | TxRetryPulse){
     ReadTxDataFromMemory := false.B
   } .elsewhen(SetReadTxDataFromMemory){
     ReadTxDataFromMemory := true.B
@@ -799,7 +782,7 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, ReadTxDataFromMemory_2, WriteRxDat
 
 
 // Start: Generation of the TxStartFrm_wb which is then synchronized to the MTxClk
-  when(TxBDReady & ~StartOccured & (TxBufferFull | TxLengthEq0)){
+  when(TxBDReady & ~StartOccured & (TxBufferFull | TxLength === 0.U)){
     TxStartFrm_wb := true.B
   } .elsewhen(TxStartFrm_syncb2){
     TxStartFrm_wb := false.B
@@ -823,7 +806,7 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, ReadTxDataFromMemory_2, WriteRxDat
 
 
   // TxEndFrm_wb: indicator of the end of frame
-  when(TxLengthEq0 & TxBufferAlmostEmpty & io.TxUsedData){
+  when((TxLength === 0.U) & TxBufferAlmostEmpty & io.TxUsedData){
     TxEndFrm_wb := true.B
   } .elsewhen(TxRetryPulse | TxDonePulse | TxAbortPulse){
     TxEndFrm_wb := false.B
@@ -831,11 +814,11 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, ReadTxDataFromMemory_2, WriteRxDat
 
 
   // Marks which bytes are valid within the word.
-  TxValidBytes := Mux(TxLengthLt4, TxLength(1,0), 0.U)
+  TxValidBytes := Mux(TxLength < 4.U, TxLength(1,0), 0.U)
 
 
 
-  when(TxLengthLt4 & TxBDReady){
+  when( (TxLength < 4.U) & TxBDReady){
     LatchValidBytes := true.B
   }.otherwise{
     LatchValidBytes := false.B
