@@ -143,7 +143,6 @@ abstract class MacTileLinkBase extends Module{
   val TxStatusWrite = Wire(Bool())
 
 
-  val TxValidBytesLatched = RegInit(0.U(2.W))
 
   val TxLength = RegInit(0.U(16.W))
   val LatchedTxLength = RegInit(0.U(16.W))
@@ -151,19 +150,16 @@ abstract class MacTileLinkBase extends Module{
   val RxStatus = RegInit(0.U(2.W)) //[14:13]
 
   // Synchronizing TxRetry TxDone_wb TxAbort signal (synchronized to WISHBONE clock)
-  val TxRetrySync1 = RegNext(io.TxRetry, false.B)
-  val TxAbortSync1 = RegNext(io.TxAbort, false.B)
-  val TxDoneSync1  = RegNext(io.TxDone, false.B)
+
 
   val TxStartFrm_wb = RegInit(false.B)
-  val TxRetry_wb = RegNext(TxRetrySync1, false.B)
-  val TxAbort_wb = RegNext(TxAbortSync1, false.B)
-  val TxDone_wb  = RegNext(TxDoneSync1,  false.B)
 
   // Generating delayed signals
-  val TxDone_wb_q  = RegNext(TxDone_wb,  false.B)
-  val TxAbort_wb_q = RegNext(TxAbort_wb, false.B)
-  val TxRetry_wb_q = RegNext(TxRetry_wb, false.B)
+
+  val TxRetry_wb = ShiftRegisters( io.TxRetry, 3, false.B, true.B )
+  val TxAbort_wb = ShiftRegisters( io.TxAbort, 3, false.B, true.B )
+  val TxDone_wb  = ShiftRegisters( io.TxDone,  3, false.B, true.B )
+
   val TxRetryPacket = RegInit(false.B)
   val TxRetryPacket_NotCleared = RegInit(false.B)
   val TxDonePacket = RegInit(false.B)
@@ -206,16 +202,12 @@ abstract class MacTileLinkBase extends Module{
 
   val StartRxBDRead = Wire(Bool())
 
-  val TxIRQEn = Wire(Bool())
-  val WrapTxStatusBit = Wire(Bool())
 
-  val RxIRQEn = Wire(Bool())
-  val WrapRxStatusBit = Wire(Bool())
 
-  val TxValidBytes = Wire(UInt(2.W))
 
-  val TempTxBDAddress = Wire(UInt(7.W)) //[7:1]
-  val TempRxBDAddress = Wire(UInt(7.W)) //[7:1]
+
+
+
 
   val RxStatusWrite = Wire(Bool())
   val RxBufferFull = Wire(Bool())
@@ -265,23 +257,22 @@ abstract class MacTileLinkBase extends Module{
   val StartShiftWillEnd = Wire(Bool())
 
   val StartOccured      = RegInit(false.B)
-  val TxStartFrm_syncb1 = RegInit(false.B)
-  val TxStartFrm_syncb2 = RegInit(false.B)
+  val TxStartFrm_sync2_txclk = Wire(Bool())
+  val TxStartFrm_syncb1 = RegNext(TxStartFrm_sync2_txclk, false.B)
+  val TxStartFrm_syncb2 = RegNext(TxStartFrm_syncb1, false.B)
 
   val TxFifoClear = Wire(Bool())
   val TxBufferAlmostFull = Wire(Bool())
   val TxBufferFull  = Wire(Bool())
   val TxBufferEmpty = Wire(Bool())
   val TxBufferAlmostEmpty = Wire(Bool())
-  val SetReadTxDataFromMemory = Wire(Bool())
   val BlockReadTxDataFromMemory = RegInit(false.B)
 
   val tx_burst_en = RegInit(true.B)
   val rx_burst_en = RegInit(false.B)
   val tx_burst_cnt = RegInit(0.U(3.W))
 
-  val ReadTxDataFromMemory_2 = Wire(Bool())
-  val tx_burst = Wire(Bool())
+  // val tx_burst = Wire(Bool())
   val m_wb_cti_o = RegInit(0.U(3.W)); io.m_wb_cti_o := m_wb_cti_o    // Cycle Type Identifier
 
   val TxData_wb = Wire(UInt(32.W))
@@ -317,7 +308,6 @@ abstract class MacTileLinkBase extends Module{
 
 
 
-  val ResetTxBDReady = Wire(Bool())
 
 
   val cyc_cleared = RegInit(false.B)
@@ -326,8 +316,7 @@ abstract class MacTileLinkBase extends Module{
   val RxByteSel = Wire(UInt(4.W))
   val MasterAccessFinished = Wire(Bool())
 
-  val LatchValidBytes   = RegInit(false.B)
-  val LatchValidBytes_q = RegNext(LatchValidBytes, false.B)
+
 
   // Start: Generation of the ReadTxDataFromFifo_tck signal and synchronization to the WB_CLK_I
   val ReadTxDataFromFifo_tck_txclk = Wire(Bool())
@@ -485,9 +474,7 @@ abstract class MacTileLinkBase extends Module{
 
 
 
-
-
-  ResetTxBDReady := TxDonePulse | TxAbortPulse | TxRetryPulse
+  val ResetTxBDReady = TxDonePulse | TxAbortPulse | TxRetryPulse
 
 
   // Latching READY status of the Tx buffer descriptor
@@ -521,8 +508,8 @@ abstract class MacTileLinkBase extends Module{
   TxStatusWrite := (TxDonePacket_NotCleared | TxAbortPacket_NotCleared) & TxEn & TxEn_q & ~BlockingTxStatusWrite
 
 
-// Status writing must occur only once. Meanwhile it is blocked.
-  when(~TxDone_wb & ~TxAbort_wb){
+  // Status writing must occur only once. Meanwhile it is blocked.
+  when(~TxDone_wb(1) & ~TxAbort_wb(1)){
     BlockingTxStatusWrite := false.B
   } .elsewhen(TxStatusWrite){
     BlockingTxStatusWrite := true.B
@@ -544,9 +531,7 @@ abstract class MacTileLinkBase extends Module{
 
 
 
-// Latching status from the tx buffer descriptor
-// Data is avaliable one cycle after the access is started (at that time
-// signal TxEn is not active)
+  // Latching status from the tx buffer descriptor Data is avaliable one cycle after the access is started (at that time signal TxEn is not active)
   when(TxEn & TxEn_q & TxBDRead){
     TxStatus := Cat(txBuffDesc.irq, txBuffDesc.wr, txBuffDesc.pad, txBuffDesc.crc)
   }
@@ -604,20 +589,13 @@ abstract class MacTileLinkBase extends Module{
   }
 
 
-  SetReadTxDataFromMemory := TxEn & TxEn_q & TxPointerRead;
-
   when( (TxLength === 0.U) | TxAbortPulse | TxRetryPulse){
     ReadTxDataFromMemory := false.B
-  } .elsewhen(SetReadTxDataFromMemory){
+  } .elsewhen(TxEn & TxEn_q & TxPointerRead){
     ReadTxDataFromMemory := true.B
   }
 
-
-  ReadTxDataFromMemory_2 := ReadTxDataFromMemory & ~BlockReadTxDataFromMemory
-
-  tx_burst := ReadTxDataFromMemory_2 & tx_burst_en
-
-
+  val tx_burst = ReadTxDataFromMemory & ~BlockReadTxDataFromMemory & tx_burst_en
 
   when((TxBufferAlmostFull | TxLength <= 4.U) & MasterWbTX & (~cyc_cleared) & (~(TxAbortPacket_NotCleared | TxRetryPacket_NotCleared))){
     BlockReadTxDataFromMemory := true.B
@@ -631,7 +609,7 @@ abstract class MacTileLinkBase extends Module{
 
 // Enabling master wishbone access to the memory for two devices TX and RX.
 
-val masterStage = Cat(MasterWbTX, MasterWbRX, ReadTxDataFromMemory_2, WriteRxDataToMemory, MasterAccessFinished, cyc_cleared, tx_burst, rx_burst)
+val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockReadTxDataFromMemory), WriteRxDataToMemory, MasterAccessFinished, cyc_cleared, tx_burst, rx_burst)
 
       // Switching between two stages depends on enable signals
 
@@ -781,7 +759,7 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, ReadTxDataFromMemory_2, WriteRxDat
 
 
 
-// Start: Generation of the TxStartFrm_wb which is then synchronized to the MTxClk
+  // Start: Generation of the TxStartFrm_wb which is then synchronized to the MTxClk
   when(TxBDReady & ~StartOccured & (TxBufferFull | TxLength === 0.U)){
     TxStartFrm_wb := true.B
   } .elsewhen(TxStartFrm_syncb2){
@@ -789,20 +767,12 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, ReadTxDataFromMemory_2, WriteRxDat
   }
 
 
-// StartOccured: TxStartFrm_wb occurs only ones at the beginning. Then it's blocked.
+  // StartOccured: TxStartFrm_wb occurs only ones at the beginning. Then it's blocked.
   when(TxStartFrm_wb){
     StartOccured := true.B
   } .elsewhen(ResetTxBDReady){
     StartOccured := false.B
   }
-
-
-  val TxStartFrm_sync2_txclk = Wire(Bool())
-  when(true.B){
-    TxStartFrm_syncb1 := TxStartFrm_sync2_txclk
-    TxStartFrm_syncb2 := TxStartFrm_syncb1
-  }
-
 
 
   // TxEndFrm_wb: indicator of the end of frame
@@ -814,19 +784,15 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, ReadTxDataFromMemory_2, WriteRxDat
 
 
   // Marks which bytes are valid within the word.
-  TxValidBytes := Mux(TxLength < 4.U, TxLength(1,0), 0.U)
+  val TxValidBytes = Mux(TxLength < 4.U, TxLength(1,0), 0.U)
+  val TxValidBytesLatched = RegInit(0.U(2.W))
+  // val LatchValidBytes   = RegNext((TxLength < 4.U) & TxBDReady, false.B)
+  // val LatchValidBytes_q = RegNext(LatchValidBytes, false.B)
 
-
-
-  when( (TxLength < 4.U) & TxBDReady){
-    LatchValidBytes := true.B
-  }.otherwise{
-    LatchValidBytes := false.B
-  }
-
+  val LatchValidBytes   = ShiftRegisters((TxLength < 4.U) & TxBDReady, 2, false.B, true.B)
 
   // Latching valid bytes
-  when(LatchValidBytes & ~LatchValidBytes_q){
+  when(LatchValidBytes(0) & ~LatchValidBytes(1)){
     TxValidBytesLatched := TxValidBytes
   } .elsewhen(TxRetryPulse | TxDonePulse | TxAbortPulse){
     TxValidBytesLatched := 0.U
@@ -834,22 +800,19 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, ReadTxDataFromMemory_2, WriteRxDat
 
 
   // dontTouch(TxStatus)
-  TxIRQEn         := TxStatus.extract(3) //[14:11]
-  WrapTxStatusBit := TxStatus.extract(2)
+  val TxIRQEn         = TxStatus.extract(3) //[14:11]
+  val WrapTxStatusBit = TxStatus.extract(2)
   io.PerPacketPad    := TxStatus.extract(1)
   io.PerPacketCrcEn  := TxStatus.extract(0)
 
-  RxIRQEn         := RxStatus.extract(1) //[14:13]
-  WrapRxStatusBit := RxStatus.extract(0)
+  val RxIRQEn         = RxStatus.extract(1) //[14:13]
+  val WrapRxStatusBit = RxStatus.extract(0)
 
 
-  // Temporary Tx and Rx buffer descriptor address
-  TempTxBDAddress := Fill(7, TxStatusWrite & ~WrapTxStatusBit) & (TxBDAddress + 1.U) // Tx BD increment or wrap (last BD)
+  // Temporary Tx and Rx buffer descriptor address//[7:1]
+  val TempTxBDAddress = Mux( TxStatusWrite & ~WrapTxStatusBit, (TxBDAddress + 1.U), 0.U ) // Tx BD increment or wrap (last BD)
+  val TempRxBDAddress = Mux( WrapRxStatusBit,                    io.r_TxBDNum(6,0), (RxBDAddress + 1.U) ) // Using first Rx BD / Using next Rx BD
 
-  TempRxBDAddress := 
-    ( Fill(7, WrapRxStatusBit) & io.r_TxBDNum(6,0)  ) |   // Using first Rx BD
-    ( Fill(7,~WrapRxStatusBit) & (RxBDAddress + 1.U)) // Using next Rx BD
-                                                  // (increment address)
 
   // Latching Tx buffer descriptor address
   when(io.r_TxEn & (~r_TxEn_q)){
@@ -874,9 +837,9 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, ReadTxDataFromMemory_2, WriteRxDat
 
 
   // Signals used for various purposes
-  TxRetryPulse := TxRetry_wb   & ~TxRetry_wb_q
-  TxDonePulse  := TxDone_wb    & ~TxDone_wb_q
-  TxAbortPulse := TxAbort_wb   & ~TxAbort_wb_q
+  TxRetryPulse := TxRetry_wb(1)   & ~TxRetry_wb(2)
+  TxDonePulse  := TxDone_wb(1)    & ~TxDone_wb(2)
+  TxAbortPulse := TxAbort_wb(1)   & ~TxAbort_wb(2)
 
 
 
@@ -888,9 +851,9 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, ReadTxDataFromMemory_2, WriteRxDat
 
   val TxAbortPacketBlocked = RegInit(false.B)
 
-  when(TxAbort_wb & (~tx_burst_en) & MasterWbTX & MasterAccessFinished &
-    (~TxAbortPacketBlocked) | TxAbort_wb & (~MasterWbTX) &
-    (~TxAbortPacketBlocked)){
+  when(
+    TxAbort_wb(1) & (~TxAbortPacketBlocked) &   MasterWbTX  & (~tx_burst_en) & MasterAccessFinished  |
+    TxAbort_wb(1) & (~TxAbortPacketBlocked) & (~MasterWbTX) ){
     TxAbortPacket := true.B
   } .otherwise{
     TxAbortPacket := false.B
@@ -899,13 +862,13 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, ReadTxDataFromMemory_2, WriteRxDat
 
   when(TxEn & TxEn_q & TxAbortPacket_NotCleared){
     TxAbortPacket_NotCleared := false.B
-  } .elsewhen(TxAbort_wb & (~tx_burst_en) & MasterWbTX & MasterAccessFinished &
-    (~TxAbortPacketBlocked) | TxAbort_wb & (~MasterWbTX) &
-    (~TxAbortPacketBlocked)){
+  } .elsewhen(
+    TxAbort_wb(1) & (~TxAbortPacketBlocked) &   MasterWbTX & (~tx_burst_en) & MasterAccessFinished |
+    TxAbort_wb(1) & (~TxAbortPacketBlocked) & (~MasterWbTX) ){
     TxAbortPacket_NotCleared := true.B
   }
 
-  when(~TxAbort_wb & TxAbort_wb_q){
+  when(~TxAbort_wb(1) & TxAbort_wb(2)){
     TxAbortPacketBlocked := false.B
   } .elsewhen(TxAbortPacket){
     TxAbortPacketBlocked := true.B
@@ -913,14 +876,11 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, ReadTxDataFromMemory_2, WriteRxDat
 
 
 
-
-
-
   val TxRetryPacketBlocked = RegInit(false.B)
 
   when(
-    TxRetry_wb & ~tx_burst_en & MasterWbTX & MasterAccessFinished & ~TxRetryPacketBlocked |
-    TxRetry_wb & ~MasterWbTX & ~TxRetryPacketBlocked){
+    TxRetry_wb(1) & ~TxRetryPacketBlocked &  MasterWbTX & ~tx_burst_en & MasterAccessFinished |
+    TxRetry_wb(1) & ~TxRetryPacketBlocked & ~MasterWbTX ){
     TxRetryPacket := true.B
   } .otherwise{
     TxRetryPacket := false.B
@@ -933,13 +893,13 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, ReadTxDataFromMemory_2, WriteRxDat
   when(StartTxBDRead){
     TxRetryPacket_NotCleared := false.B
   } .elsewhen(
-    TxRetry_wb & ~tx_burst_en & MasterWbTX & MasterAccessFinished & ~TxRetryPacketBlocked |
-    TxRetry_wb & ~MasterWbTX & ~TxRetryPacketBlocked){
+    TxRetry_wb(1) & ~TxRetryPacketBlocked &  MasterWbTX & ~tx_burst_en & MasterAccessFinished |
+    TxRetry_wb(1) & ~TxRetryPacketBlocked & ~MasterWbTX ){
     TxRetryPacket_NotCleared := true.B
   }
 
 
-  when(~TxRetry_wb & TxRetry_wb_q){
+  when(~TxRetry_wb(1) & TxRetry_wb(2)){
     TxRetryPacketBlocked := false.B
   } .elsewhen(TxRetryPacket){
     TxRetryPacketBlocked := true.B
@@ -950,8 +910,8 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, ReadTxDataFromMemory_2, WriteRxDat
   val TxDonePacketBlocked = RegInit(false.B)
 
   when(
-    TxDone_wb & ~tx_burst_en & MasterWbTX & MasterAccessFinished & ~TxDonePacketBlocked |
-    TxDone_wb & ~MasterWbTX  & ~TxDonePacketBlocked){
+    TxDone_wb(1) & ~tx_burst_en & MasterWbTX & MasterAccessFinished & ~TxDonePacketBlocked |
+    TxDone_wb(1) & ~MasterWbTX  & ~TxDonePacketBlocked){
     TxDonePacket := true.B
   }.otherwise{
     TxDonePacket := false.B
@@ -960,13 +920,13 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, ReadTxDataFromMemory_2, WriteRxDat
   when(TxEn & TxEn_q & TxDonePacket_NotCleared){
     TxDonePacket_NotCleared := false.B
   } .elsewhen(
-    TxDone_wb & ~tx_burst_en & MasterWbTX & MasterAccessFinished & (~TxDonePacketBlocked) |
-    TxDone_wb & ~MasterWbTX & (~TxDonePacketBlocked)){
+    TxDone_wb(1) & ~tx_burst_en & MasterWbTX & MasterAccessFinished & (~TxDonePacketBlocked) |
+    TxDone_wb(1) & ~MasterWbTX & (~TxDonePacketBlocked)){
     TxDonePacket_NotCleared := true.B
   }
 
 
-  when(~TxDone_wb & TxDone_wb_q){
+  when(~TxDone_wb(1) & TxDone_wb(2)){
     TxDonePacketBlocked := false.B
   } .elsewhen(TxDonePacket){
     TxDonePacketBlocked := true.B
