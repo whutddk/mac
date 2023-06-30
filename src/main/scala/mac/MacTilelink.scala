@@ -39,6 +39,9 @@ class RxBuffDesc extends Bundle{
 
 
 
+
+
+
 class MacTileLinkIO extends Bundle{
 
   // WISHBONE common
@@ -47,10 +50,15 @@ class MacTileLinkIO extends Bundle{
   val WB_DAT_O = Output(UInt(32.W))       // WISHBONE data output
 
   // WISHBONE slave
-  val WB_ADR_I = Input(UInt(8.W))       // WISHBONE address input
+  val WB_ADR_I = Input(UInt(10.W))       // WISHBONE address input
   val WB_WE_I  = Input(Bool())        // WISHBONE write enable input
-  val BDCs     = Input(UInt(4.W))          // Buffer descriptors are selected
+  // val BDCs     = Input(UInt(4.W))          // Buffer descriptors are selected
+  val WB_SEL_I = Input(UInt(4.W))     // WISHBONE byte select input
+  val WB_CYC_I = Input(Bool())     // WISHBONE cycle input
+  val WB_STB_I = Input(Bool())     // WISHBONE strobe input
+
   val WB_ACK_O = Output(Bool())       // WISHBONE acknowledge output
+  val WB_ERR_O = Output(Bool())       // WISHBONE error output
 
   // WISHBONE master
   val m_wb_adr_o = Output(UInt(30.W))
@@ -115,6 +123,8 @@ class MacTileLinkIO extends Bundle{
   val r_TxEn    = Input(Bool())          // Transmit enable
   val r_RxEn    = Input(Bool())         // Receive enable
   val r_TxBDNum = Input(UInt(8.W))      // Receive buffer descriptor number
+  val RegDataOut = Input(UInt(32.W))
+  val RegCs = Output(UInt(4.W))
 
   // Interrupts
   val TxB_IRQ  = Output(Bool())
@@ -128,6 +138,7 @@ class MacTileLinkIO extends Bundle{
 abstract class MacTileLinkBase extends Module{
   val io: MacTileLinkIO = IO(new MacTileLinkIO)
 
+  val BDCs = Wire(UInt(4.W))
 
   val TxB_IRQ = RegInit(false.B); io.TxB_IRQ := TxB_IRQ
   val TxE_IRQ = RegInit(false.B); io.TxE_IRQ := TxE_IRQ
@@ -212,7 +223,7 @@ abstract class MacTileLinkBase extends Module{
   val RxBufferAlmostEmpty = Wire(Bool())
   val RxBufferEmpty = Wire(Bool())
 
-  val WB_ACK_O = Reg(Bool()); io.WB_ACK_O := WB_ACK_O
+  val BDAck = Reg(Bool());
 
 
 
@@ -340,14 +351,14 @@ abstract class MacTileLinkBase extends Module{
 
 
   when(true.B){
-    WB_ACK_O := (BDWrite.orR & WbEn & WbEn_q) | (BDRead & WbEn & ~WbEn_q)
+    BDAck := (BDWrite.orR & WbEn & WbEn_q) | (BDRead & WbEn & ~WbEn_q)
   }
 
   // Generic synchronous single-port RAM interface
   val bd_ram = Module(new MacSRAM)
 
 
-  io.WB_DAT_O := ram_do
+  val BD_WB_DAT_O = ram_do
 
 
 
@@ -397,10 +408,10 @@ abstract class MacTileLinkBase extends Module{
     WbEn := true.B  // RxEn access stage and r_TxEn is disabled
     RxEn := false.B
     TxEn := false.B
-    ram_addr := io.WB_ADR_I // [9:2];
+    ram_addr := io.WB_ADR_I(7,0) // [11:2 ] -> [9:2];
     ram_di  := io.WB_DAT_I;
-    BDWrite := io.BDCs & Fill(4,io.WB_WE_I)
-    BDRead  := io.BDCs.orR & ~io.WB_WE_I
+    BDWrite := BDCs & Fill(4,io.WB_WE_I)
+    BDRead  := BDCs.orR & ~io.WB_WE_I
   } .elsewhen( RAMAccessEnable === BitPat("b010?1") ){
     WbEn := false.B
     RxEn := false.B
@@ -411,20 +422,20 @@ abstract class MacTileLinkBase extends Module{
     WbEn := true.B  // TxEn access stage (we always go to wb access stage)
     RxEn := false.B
     TxEn := false.B
-    ram_addr := io.WB_ADR_I //[9:2]
+    ram_addr := io.WB_ADR_I(7,0) //[11:2 ] ->[9:2]
     ram_di  := io.WB_DAT_I
-    BDWrite := io.BDCs & Fill(4,io.WB_WE_I)
-    BDRead  := io.BDCs.orR & ~io.WB_WE_I
+    BDWrite := BDCs & Fill(4,io.WB_WE_I)
+    BDRead  := BDCs.orR & ~io.WB_WE_I
   } .elsewhen( RAMAccessEnable === BitPat("b10000") ){
     WbEn := false.B // WbEn access stage and there is no need for other stages. WbEn needs to be switched off for a bit
   } .elsewhen( RAMAccessEnable === BitPat("b00000") ){
     WbEn := true.B  // Idle state. We go to WbEn access stage.
     RxEn := false.B
     TxEn := false.B
-    ram_addr := io.WB_ADR_I //[9:2]
+    ram_addr := io.WB_ADR_I(7,0) // [11:2 ] -> [9:2]
     ram_di  := io.WB_DAT_I
-    BDWrite := io.BDCs & Fill(4,io.WB_WE_I)
-    BDRead  := io.BDCs.orR & ~io.WB_WE_I   
+    BDWrite := BDCs & Fill(4,io.WB_WE_I)
+    BDRead  := BDCs.orR & ~io.WB_WE_I   
   }
 
 
@@ -1136,6 +1147,23 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
   io.Busy_IRQ := Busy_IRQ_sync(1) & ~Busy_IRQ_sync(2)
 
 
+
+  // val WB_ERR_O = Output(Bool())       // WISHBONE error output
+  // val WB_SEL_I = Input(UInt(4.W))     // WISHBONE byte select input
+  // val WB_CYC_I = Input(Bool())     // WISHBONE cycle input
+  // val WB_STB_I = Input(Bool())     // WISHBONE strobe input
+
+
+// Connected to registers
+  io.RegCs := Fill(4, io.WB_STB_I & io.WB_CYC_I & io.WB_SEL_I.orR & ~io.WB_ADR_I.extract(9) & ~io.WB_ADR_I.extract(8)) & io.WB_SEL_I // 0x0   - 0x3FF
+     BDCs  := Fill(4, io.WB_STB_I & io.WB_CYC_I & io.WB_SEL_I.orR & ~io.WB_ADR_I.extract(9) &  io.WB_ADR_I.extract(8)) & io.WB_SEL_I // 0x400 - 0x7FF
+  val CsMiss =        io.WB_STB_I & io.WB_CYC_I & io.WB_SEL_I.orR &  io.WB_ADR_I.extract(9)    // 0x800 - 0xfFF     // When access to the address between 0x800 and 0xfff occurs, acknowledge is set but data is not valid.
+             
+
+  io.WB_ACK_O := RegNext((io.RegCs.orR | BDAck) & ~io.WB_ACK_O, false.B)
+  io.WB_DAT_O := RegNext(Mux( ((io.RegCs.orR) & ~io.WB_WE_I), io.RegDataOut, BD_WB_DAT_O ), 0.U(32.W))
+
+  io.WB_ERR_O := RegNext(io.WB_STB_I & io.WB_CYC_I & (~(io.WB_SEL_I.orR) | CsMiss) & ~io.WB_ERR_O, false.B)
 }
 
 
@@ -1296,7 +1324,6 @@ trait MacTileLinkTXClk{ this: MacTileLinkBase =>
 
   }
 }
-
 
 
 
@@ -1496,19 +1523,4 @@ class MacTileLink extends MacTileLinkBase with MacTileLinkTXClk with MacTileLink
 
 
 
-
-
-
-
-
-
-// trait MacTileLinkSlave{ this: MacTileLinkBase =>
-
-//   val a = Flipped(new DecoupledIO(new TLBundleA(edge.bundle)))
-//   val d = new DecoupledIO(new TLBundleD(edge.bundle))
-
-//   val tlSlvDValid = RegInit(false.B); io.d.valid := tlSlvDValid
-
-
-// }
 
