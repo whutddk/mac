@@ -149,13 +149,12 @@ abstract class MacTileLinkBase extends Module{
   val TxStatus = RegInit(0.U(4.W)) //[14:11]
   val RxStatus = RegInit(0.U(2.W)) //[14:13]
 
-  // Synchronizing TxRetry TxDone_wb TxAbort signal (synchronized to WISHBONE clock)
+
 
 
   val TxStartFrm_wb = RegInit(false.B)
 
-  // Generating delayed signals
-
+  // Synchronizing TxRetry TxDone_wb TxAbort signal (synchronized to WISHBONE clock)
   val TxRetry_wb = ShiftRegisters( io.TxRetry, 3, false.B, true.B )
   val TxAbort_wb = ShiftRegisters( io.TxAbort, 3, false.B, true.B )
   val TxDone_wb  = ShiftRegisters( io.TxDone,  3, false.B, true.B )
@@ -200,7 +199,6 @@ abstract class MacTileLinkBase extends Module{
   val TxDonePulse  = Wire(Bool())
   val TxAbortPulse = Wire(Bool())
 
-  val StartRxBDRead = Wire(Bool())
 
 
 
@@ -216,7 +214,6 @@ abstract class MacTileLinkBase extends Module{
 
   val WB_ACK_O = Reg(Bool()); io.WB_ACK_O := WB_ACK_O
 
-  val RxStatusIn = Wire(UInt(9.W))
 
 
   // Delayed stage signals
@@ -243,7 +240,6 @@ abstract class MacTileLinkBase extends Module{
   val TxEn_needed = RegInit(false.B)
   val RxEn_needed = RegInit(false.B)
 
-  val StartRxPointerRead = Wire(Bool())
   val RxPointerRead = RegInit(false.B)
 
   // RX shift ending signals
@@ -254,11 +250,10 @@ abstract class MacTileLinkBase extends Module{
 
 
 
-  val StartShiftWillEnd = Wire(Bool())
 
   val StartOccured      = RegInit(false.B)
-  val TxStartFrm_sync2_txclk = Wire(Bool())
-  val TxStartFrm_syncb1 = RegNext(TxStartFrm_sync2_txclk, false.B)
+  val TxStartFrm_sync_txclk = Wire(Bool())
+  val TxStartFrm_syncb1 = RegNext(TxStartFrm_sync_txclk, false.B)
   val TxStartFrm_syncb2 = RegNext(TxStartFrm_syncb1, false.B)
 
   val TxFifoClear = Wire(Bool())
@@ -320,39 +315,24 @@ abstract class MacTileLinkBase extends Module{
 
   // Start: Generation of the ReadTxDataFromFifo_tck signal and synchronization to the WB_CLK_I
   val ReadTxDataFromFifo_tck_txclk = Wire(Bool())
-  val ReadTxDataFromFifo_sync1 = RegNext(ReadTxDataFromFifo_tck_txclk, false.B)
-  val ReadTxDataFromFifo_sync2 = RegNext(ReadTxDataFromFifo_sync1, false.B)
-  val ReadTxDataFromFifo_sync3 = RegNext(ReadTxDataFromFifo_sync2, false.B)
+
+  val ReadTxDataFromFifo_sync = ShiftRegisters( ReadTxDataFromFifo_tck_txclk, 3, false.B, true.B)
+
 
   val RxAbortLatched_rxclk = Wire(Bool())
-  val RxAbortSync1 = RegNext( RxAbortLatched_rxclk, false.B )
-  val RxAbortSync2 = RegNext( RxAbortSync1, false.B )
-  val RxAbortSync3 = RegNext( RxAbortSync2, false.B )
-  val RxAbortSync4 = RegNext( RxAbortSync3, false.B )
+  val RxAbortSync = ShiftRegisters( RxAbortLatched_rxclk, 4, false.B, true.B )
 
-
-  val SetWriteRxDataToFifo = Wire(Bool())
   val WriteRxDataToFifo_rxclk = Wire(Bool())
-  val WriteRxDataToFifoSync1 = RegNext( WriteRxDataToFifo_rxclk, false.B)
-  val WriteRxDataToFifoSync2 = RegNext( WriteRxDataToFifoSync1, false.B)
-  val WriteRxDataToFifoSync3 = RegNext( WriteRxDataToFifoSync2, false.B)
+  val WriteRxDataToFifoSync = ShiftRegisters(WriteRxDataToFifo_rxclk, 3, false.B, true.B)
 
-  val WriteRxDataToFifo_wb = Wire(Bool())
+
   val LatchedRxStartFrm_rxclk = Wire(Bool())
-  val SyncRxStartFrm    = RegNext( LatchedRxStartFrm_rxclk, false.B)
-  val SyncRxStartFrm_q  = RegNext( SyncRxStartFrm, false.B)
-  val SyncRxStartFrm_q2 = RegNext( SyncRxStartFrm_q, false.B)
+  val SyncRxStartFrm = ShiftRegisters(LatchedRxStartFrm_rxclk, 3, false.B, true.B)
 
-
-  val RxFifoReset = Wire(Bool())
-
-  val TxError = Wire(Bool())
-  val RxError = Wire(Bool())
 
   val RxStatusWriteLatched = RegInit(false.B)
 
-  val RxStatusWriteLatched_syncb1 = RegNext(io.RxStatusWriteLatched_sync2, false.B)
-  val RxStatusWriteLatched_syncb2 = RegNext(RxStatusWriteLatched_syncb1, false.B)
+  val RxStatusWriteLatched_syncb = ShiftRegister(io.RxStatusWriteLatched_sync2, 2, false.B, true.B)
 
 
   io.m_wb_bte_o := "b00".U    // Linear burst
@@ -841,7 +821,7 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
   TxDonePulse  := TxDone_wb(1)    & ~TxDone_wb(2)
   TxAbortPulse := TxAbort_wb(1)   & ~TxAbort_wb(2)
 
-
+  val TxError = io.TxUnderRun | io.RetryLimit | io.LateCollLatched | io.CarrierSenseLost
 
 
 
@@ -910,8 +890,8 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
   val TxDonePacketBlocked = RegInit(false.B)
 
   when(
-    TxDone_wb(1) & ~tx_burst_en & MasterWbTX & MasterAccessFinished & ~TxDonePacketBlocked |
-    TxDone_wb(1) & ~MasterWbTX  & ~TxDonePacketBlocked){
+    TxDone_wb(1) & ~TxDonePacketBlocked &  MasterWbTX & ~tx_burst_en & MasterAccessFinished |
+    TxDone_wb(1) & ~TxDonePacketBlocked & ~MasterWbTX  ){
     TxDonePacket := true.B
   }.otherwise{
     TxDonePacket := false.B
@@ -920,8 +900,8 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
   when(TxEn & TxEn_q & TxDonePacket_NotCleared){
     TxDonePacket_NotCleared := false.B
   } .elsewhen(
-    TxDone_wb(1) & ~tx_burst_en & MasterWbTX & MasterAccessFinished & (~TxDonePacketBlocked) |
-    TxDone_wb(1) & ~MasterWbTX & (~TxDonePacketBlocked)){
+    TxDone_wb(1) & ~TxDonePacketBlocked &  MasterWbTX & ~tx_burst_en & MasterAccessFinished |
+    TxDone_wb(1) & ~TxDonePacketBlocked & ~MasterWbTX ){
     TxDonePacket_NotCleared := true.B
   }
 
@@ -942,14 +922,9 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
   }
 
 
-  ReadTxDataFromFifo_wb := ReadTxDataFromFifo_sync2 & ~ReadTxDataFromFifo_sync3
-  // End: Generation of the ReadTxDataFromFifo_tck signal and synchronization to the WB_CLK_I
+  ReadTxDataFromFifo_wb := ReadTxDataFromFifo_sync(1) & ~ReadTxDataFromFifo_sync(2)
 
-
-  StartRxBDRead :=
-    RxStatusWrite |
-    RxAbortSync3 & ~RxAbortSync4 |
-    io.r_RxEn & ~r_RxEn_q
+  val StartRxBDRead = RxStatusWrite | (RxAbortSync(2) & ~RxAbortSync(3)) | (io.r_RxEn & ~r_RxEn_q)
 
   // Reading the Rx buffer descriptor
   when(StartRxBDRead & ~RxReady){
@@ -960,20 +935,17 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
 
 
 
-// Reading of the next receive buffer descriptor starts after reception status
-// is written to the previous one.
+  // Reading of the next receive buffer descriptor starts after reception status is written to the previous one.
 
   // Latching READY status of the Rx buffer descriptor
   when(RxPointerRead){
     RxBDReady := false.B
   } .elsewhen(RxEn & RxEn_q & RxBDRead){
-    RxBDReady := rxBuffDesc.e// RxBDReady is sampled only once at the beginning    
+    RxBDReady := rxBuffDesc.e  // RxBDReady is sampled only once at the beginning    
   }
 
 
-  // Latching Rx buffer descriptor status
-  // Data is avaliable one cycle after the access is started (at that time
-  // signal RxEn is not active)
+  // Latching Rx buffer descriptor status Data is avaliable one cycle after the access is started (at that time signal RxEn is not active)
   when(RxEn & RxEn_q & RxBDRead){
     RxStatus := Cat(rxBuffDesc.irq, rxBuffDesc.wrap)
   }
@@ -981,14 +953,14 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
 
 
   // RxReady generation
-  when(ShiftEnded | RxAbortSync2 & ~RxAbortSync3 | ~io.r_RxEn & r_RxEn_q){
+  when(ShiftEnded | RxAbortSync(1) & ~RxAbortSync(2) | ~io.r_RxEn & r_RxEn_q){
     RxReady := false.B
   } .elsewhen(RxEn & RxEn_q & RxPointerRead){
     RxReady := true.B
   }
 
   // Reading Rx BD pointer
-  StartRxPointerRead := RxBDRead & RxBDReady
+  val StartRxPointerRead = RxBDRead & RxBDReady
 
   // Reading Tx BD Pointer
   when(StartRxPointerRead){
@@ -1038,22 +1010,18 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
   val LastByteIn_rxclk = Wire(Bool())
   val RxByteCnt_rxclk  = Wire(UInt(2.W))
   val RxEnableWindow_rxclk = Wire(Bool())
-  StartShiftWillEnd := LastByteIn_rxclk | io.RxValid & io.RxEndFrm & RxByteCnt_rxclk.andR & RxEnableWindow_rxclk
+  val StartShiftWillEnd = LastByteIn_rxclk | io.RxValid & io.RxEndFrm & RxByteCnt_rxclk.andR & RxEnableWindow_rxclk
 
   // Indicating start of the reception process
   val ShiftWillEnd_rxclk = Wire(Bool())
-  SetWriteRxDataToFifo :=
+  val SetWriteRxDataToFifo =
     (io.RxValid & RxReady & ~io.RxStartFrm & RxEnableWindow_rxclk & (RxByteCnt_rxclk.andR)) |
     (io.RxValid & RxReady &  io.RxStartFrm & (RxPointerLSB_rst.andR)) |
     (ShiftWillEnd_rxclk & LastByteIn_rxclk & (RxByteCnt_rxclk.andR))
 
 
-
-  WriteRxDataToFifo_wb := WriteRxDataToFifoSync2 & ~WriteRxDataToFifoSync3
-
-
-
-  RxFifoReset := SyncRxStartFrm_q & ~SyncRxStartFrm_q2
+  val WriteRxDataToFifo_wb  = WriteRxDataToFifoSync(1) & ~WriteRxDataToFifoSync(2)
+  val RxFifoReset = SyncRxStartFrm(1) & ~SyncRxStartFrm(2)
 
   val rx_fifo = Module(new MacFifo(dw = 32, dp = 16))
   val RxDataLatched2_rxclk = Wire(UInt(32.W))
@@ -1097,8 +1065,7 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
 
 
 
-
-  RxStatusIn := Cat(io.ReceivedPauseFrm, io.AddressMiss, RxOverrun, io.InvalidSymbol, io.DribbleNibble, io.ReceivedPacketTooBig, io.ShortFrame, io.LatchedCrcError, io.RxLateCollision)
+  val RxStatusIn = Cat(io.ReceivedPauseFrm, io.AddressMiss, RxOverrun, io.InvalidSymbol, io.DribbleNibble, io.ReceivedPacketTooBig, io.ShortFrame, io.LatchedCrcError, io.RxLateCollision)
 
 
   // Rx overrun
@@ -1111,16 +1078,15 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
 
 
 
-  TxError := io.TxUnderRun | io.RetryLimit | io.LateCollLatched | io.CarrierSenseLost
 
 
   // ShortFrame (RxStatusInLatched[2]) can not set an error because short frames are aborted when signal r_RecSmall is set to 0 in MODER register. 
   // AddressMiss is identifying that a frame was received because of the promiscous mode and is not an error
-  RxError := (RxStatusInLatched_rxclk(6,3).orR) | (RxStatusInLatched_rxclk(1,0).orR)
+  val RxError = (RxStatusInLatched_rxclk(6,3).orR) | (RxStatusInLatched_rxclk(1,0).orR)
 
 
   // Latching and synchronizing RxStatusWrite signal. This signal is used for clearing the ReceivedPauseFrm signal
-  when(RxStatusWriteLatched_syncb2){
+  when(RxStatusWriteLatched_syncb){
     RxStatusWriteLatched := false.B
   } .elsewhen(RxStatusWrite){
     RxStatusWriteLatched := true.B
@@ -1164,17 +1130,10 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
 
   // Busy Interrupt
   val Busy_IRQ_rck_rxclk = Wire(Bool())
-  val Busy_IRQ_sync1 = RegNext(Busy_IRQ_rck_rxclk)
-  val Busy_IRQ_sync2 = RegNext(Busy_IRQ_sync1)
-  val Busy_IRQ_sync3 = RegNext(Busy_IRQ_sync2)
-  val Busy_IRQ_syncb1 = RegNext(Busy_IRQ_sync2, false.B)
-  val Busy_IRQ_syncb2 = RegNext(Busy_IRQ_syncb1, false.B)
-
-  
+  val Busy_IRQ_sync = ShiftRegisters(Busy_IRQ_rck_rxclk, 3)
 
 
-
-  io.Busy_IRQ := Busy_IRQ_sync2 & ~Busy_IRQ_sync3
+  io.Busy_IRQ := Busy_IRQ_sync(1) & ~Busy_IRQ_sync(2)
 
 
 }
@@ -1208,9 +1167,10 @@ trait MacTileLinkTXClk{ this: MacTileLinkBase =>
     val BlockingTxStatusWrite_sync1 = RegNext(BlockingTxStatusWrite, false.B)
     val BlockingTxStatusWrite_sync2 = RegNext(BlockingTxStatusWrite_sync1, false.B); BlockingTxStatusWrite_sync2_txclk := BlockingTxStatusWrite_sync2
     val BlockingTxStatusWrite_sync3 = RegNext(BlockingTxStatusWrite_sync2, false.B); BlockingTxStatusWrite_sync3_txclk := BlockingTxStatusWrite_sync3
+
     // Synchronizing TxStartFrm_wb to MTxClk
-    val TxStartFrm_sync1  = RegNext( TxStartFrm_wb, false.B)
-    val TxStartFrm_sync2  = RegNext( TxStartFrm_sync1, false.B); TxStartFrm_sync2_txclk := TxStartFrm_sync2
+    val TxStartFrm_sync = ShiftRegister( TxStartFrm_wb, 2, false.B, true.B ); TxStartFrm_sync_txclk := TxStartFrm_sync
+
     val TxStartFrm = RegInit(false.B);   io.TxStartFrm := TxStartFrm
     val TxEndFrm   = RegInit(false.B);   io.TxEndFrm   := TxEndFrm
     val TxData     = RegInit(0.U(8.W)); io.TxData := TxData
@@ -1225,9 +1185,7 @@ trait MacTileLinkTXClk{ this: MacTileLinkBase =>
     val TxRetry_q    = RegNext( io.TxRetry, false.B)
     val TxUsedData_q = RegNext( io.TxUsedData, false.B)
 
-    val ReadTxDataFromFifo_syncb1 = RegNext( ReadTxDataFromFifo_sync2, false.B)
-    val ReadTxDataFromFifo_syncb2 = RegNext( ReadTxDataFromFifo_syncb1, false.B)
-    val ReadTxDataFromFifo_syncb3 = RegNext( ReadTxDataFromFifo_syncb2, false.B)
+    val ReadTxDataFromFifo_syncb = ShiftRegisters(ReadTxDataFromFifo_sync(1), 3, false.B, true.B)
 
     // Changes for tx occur every second clock. Flop is used for this manner.
     when( io.TxDone | io.TxAbort | TxRetry_q){
@@ -1236,9 +1194,9 @@ trait MacTileLinkTXClk{ this: MacTileLinkBase =>
       Flop := ~Flop
     }
 
-    when(TxStartFrm_sync2){
+    when(TxStartFrm_sync){
       TxStartFrm := true.B
-    } .elsewhen(TxUsedData_q | ~TxStartFrm_sync2 & (io.TxRetry & (~TxRetry_q) | io.TxAbort & (~TxAbort_q))){
+    } .elsewhen(TxUsedData_q | ~TxStartFrm_sync & (io.TxRetry & (~TxRetry_q) | io.TxAbort & (~TxAbort_q))){
       TxStartFrm := false.B
     }
 
@@ -1266,7 +1224,7 @@ trait MacTileLinkTXClk{ this: MacTileLinkBase =>
 
 
     // Tx data selection (latching)
-    when( TxStartFrm_sync2 & ~TxStartFrm ){
+    when( TxStartFrm_sync & ~TxStartFrm ){
       TxData := Mux1H(Seq(
         ( TxPointerLSB === 0.U ) -> TxData_wb(31,24),// Big Endian Byte Ordering
         ( TxPointerLSB === 1.U ) -> TxData_wb(23,16),// Big Endian Byte Ordering
@@ -1288,7 +1246,7 @@ trait MacTileLinkTXClk{ this: MacTileLinkBase =>
 
     // Latching tx data
     when(
-      TxStartFrm_sync2 & ~TxStartFrm |
+      TxStartFrm_sync & ~TxStartFrm |
       io.TxUsedData & Flop & TxByteCnt === 3.U |
       TxStartFrm & io.TxUsedData & Flop & TxByteCnt === 0.U){
       TxDataLatched := TxData_wb
@@ -1328,10 +1286,10 @@ trait MacTileLinkTXClk{ this: MacTileLinkBase =>
       TxByteCnt := TxByteCnt + 1.U
     }
 
-    when(TxStartFrm_sync2 & ~TxStartFrm | io.TxUsedData & Flop & TxByteCnt === 3.U &
+    when(TxStartFrm_sync & ~TxStartFrm | io.TxUsedData & Flop & TxByteCnt === 3.U &
       ~LastWord | TxStartFrm & io.TxUsedData & Flop & TxByteCnt === 0.U ){
       ReadTxDataFromFifo_tck := true.B
-    } .elsewhen(ReadTxDataFromFifo_syncb2 & ~ReadTxDataFromFifo_syncb3){
+    } .elsewhen(ReadTxDataFromFifo_syncb(1) & ~ReadTxDataFromFifo_syncb(2)){
       ReadTxDataFromFifo_tck := false.B
     }
 
@@ -1385,18 +1343,20 @@ trait MacTileLinkRXClk{ this: MacTileLinkBase =>
     val LastByteIn   = RegInit(false.B); LastByteIn_rxclk := LastByteIn
     val ShiftWillEnd = RegInit(false.B); ShiftWillEnd_rxclk := ShiftWillEnd
     val WriteRxDataToFifo = RegInit(false.B); WriteRxDataToFifo_rxclk := WriteRxDataToFifo
-    val LatchedRxLength = RegInit(0.U(16.W)); LatchedRxLength_rxclk := LatchedRxLength
     val RxAbortLatched = RegInit(false.B); RxAbortLatched_rxclk := RxAbortLatched
-    val RxStatusInLatched = RegInit(0.U(9.W)); RxStatusInLatched_rxclk := RxStatusInLatched
+
+    val LatchedRxLength = RegEnable(io.RxLength, 0.U(16.W), io.LoadRxStatus); LatchedRxLength_rxclk := LatchedRxLength
+    val RxStatusInLatched = RegEnable(RxStatusIn, 0.U(9.W), io.LoadRxStatus); RxStatusInLatched_rxclk := RxStatusInLatched
     val ShiftEnded_rck = RegInit(false.B); ShiftEnded_rck_txclk := ShiftEnded_rck
-    val ShiftEndedSync_c1 = RegNext( ShiftEndedSync2, false.B)
-    val ShiftEndedSync_c2 = RegNext( ShiftEndedSync_c1, false.B)
-    val RxAbortSyncb1 = RegNext( RxAbortSync2, false.B)
-    val RxAbortSyncb2 = RegNext( RxAbortSyncb1, false.B)
+
+    val ShiftEndedSync = ShiftRegisters(ShiftEndedSync2, 2, false.B, true.B)
+
+    val RxAbortSyncb = ShiftRegister( RxAbortSync(1), 2, false.B, true.B )
+
     val RxEnableWindow = RegInit(false.B); RxEnableWindow_rxclk := RxEnableWindow
     val LatchedRxStartFrm = RegInit(false.B); LatchedRxStartFrm_rxclk := LatchedRxStartFrm
-    val RxStatusWriteLatched_sync1 = RegNext(RxStatusWriteLatched, false.B)
-    val RxStatusWriteLatched_sync2 = RegNext(RxStatusWriteLatched_sync1, false.B); io.RxStatusWriteLatched_sync2 := RxStatusWriteLatched_sync2
+
+    val RxStatusWriteLatched_sync = ShiftRegister(RxStatusWriteLatched, 2, false.B, true.B); io.RxStatusWriteLatched_sync2 := RxStatusWriteLatched_sync
     // Indicating that last byte is being reveived
 
     when(ShiftWillEnd & RxByteCnt.andR | io.RxAbort){
@@ -1471,14 +1431,14 @@ trait MacTileLinkRXClk{ this: MacTileLinkBase =>
 
     when(SetWriteRxDataToFifo & ~io.RxAbort){
       WriteRxDataToFifo := true.B
-    } .elsewhen(WriteRxDataToFifoSync2 | io.RxAbort){
+    } .elsewhen(WriteRxDataToFifoSync(1) | io.RxAbort){
       WriteRxDataToFifo := false.B
     }
 
 
-    when(io.RxStartFrm & ~SyncRxStartFrm_q){
+    when(io.RxStartFrm & ~SyncRxStartFrm(1)){
       LatchedRxStartFrm := true.B
-    } .elsewhen(SyncRxStartFrm_q){
+    } .elsewhen(SyncRxStartFrm(1)){
       LatchedRxStartFrm := false.B
     }
 
@@ -1486,11 +1446,11 @@ trait MacTileLinkRXClk{ this: MacTileLinkBase =>
     // Generation of the end-of-frame signal
     when(~io.RxAbort & SetWriteRxDataToFifo & StartShiftWillEnd){
       ShiftEnded_rck := true.B
-    } .elsewhen(io.RxAbort | ShiftEndedSync_c1 & ShiftEndedSync_c2){
+    } .elsewhen(io.RxAbort | ShiftEndedSync(0) & ShiftEndedSync(1)){
       ShiftEnded_rck := false.B
     }
 
-  // Generation of the end-of-frame signal
+    // Generation of the end-of-frame signal
     when(io.RxStartFrm){
       RxEnableWindow := true.B
     } .elsewhen(io.RxEndFrm | io.RxAbort){
@@ -1498,34 +1458,28 @@ trait MacTileLinkRXClk{ this: MacTileLinkBase =>
     }
 
 
-    when(RxAbortSyncb2){
+    when(RxAbortSyncb){
       RxAbortLatched := false.B
     } .elsewhen(io.RxAbort){
       RxAbortLatched := true.B
     }
 
-    when(io.LoadRxStatus){
-      LatchedRxLength := io.RxLength
-    }
 
 
-    when(io.LoadRxStatus){
-      RxStatusInLatched := RxStatusIn
-    }
+
+
 
 
     val Busy_IRQ_rck = RegInit(false.B); Busy_IRQ_rck_rxclk := Busy_IRQ_rck
+    val Busy_IRQ_syncb = ShiftRegister( Busy_IRQ_sync(1), 2, false.B, true.B )
 
     when(io.RxValid & io.RxStartFrm & ~RxReady){
       Busy_IRQ_rck := true.B
-    } .elsewhen(Busy_IRQ_syncb2){
+    } .elsewhen(Busy_IRQ_syncb){
       Busy_IRQ_rck := false.B
     }
 
-    when(true.B){
-      Busy_IRQ_syncb1 := Busy_IRQ_sync2
-      Busy_IRQ_syncb2 := Busy_IRQ_syncb1
-    }
+
 
   }
 }
