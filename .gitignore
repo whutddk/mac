@@ -1,3 +1,5 @@
+
+/project/.*/
 ### Project Specific stuff
 test_run_dir/*
 ### XilinxISE template
@@ -341,3 +343,5 @@ hs_err_pid*
 
 .metals/
 generated/
+project/.bloop/riscv-mac-swich-build.json
+src/main/scala/mac/MacTilelink.scala
