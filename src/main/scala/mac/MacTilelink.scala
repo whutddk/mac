@@ -3,6 +3,9 @@ package MAC
 import chisel3._
 import chisel3.util._
 
+import freechips.rocketchip.tilelink._
+import freechips.rocketchip.diplomacy._
+
 
 class TxBuffDesc extends Bundle{
   val len = UInt(16.W) //[31.16]
@@ -41,102 +44,112 @@ class RxBuffDesc extends Bundle{
 
 
 
+abstract class MacTileLinkBase(edge: TLEdgeIn) extends Module{
+  trait MacTileLinkSlaveIO { this: Bundle =>
+    val slvA = Flipped(Decoupled(new TLBundleA(edge.bundle)))
+    val slvD = Decoupled(new TLBundleD(edge.bundle))
+  }
 
-class MacTileLinkIO extends Bundle{
+  trait MacWishboneSlaveIO{ this: Bundle =>
+    // WISHBONE common
+    val WB_DAT_I = Input(UInt(32.W))       // WISHBONE data input
+    val WB_DAT_O = Output(UInt(32.W))       // WISHBONE data output
 
-  // WISHBONE common
-  val WB_DAT_I = Input(UInt(32.W))       // WISHBONE data input
+    // WISHBONE slave
+    val WB_ADR_I = Input(UInt(10.W))       // WISHBONE address input
+    val WB_WE_I  = Input(Bool())        // WISHBONE write enable input
+    // val BDCs     = Input(UInt(4.W))          // Buffer descriptors are selected
+    val WB_SEL_I = Input(UInt(4.W))     // WISHBONE byte select input
+    val WB_CYC_I = Input(Bool())     // WISHBONE cycle input
+    val WB_STB_I = Input(Bool())     // WISHBONE strobe input
 
-  val WB_DAT_O = Output(UInt(32.W))       // WISHBONE data output
+    val WB_ACK_O = Output(Bool())       // WISHBONE acknowledge output
+    val WB_ERR_O = Output(Bool())       // WISHBONE error output
+  }
 
-  // WISHBONE slave
-  val WB_ADR_I = Input(UInt(10.W))       // WISHBONE address input
-  val WB_WE_I  = Input(Bool())        // WISHBONE write enable input
-  // val BDCs     = Input(UInt(4.W))          // Buffer descriptors are selected
-  val WB_SEL_I = Input(UInt(4.W))     // WISHBONE byte select input
-  val WB_CYC_I = Input(Bool())     // WISHBONE cycle input
-  val WB_STB_I = Input(Bool())     // WISHBONE strobe input
+  class MacTileLinkIO extends Bundle{
 
-  val WB_ACK_O = Output(Bool())       // WISHBONE acknowledge output
-  val WB_ERR_O = Output(Bool())       // WISHBONE error output
+    // WISHBONE master
+    val m_wb_adr_o = Output(UInt(30.W))
+    val m_wb_sel_o = Output(UInt(4.W))
+    val m_wb_we_o  = Output(Bool())
+    val m_wb_dat_o = Output(UInt(32.W))
+    val m_wb_cyc_o = Output(Bool())
+    val m_wb_stb_o = Output(Bool())
+    val m_wb_dat_i = Input(UInt(32.W))
+    val m_wb_ack_i = Input(Bool())
+    val m_wb_err_i = Input(Bool())
 
-  // WISHBONE master
-  val m_wb_adr_o = Output(UInt(30.W))
-  val m_wb_sel_o = Output(UInt(4.W))
-  val m_wb_we_o  = Output(Bool())
-  val m_wb_dat_o = Output(UInt(32.W))
-  val m_wb_cyc_o = Output(Bool())
-  val m_wb_stb_o = Output(Bool())
-  val m_wb_dat_i = Input(UInt(32.W))
-  val m_wb_ack_i = Input(Bool())
-  val m_wb_err_i = Input(Bool())
+    val m_wb_cti_o = Output(UInt(3.W))     // Cycle Type Identifier
+    val m_wb_bte_o = Output(UInt(2.W))     // Burst Type Extension
 
-  val m_wb_cti_o = Output(UInt(3.W))     // Cycle Type Identifier
-  val m_wb_bte_o = Output(UInt(2.W))     // Burst Type Extension
+    // Rx Status signals
+    val InvalidSymbol   = Input(Bool())             // Invalid symbol was received during reception in 100 Mbps mode
+    val LatchedCrcError = Input(Bool())             // CRC error
+    val RxLateCollision = Input(Bool())             // Late collision occured while receiving frame
+    val ShortFrame      = Input(Bool())             // Frame shorter then the minimum size (r_MinFL) was received while small packets are enabled (r_RecSmall)
+    val DribbleNibble        = Input(Bool())        // Extra nibble received
+    val ReceivedPacketTooBig = Input(Bool())        // Received packet is bigger than r_MaxFL
+    val RxLength             = Input(UInt(16.W))    // Length of the incoming frame
+    val LoadRxStatus         = Input(Bool())        // Rx status was loaded
+    val ReceivedPacketGood   = Input(Bool())        // Received packet's length and CRC are good
+    val AddressMiss          = Input(Bool())        // When a packet is received AddressMiss status is written to the Rx BD
+    val r_RxFlow             = Input(Bool())
+    val r_PassAll            = Input(Bool())
+    val ReceivedPauseFrm     = Input(Bool())
 
-  // Rx Status signals
-  val InvalidSymbol   = Input(Bool())             // Invalid symbol was received during reception in 100 Mbps mode
-  val LatchedCrcError = Input(Bool())             // CRC error
-  val RxLateCollision = Input(Bool())             // Late collision occured while receiving frame
-  val ShortFrame      = Input(Bool())             // Frame shorter then the minimum size (r_MinFL) was received while small packets are enabled (r_RecSmall)
-  val DribbleNibble        = Input(Bool())        // Extra nibble received
-  val ReceivedPacketTooBig = Input(Bool())        // Received packet is bigger than r_MaxFL
-  val RxLength             = Input(UInt(16.W))    // Length of the incoming frame
-  val LoadRxStatus         = Input(Bool())        // Rx status was loaded
-  val ReceivedPacketGood   = Input(Bool())        // Received packet's length and CRC are good
-  val AddressMiss          = Input(Bool())        // When a packet is received AddressMiss status is written to the Rx BD
-  val r_RxFlow             = Input(Bool())
-  val r_PassAll            = Input(Bool())
-  val ReceivedPauseFrm     = Input(Bool())
+    // Tx Status signals
+    val RetryCntLatched  = Input(UInt(4.W))  // Latched Retry Counter
+    val RetryLimit       = Input(Bool())     // Retry limit reached (Retry Max value +1 attempts were made)
+    val LateCollLatched  = Input(Bool())     // Late collision occured
+    val DeferLatched     = Input(Bool())     // Defer indication (Frame was defered before sucessfully sent)
+    val RstDeferLatched  = Output(Bool())
+    val CarrierSenseLost = Input(Bool())     // Carrier Sense was lost during the frame transmission
 
-  // Tx Status signals
-  val RetryCntLatched  = Input(UInt(4.W))  // Latched Retry Counter
-  val RetryLimit       = Input(Bool())     // Retry limit reached (Retry Max value +1 attempts were made)
-  val LateCollLatched  = Input(Bool())     // Late collision occured
-  val DeferLatched     = Input(Bool())     // Defer indication (Frame was defered before sucessfully sent)
-  val RstDeferLatched  = Output(Bool())
-  val CarrierSenseLost = Input(Bool())     // Carrier Sense was lost during the frame transmission
+    // Tx
+    val MTxClk         = Input(Bool())      // Transmit clock (from PHY)
+    val TxUsedData     = Input(Bool())      // Transmit packet used data
+    val TxRetry        = Input(Bool())      // Transmit packet retry
+    val TxAbort        = Input(Bool())      // Transmit packet abort
+    val TxDone         = Input(Bool())      // Transmission ended
+    val TxStartFrm     = Output(Bool())     // Transmit packet start frame
+    val TxEndFrm       = Output(Bool())     // Transmit packet end frame
+    val TxData         = Output(UInt(8.W))  // Transmit packet data byte
+    val TxUnderRun     = Output(Bool())     // Transmit packet under-run
+    val PerPacketCrcEn = Output(Bool())     // Per packet crc enable
+    val PerPacketPad   = Output(Bool())     // Per packet pading
 
-  // Tx
-  val MTxClk         = Input(Bool())      // Transmit clock (from PHY)
-  val TxUsedData     = Input(Bool())      // Transmit packet used data
-  val TxRetry        = Input(Bool())      // Transmit packet retry
-  val TxAbort        = Input(Bool())      // Transmit packet abort
-  val TxDone         = Input(Bool())      // Transmission ended
-  val TxStartFrm     = Output(Bool())     // Transmit packet start frame
-  val TxEndFrm       = Output(Bool())     // Transmit packet end frame
-  val TxData         = Output(UInt(8.W))  // Transmit packet data byte
-  val TxUnderRun     = Output(Bool())     // Transmit packet under-run
-  val PerPacketCrcEn = Output(Bool())     // Per packet crc enable
-  val PerPacketPad   = Output(Bool())     // Per packet pading
+    // Rx
+    val MRxClk     = Input(Bool())         // Receive clock (from PHY)
+    val RxData     = Input(UInt(8.W))      // Received data byte (from PHY)
+    val RxValid    = Input(Bool())
+    val RxStartFrm = Input(Bool())
+    val RxEndFrm   = Input(Bool())
+    val RxAbort    = Input(Bool())        // This signal is set when address doesn't match.
+    val RxStatusWriteLatched_sync2 = Output(Bool())
 
-  // Rx
-  val MRxClk     = Input(Bool())         // Receive clock (from PHY)
-  val RxData     = Input(UInt(8.W))      // Received data byte (from PHY)
-  val RxValid    = Input(Bool())
-  val RxStartFrm = Input(Bool())
-  val RxEndFrm   = Input(Bool())
-  val RxAbort    = Input(Bool())        // This signal is set when address doesn't match.
-  val RxStatusWriteLatched_sync2 = Output(Bool())
+    //Register
+    val r_TxEn    = Input(Bool())          // Transmit enable
+    val r_RxEn    = Input(Bool())         // Receive enable
+    val r_TxBDNum = Input(UInt(8.W))      // Receive buffer descriptor number
+    val RegDataOut = Input(UInt(32.W))
+    val RegCs = Output(UInt(4.W))
 
-  //Register
-  val r_TxEn    = Input(Bool())          // Transmit enable
-  val r_RxEn    = Input(Bool())         // Receive enable
-  val r_TxBDNum = Input(UInt(8.W))      // Receive buffer descriptor number
-  val RegDataOut = Input(UInt(32.W))
-  val RegCs = Output(UInt(4.W))
-
-  // Interrupts
-  val TxB_IRQ  = Output(Bool())
-  val TxE_IRQ  = Output(Bool())
-  val RxB_IRQ  = Output(Bool())
-  val RxE_IRQ  = Output(Bool())
-  val Busy_IRQ = Output(Bool())
-}
+    // Interrupts
+    val TxB_IRQ  = Output(Bool())
+    val TxE_IRQ  = Output(Bool())
+    val RxB_IRQ  = Output(Bool())
+    val RxE_IRQ  = Output(Bool())
+    val Busy_IRQ = Output(Bool())
+  }
 
 
-abstract class MacTileLinkBase extends Module{
-  val io: MacTileLinkIO = IO(new MacTileLinkIO)
+  def isTileLink = false.B
+  
+  val io: MacTileLinkIO = if( !isTileLink ) {IO(new MacTileLinkIO with MacWishboneSlaveIO)} else {IO(new MacTileLinkIO with MacTileLinkSlaveIO)}
+
+
+
 
   val BDCs = Wire(UInt(4.W))
 
@@ -408,34 +421,34 @@ abstract class MacTileLinkBase extends Module{
     WbEn := true.B  // RxEn access stage and r_TxEn is disabled
     RxEn := false.B
     TxEn := false.B
-    ram_addr := io.WB_ADR_I(7,0) // [11:2 ] -> [9:2];
-    ram_di  := io.WB_DAT_I;
-    BDWrite := BDCs & Fill(4,io.WB_WE_I)
-    BDRead  := BDCs.orR & ~io.WB_WE_I
+    ram_addr := (if( !isTileLink ) {io.WB_ADR_I(7,0)} else {io.slvA.bits.address(9:2)}) // [11:2 ] -> [9:2];
+    ram_di   := (if( !isTileLink ) {io.WB_DAT_I} else { io.slvA.bits.data })
+    BDWrite  := (if( !isTileLink ) {BDCs & Fill(4,io.WB_WE_I)} else {BDCs & Fill(4,(io.slvA.bits.opcode === 0.U) || (io.slvA.bits.opcode === 1.U))} )
+    BDRead   := (if( !isTileLink ) {BDCs.orR & ~io.WB_WE_I} else {BDCs.orR & (io.slvA.bits.opcode === 4.U)})
   } .elsewhen( RAMAccessEnable === BitPat("b010?1") ){
     WbEn := false.B
     RxEn := false.B
     TxEn := true.B  // RxEn access stage and r_TxEn is enabled
     ram_addr := Cat(TxBDAddress, TxPointerRead)
-    ram_di := TxBDDataIn;      
+    ram_di := TxBDDataIn
   } .elsewhen( RAMAccessEnable === BitPat("b001??") ){
     WbEn := true.B  // TxEn access stage (we always go to wb access stage)
     RxEn := false.B
     TxEn := false.B
-    ram_addr := io.WB_ADR_I(7,0) //[11:2 ] ->[9:2]
-    ram_di  := io.WB_DAT_I
-    BDWrite := BDCs & Fill(4,io.WB_WE_I)
-    BDRead  := BDCs.orR & ~io.WB_WE_I
+    ram_addr := (if( !isTileLink ) {io.WB_ADR_I(7,0)} else {io.slvA.bits.address(9:2)}) //[11:2 ] ->[9:2]
+    ram_di   := (if( !isTileLink ) {io.WB_DAT_I} else { io.slvA.bits.data })
+    BDWrite  := (if( !isTileLink ) {BDCs & Fill(4,io.WB_WE_I)} else {BDCs & Fill(4,(io.slvA.bits.opcode === 0.U) || (io.slvA.bits.opcode === 1.U))} )
+    BDRead   := (if( !isTileLink ) {BDCs.orR & ~io.WB_WE_I} else {BDCs.orR & (io.slvA.bits.opcode === 4.U)})
   } .elsewhen( RAMAccessEnable === BitPat("b10000") ){
     WbEn := false.B // WbEn access stage and there is no need for other stages. WbEn needs to be switched off for a bit
   } .elsewhen( RAMAccessEnable === BitPat("b00000") ){
     WbEn := true.B  // Idle state. We go to WbEn access stage.
     RxEn := false.B
     TxEn := false.B
-    ram_addr := io.WB_ADR_I(7,0) // [11:2 ] -> [9:2]
-    ram_di  := io.WB_DAT_I
-    BDWrite := BDCs & Fill(4,io.WB_WE_I)
-    BDRead  := BDCs.orR & ~io.WB_WE_I   
+    ram_addr := (if( !isTileLink ) {io.WB_ADR_I(7,0)} else {io.slvA.bits.address(9:2)}) // [11:2 ] -> [9:2]
+    ram_di   := (if( !isTileLink ) {io.WB_DAT_I} else { io.slvA.bits.data })
+    BDWrite  := (if( !isTileLink ) {BDCs & Fill(4,io.WB_WE_I)} else {BDCs & Fill(4,(io.slvA.bits.opcode === 0.U) || (io.slvA.bits.opcode === 1.U))} )
+    BDRead   := (if( !isTileLink ) {BDCs.orR & ~io.WB_WE_I} else {BDCs.orR & (io.slvA.bits.opcode === 4.U)})
   }
 
 
@@ -737,7 +750,7 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
   TxFifoClear := (TxAbortPacket | TxRetryPacket)
 
   val tx_fifo = Module( new MacFifo(dw = 32, dp = 16) )
-  tx_fifo.io.data_in := io.m_wb_dat_i
+  tx_fifo.io.data_in := (if( !isTileLink ) {io.WB_DAT_I} else { io.slvA.bits.data })
   tx_fifo.io.write   := MasterWbTX & io.m_wb_ack_i
   tx_fifo.io.read    := ReadTxDataFromFifo_wb & ~TxBufferEmpty
   tx_fifo.io.clear   := TxFifoClear
@@ -1148,26 +1161,40 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
 
 
 
-  // val WB_ERR_O = Output(Bool())       // WISHBONE error output
-  // val WB_SEL_I = Input(UInt(4.W))     // WISHBONE byte select input
-  // val WB_CYC_I = Input(Bool())     // WISHBONE cycle input
-  // val WB_STB_I = Input(Bool())     // WISHBONE strobe input
+  // Connected to registers
+  val CsMiss = Wire(Bool())
 
 
-// Connected to registers
-  io.RegCs := Fill(4, io.WB_STB_I & io.WB_CYC_I & io.WB_SEL_I.orR & ~io.WB_ADR_I.extract(9) & ~io.WB_ADR_I.extract(8)) & io.WB_SEL_I // 0x0   - 0x3FF
-     BDCs  := Fill(4, io.WB_STB_I & io.WB_CYC_I & io.WB_SEL_I.orR & ~io.WB_ADR_I.extract(9) &  io.WB_ADR_I.extract(8)) & io.WB_SEL_I // 0x400 - 0x7FF
-  val CsMiss =        io.WB_STB_I & io.WB_CYC_I & io.WB_SEL_I.orR &  io.WB_ADR_I.extract(9)    // 0x800 - 0xfFF     // When access to the address between 0x800 and 0xfff occurs, acknowledge is set but data is not valid.
-             
+  if( !isTileLink ){
+    io.RegCs := Fill(4, io.WB_STB_I & io.WB_CYC_I & io.WB_SEL_I.orR & ~io.WB_ADR_I.extract(9) & ~io.WB_ADR_I.extract(8)) & io.WB_SEL_I // 0x0   - 0x3FF
+    BDCs     := Fill(4, io.WB_STB_I & io.WB_CYC_I & io.WB_SEL_I.orR & ~io.WB_ADR_I.extract(9) &  io.WB_ADR_I.extract(8)) & io.WB_SEL_I // 0x400 - 0x7FF
+    CsMiss :=           io.WB_STB_I & io.WB_CYC_I & io.WB_SEL_I.orR &  io.WB_ADR_I.extract(9)    // 0x800 - 0xfFF     // When access to the address between 0x800 and 0xfff occurs, acknowledge is set but data is not valid.
 
-  io.WB_ACK_O := RegNext((io.RegCs.orR | BDAck) & ~io.WB_ACK_O, false.B)
-  io.WB_DAT_O := RegNext(Mux( ((io.RegCs.orR) & ~io.WB_WE_I), io.RegDataOut, BD_WB_DAT_O ), 0.U(32.W))
+    io.WB_DAT_O := RegNext(Mux( ((io.RegCs.orR) & ~io.WB_WE_I), io.RegDataOut, BD_WB_DAT_O ), 0.U(32.W))
+    io.WB_ACK_O := RegNext((io.RegCs.orR | BDAck) & ~io.WB_ACK_O, false.B)
+
+  } else {
+    io.RegCs := Fill(4, io.slvA.fire & io.slvA.bits.mask.orR & ~io.slvA.bits.address(11) & ~io.slvA.bits.address(10)) & io.slvA.bits.mask // 0x0   - 0x3FF
+       BDCs  := Fill(4, io.slvA.fire & io.slvA.bits.mask.orR & ~io.slvA.bits.address(11) &  io.slvA.bits.address(10)) & io.slvA.bits.mask // 0x400 - 0x7FF
+      CsMiss :=         io.slvA.fire & io.slvA.bits.mask.orR &  io.slvA.bits.address(11)    // 0x800 - 0xfFF     // When access to the address between 0x800 and 0xfff occurs, acknowledge is set but data is not valid.
+    
+    io.WB_DAT_O := RegNext(Mux( ((io.RegCs.orR) & (io.slvA.bits.opcode === 4.U)), io.RegDataOut, BD_WB_DAT_O ), 0.U(32.W))
+    
+    val slvAInfo = RegEnable( io.slvA.bits, io.slvA.fire )
+    val slvDValid = RegInit(false.B); io.slvD.valid := slvDValid
+    when( io.slvD.fire ){
+      slvDValid := false.B
+    } .elsewhen(io.RegCs.orR | BDAck){
+      slvDValid := true.B
+    }
+
+
+    io.slvD.bits := 
+  }
+
 
   io.WB_ERR_O := RegNext(io.WB_STB_I & io.WB_CYC_I & (~(io.WB_SEL_I.orR) | CsMiss) & ~io.WB_ERR_O, false.B)
 }
-
-
-
 
 
 
