@@ -3,14 +3,14 @@ package MAC
 import chisel3._
 import chisel3.util._
 
-class MDIO extends Bundle{
+trait MDIO { this: Bundle =>
   val mdi   = Input( Bool()) // MII Management Data In
   val mdc   = Output(Bool()) // MII Management Data Clock
   val mdo   = Output(Bool()) // MII Management Data Output
   val mdoEn = Output(Bool()) // MII Management Data Output Enable
 }
 
-class MIIMIO extends MDIO{
+class MIIMIO extends Bundle with MDIO{
   val Divider  = Input( UInt(8.W) )        // Divider for the host clock // Divider (input clock will be divided by the Divider[7:0])
   val NoPre = Input(Bool())                // No Preamble (no 32-bit preamble)
 

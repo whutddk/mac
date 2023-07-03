@@ -44,28 +44,14 @@ class RxBuffDesc extends Bundle{
 
 
 
-abstract class MacTileLinkBase(edge: TLEdgeIn) extends Module{
-  trait MacTileLinkSlaveIO { this: Bundle =>
-    val slvA = Flipped(Decoupled(new TLBundleA(edge.bundle)))
-    val slvD = Decoupled(new TLBundleD(edge.bundle))
-  }
+abstract class MacTileLinkBase() extends Module{
+// edge: TLEdgeIn
+  // trait MacTileLinkSlaveIO { this: Bundle =>
+  //   val slvA = Flipped(Decoupled(new TLBundleA(edge.bundle)))
+  //   val slvD = Decoupled(new TLBundleD(edge.bundle))
+  // }
 
-  trait MacWishboneSlaveIO{ this: Bundle =>
-    // WISHBONE common
-    val WB_DAT_I = Input(UInt(32.W))       // WISHBONE data input
-    val WB_DAT_O = Output(UInt(32.W))       // WISHBONE data output
 
-    // WISHBONE slave
-    val WB_ADR_I = Input(UInt(10.W))       // WISHBONE address input
-    val WB_WE_I  = Input(Bool())        // WISHBONE write enable input
-    // val BDCs     = Input(UInt(4.W))          // Buffer descriptors are selected
-    val WB_SEL_I = Input(UInt(4.W))     // WISHBONE byte select input
-    val WB_CYC_I = Input(Bool())     // WISHBONE cycle input
-    val WB_STB_I = Input(Bool())     // WISHBONE strobe input
-
-    val WB_ACK_O = Output(Bool())       // WISHBONE acknowledge output
-    val WB_ERR_O = Output(Bool())       // WISHBONE error output
-  }
 
   class MacTileLinkIO extends Bundle{
 
@@ -144,9 +130,10 @@ abstract class MacTileLinkBase(edge: TLEdgeIn) extends Module{
   }
 
 
-  def isTileLink = false.B
+  def isTileLink = false
   
-  val io: MacTileLinkIO = if( !isTileLink ) {IO(new MacTileLinkIO with MacWishboneSlaveIO)} else {IO(new MacTileLinkIO with MacTileLinkSlaveIO)}
+  val io = IO(new MacTileLinkIO with MacWishboneSlaveIO)
+    // if( !isTileLink ) {IO(new MacTileLinkIO with MacWishboneSlaveIO)} else {IO(new MacTileLinkIO with MacTileLinkSlaveIO)}
 
 
 
@@ -421,10 +408,16 @@ abstract class MacTileLinkBase(edge: TLEdgeIn) extends Module{
     WbEn := true.B  // RxEn access stage and r_TxEn is disabled
     RxEn := false.B
     TxEn := false.B
-    ram_addr := (if( !isTileLink ) {io.WB_ADR_I(7,0)} else {io.slvA.bits.address(9:2)}) // [11:2 ] -> [9:2];
-    ram_di   := (if( !isTileLink ) {io.WB_DAT_I} else { io.slvA.bits.data })
-    BDWrite  := (if( !isTileLink ) {BDCs & Fill(4,io.WB_WE_I)} else {BDCs & Fill(4,(io.slvA.bits.opcode === 0.U) || (io.slvA.bits.opcode === 1.U))} )
-    BDRead   := (if( !isTileLink ) {BDCs.orR & ~io.WB_WE_I} else {BDCs.orR & (io.slvA.bits.opcode === 4.U)})
+
+    ram_addr := io.WB_ADR_I(9,2)
+    ram_di   := io.WB_DAT_I
+    BDWrite  := BDCs & Fill(4,io.WB_WE_I)
+    BDRead   := BDCs.orR & ~io.WB_WE_I
+
+    // ram_addr := (if( !isTileLink ) {io.WB_ADR_I(9,2)} else {io.slvA.bits.address(9,2)}) // [11:2 ] -> [9:2];
+    // ram_di   := (if( !isTileLink ) {io.WB_DAT_I} else { io.slvA.bits.data })
+    // BDWrite  := (if( !isTileLink ) {BDCs & Fill(4,io.WB_WE_I)} else {BDCs & Fill(4,(io.slvA.bits.opcode === 0.U) || (io.slvA.bits.opcode === 1.U))} )
+    // BDRead   := (if( !isTileLink ) {BDCs.orR & ~io.WB_WE_I} else {BDCs.orR & (io.slvA.bits.opcode === 4.U)})
   } .elsewhen( RAMAccessEnable === BitPat("b010?1") ){
     WbEn := false.B
     RxEn := false.B
@@ -435,20 +428,30 @@ abstract class MacTileLinkBase(edge: TLEdgeIn) extends Module{
     WbEn := true.B  // TxEn access stage (we always go to wb access stage)
     RxEn := false.B
     TxEn := false.B
-    ram_addr := (if( !isTileLink ) {io.WB_ADR_I(7,0)} else {io.slvA.bits.address(9:2)}) //[11:2 ] ->[9:2]
-    ram_di   := (if( !isTileLink ) {io.WB_DAT_I} else { io.slvA.bits.data })
-    BDWrite  := (if( !isTileLink ) {BDCs & Fill(4,io.WB_WE_I)} else {BDCs & Fill(4,(io.slvA.bits.opcode === 0.U) || (io.slvA.bits.opcode === 1.U))} )
-    BDRead   := (if( !isTileLink ) {BDCs.orR & ~io.WB_WE_I} else {BDCs.orR & (io.slvA.bits.opcode === 4.U)})
+    ram_addr := io.WB_ADR_I(9,2)
+    ram_di   := io.WB_DAT_I
+    BDWrite  := BDCs & Fill(4,io.WB_WE_I)
+    BDRead   := BDCs.orR & ~io.WB_WE_I
+
+    // ram_addr := (if( !isTileLink ) {io.WB_ADR_I(9,2)} else {io.slvA.bits.address(9,2)}) //[11:2 ] ->[9:2]
+    // ram_di   := (if( !isTileLink ) {io.WB_DAT_I} else { io.slvA.bits.data })
+    // BDWrite  := (if( !isTileLink ) {BDCs & Fill(4,io.WB_WE_I)} else {BDCs & Fill(4,(io.slvA.bits.opcode === 0.U) || (io.slvA.bits.opcode === 1.U))} )
+    // BDRead   := (if( !isTileLink ) {BDCs.orR & ~io.WB_WE_I} else {BDCs.orR & (io.slvA.bits.opcode === 4.U)})
   } .elsewhen( RAMAccessEnable === BitPat("b10000") ){
     WbEn := false.B // WbEn access stage and there is no need for other stages. WbEn needs to be switched off for a bit
   } .elsewhen( RAMAccessEnable === BitPat("b00000") ){
     WbEn := true.B  // Idle state. We go to WbEn access stage.
     RxEn := false.B
     TxEn := false.B
-    ram_addr := (if( !isTileLink ) {io.WB_ADR_I(7,0)} else {io.slvA.bits.address(9:2)}) // [11:2 ] -> [9:2]
-    ram_di   := (if( !isTileLink ) {io.WB_DAT_I} else { io.slvA.bits.data })
-    BDWrite  := (if( !isTileLink ) {BDCs & Fill(4,io.WB_WE_I)} else {BDCs & Fill(4,(io.slvA.bits.opcode === 0.U) || (io.slvA.bits.opcode === 1.U))} )
-    BDRead   := (if( !isTileLink ) {BDCs.orR & ~io.WB_WE_I} else {BDCs.orR & (io.slvA.bits.opcode === 4.U)})
+    ram_addr := io.WB_ADR_I(9,2)
+    ram_di   := io.WB_DAT_I
+    BDWrite  := BDCs & Fill(4,io.WB_WE_I)
+    BDRead   := BDCs.orR & ~io.WB_WE_I
+
+    // ram_addr := (if( !isTileLink ) {io.WB_ADR_I(9,2)} else {io.slvA.bits.address(9,2)}) // [11:2 ] -> [9:2]
+    // ram_di   := (if( !isTileLink ) {io.WB_DAT_I} else { io.slvA.bits.data })
+    // BDWrite  := (if( !isTileLink ) {BDCs & Fill(4,io.WB_WE_I)} else {BDCs & Fill(4,(io.slvA.bits.opcode === 0.U) || (io.slvA.bits.opcode === 1.U))} )
+    // BDRead   := (if( !isTileLink ) {BDCs.orR & ~io.WB_WE_I} else {BDCs.orR & (io.slvA.bits.opcode === 4.U)})
   }
 
 
@@ -750,7 +753,8 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
   TxFifoClear := (TxAbortPacket | TxRetryPacket)
 
   val tx_fifo = Module( new MacFifo(dw = 32, dp = 16) )
-  tx_fifo.io.data_in := (if( !isTileLink ) {io.WB_DAT_I} else { io.slvA.bits.data })
+  tx_fifo.io.data_in := io.WB_DAT_I
+  // tx_fifo.io.data_in := (if( !isTileLink ) {io.WB_DAT_I} else { io.slvA.bits.data })
   tx_fifo.io.write   := MasterWbTX & io.m_wb_ack_i
   tx_fifo.io.read    := ReadTxDataFromFifo_wb & ~TxBufferEmpty
   tx_fifo.io.clear   := TxFifoClear
@@ -1165,32 +1169,32 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
   val CsMiss = Wire(Bool())
 
 
-  if( !isTileLink ){
-    io.RegCs := Fill(4, io.WB_STB_I & io.WB_CYC_I & io.WB_SEL_I.orR & ~io.WB_ADR_I.extract(9) & ~io.WB_ADR_I.extract(8)) & io.WB_SEL_I // 0x0   - 0x3FF
-    BDCs     := Fill(4, io.WB_STB_I & io.WB_CYC_I & io.WB_SEL_I.orR & ~io.WB_ADR_I.extract(9) &  io.WB_ADR_I.extract(8)) & io.WB_SEL_I // 0x400 - 0x7FF
-    CsMiss :=           io.WB_STB_I & io.WB_CYC_I & io.WB_SEL_I.orR &  io.WB_ADR_I.extract(9)    // 0x800 - 0xfFF     // When access to the address between 0x800 and 0xfff occurs, acknowledge is set but data is not valid.
+  // if( !isTileLink ){
+    io.RegCs := Fill(4, io.WB_STB_I & io.WB_CYC_I & io.WB_SEL_I.orR & ~io.WB_ADR_I.extract(11) & ~io.WB_ADR_I.extract(10)) & io.WB_SEL_I // 0x0   - 0x3FF
+    BDCs     := Fill(4, io.WB_STB_I & io.WB_CYC_I & io.WB_SEL_I.orR & ~io.WB_ADR_I.extract(11) &  io.WB_ADR_I.extract(10)) & io.WB_SEL_I // 0x400 - 0x7FF
+    CsMiss :=           io.WB_STB_I & io.WB_CYC_I & io.WB_SEL_I.orR &  io.WB_ADR_I.extract(11)    // 0x800 - 0xfFF     // When access to the address between 0x800 and 0xfff occurs, acknowledge is set but data is not valid.
 
     io.WB_DAT_O := RegNext(Mux( ((io.RegCs.orR) & ~io.WB_WE_I), io.RegDataOut, BD_WB_DAT_O ), 0.U(32.W))
     io.WB_ACK_O := RegNext((io.RegCs.orR | BDAck) & ~io.WB_ACK_O, false.B)
 
-  } else {
-    io.RegCs := Fill(4, io.slvA.fire & io.slvA.bits.mask.orR & ~io.slvA.bits.address(11) & ~io.slvA.bits.address(10)) & io.slvA.bits.mask // 0x0   - 0x3FF
-       BDCs  := Fill(4, io.slvA.fire & io.slvA.bits.mask.orR & ~io.slvA.bits.address(11) &  io.slvA.bits.address(10)) & io.slvA.bits.mask // 0x400 - 0x7FF
-      CsMiss :=         io.slvA.fire & io.slvA.bits.mask.orR &  io.slvA.bits.address(11)    // 0x800 - 0xfFF     // When access to the address between 0x800 and 0xfff occurs, acknowledge is set but data is not valid.
+  // } else {
+  //   io.RegCs := Fill(4, io.slvA.fire & io.slvA.bits.mask.orR & ~io.slvA.bits.address(11) & ~io.slvA.bits.address(10)) & io.slvA.bits.mask // 0x0   - 0x3FF
+  //      BDCs  := Fill(4, io.slvA.fire & io.slvA.bits.mask.orR & ~io.slvA.bits.address(11) &  io.slvA.bits.address(10)) & io.slvA.bits.mask // 0x400 - 0x7FF
+  //     CsMiss :=         io.slvA.fire & io.slvA.bits.mask.orR &  io.slvA.bits.address(11)    // 0x800 - 0xfFF     // When access to the address between 0x800 and 0xfff occurs, acknowledge is set but data is not valid.
     
-    io.WB_DAT_O := RegNext(Mux( ((io.RegCs.orR) & (io.slvA.bits.opcode === 4.U)), io.RegDataOut, BD_WB_DAT_O ), 0.U(32.W))
+  //   io.WB_DAT_O := RegNext(Mux( ((io.RegCs.orR) & (io.slvA.bits.opcode === 4.U)), io.RegDataOut, BD_WB_DAT_O ), 0.U(32.W))
     
-    val slvAInfo = RegEnable( io.slvA.bits, io.slvA.fire )
-    val slvDValid = RegInit(false.B); io.slvD.valid := slvDValid
-    when( io.slvD.fire ){
-      slvDValid := false.B
-    } .elsewhen(io.RegCs.orR | BDAck){
-      slvDValid := true.B
-    }
+  //   val slvAInfo = RegEnable( io.slvA.bits, io.slvA.fire )
+  //   val slvDValid = RegInit(false.B); io.slvD.valid := slvDValid
+  //   when( io.slvD.fire ){
+  //     slvDValid := false.B
+  //   } .elsewhen(io.RegCs.orR | BDAck){
+  //     slvDValid := true.B
+  //   }
 
 
-    io.slvD.bits := 
-  }
+  //   io.slvD.bits := 
+  // }
 
 
   io.WB_ERR_O := RegNext(io.WB_STB_I & io.WB_CYC_I & (~(io.WB_SEL_I.orR) | CsMiss) & ~io.WB_ERR_O, false.B)
