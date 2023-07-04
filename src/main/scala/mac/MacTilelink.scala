@@ -7,38 +7,7 @@ import freechips.rocketchip.tilelink._
 import freechips.rocketchip.diplomacy._
 
 
-class TxBuffDesc extends Bundle{
-  val len = UInt(16.W) //[31.16]
-  val rd = Bool() //[15]
-  val irq  = Bool() //14
-  val wr = Bool()  //13
-  val pad = Bool() //12
-  val crc = Bool() //11
-  val reserved1 = UInt(2.W) //10,9
-  val ur = Bool()  //8
-  val rtry = UInt(4.W)  //7 6 5 4
-  val rl = Bool()  //3
-  val lc = Bool()  //2
-  val df = Bool()  //1
-  val cs = Bool()  //0
-}
 
-class RxBuffDesc extends Bundle{
-  val len = UInt(16.W) //[31.16]
-  val e = Bool() //15
-  val irq = Bool() //14
-  val wrap = Bool() //13
-  val reserved1 = UInt(4.W) //12 11 10 9
-  val cf = Bool() //8
-  val m = Bool() //7
-  val or = Bool() //6
-  val is = Bool() //5
-  val dn = Bool() //4
-  val tl = Bool() //3
-  val sf = Bool() //2
-  val crc = Bool() //1
-  val lc = Bool() //0
-}
 
 
 
@@ -54,20 +23,6 @@ abstract class MacTileLinkBase() extends Module{
 
 
   class MacTileLinkIO extends Bundle{
-
-    // WISHBONE master
-    val m_wb_adr_o = Output(UInt(30.W))
-    val m_wb_sel_o = Output(UInt(4.W))
-    val m_wb_we_o  = Output(Bool())
-    val m_wb_dat_o = Output(UInt(32.W))
-    val m_wb_cyc_o = Output(Bool())
-    val m_wb_stb_o = Output(Bool())
-    val m_wb_dat_i = Input(UInt(32.W))
-    val m_wb_ack_i = Input(Bool())
-    val m_wb_err_i = Input(Bool())
-
-    val m_wb_cti_o = Output(UInt(3.W))     // Cycle Type Identifier
-    val m_wb_bte_o = Output(UInt(2.W))     // Burst Type Extension
 
     // Rx Status signals
     val InvalidSymbol   = Input(Bool())             // Invalid symbol was received during reception in 100 Mbps mode
@@ -127,12 +82,14 @@ abstract class MacTileLinkBase() extends Module{
     val RxB_IRQ  = Output(Bool())
     val RxE_IRQ  = Output(Bool())
     val Busy_IRQ = Output(Bool())
+
+
   }
 
 
   def isTileLink = false
   
-  val io = IO(new MacTileLinkIO with MacWishboneSlaveIO)
+  val io = IO(new MacTileLinkIO with MacWishboneSlaveIO with MacWishboneMasterIO)
     // if( !isTileLink ) {IO(new MacTileLinkIO with MacWishboneSlaveIO)} else {IO(new MacTileLinkIO with MacTileLinkSlaveIO)}
 
 
@@ -299,7 +256,7 @@ abstract class MacTileLinkBase() extends Module{
   val MasterWbTX = RegInit(false.B)
   val MasterWbRX = RegInit(false.B)
 
-  val m_wb_adr_o = RegInit(0.U(30.W)); io.m_wb_adr_o := m_wb_adr_o
+  val m_wb_adr_o = RegInit(0.U(30.W)); io.m_wb_adr_o := Cat(m_wb_adr_o, 0.U(2.W))
   val m_wb_cyc_o = RegInit(false.B); io.m_wb_cyc_o := m_wb_cyc_o
   val m_wb_sel_o = RegInit(0.U(4.W)); io.m_wb_sel_o := m_wb_sel_o
   val m_wb_we_o  = RegInit(false.B); io.m_wb_we_o := m_wb_we_o

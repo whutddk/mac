@@ -28,34 +28,7 @@ class Mac(implicit p: Parameters) extends LazyModule with HasMacParameters{
 
 }
 
-trait MacWishboneMasterIO{ this: Bundle =>
-  val m_wb_adr_o = Output(UInt(32.W))
-  val m_wb_sel_o = Output(UInt(4.W))
-  val m_wb_we_o  = Output(Bool())
-  val m_wb_dat_i = Input(UInt(32.W))
-  val m_wb_dat_o = Output(UInt(32.W))
-  val m_wb_cyc_o = Output(Bool())
-  val m_wb_stb_o = Output(Bool())
-  val m_wb_ack_i = Input(Bool())
-  val m_wb_err_i = Input(Bool())
-  val m_wb_cti_o = Output(UInt(3.W))
-  val m_wb_bte_o = Output(UInt(2.W))
-}
 
-trait MacWishboneSlaveIO{ this: Bundle =>
-  val WB_DAT_I = Input(UInt(32.W))       // WISHBONE data input
-  val WB_DAT_O = Output(UInt(32.W))       // WISHBONE data output
-
-  val WB_ADR_I = Input(UInt(12.W))       // WISHBONE address input
-  val WB_WE_I  = Input(Bool())        // WISHBONE write enable input
-
-  val WB_SEL_I = Input(UInt(4.W))     // WISHBONE byte select input
-  val WB_CYC_I = Input(Bool())     // WISHBONE cycle input
-  val WB_STB_I = Input(Bool())     // WISHBONE strobe input
-
-  val WB_ACK_O = Output(Bool())       // WISHBONE acknowledge output
-  val WB_ERR_O = Output(Bool())       // WISHBONE error output
-}
 
 class MacIO extends Bundle{
   // Tx
@@ -74,8 +47,6 @@ class MacIO extends Bundle{
   val mcoll_pad_i = Input(Bool())
   val mcrs_pad_i  = Input(Bool())
 
-
-
   val int_o = Output(Bool())
 }
 
@@ -85,7 +56,6 @@ class MacImp(outer: Mac) extends LazyModuleImp(outer){
     //( if(!isTileLink) { IO(new MacIO with MDIO with MacWishboneMasterIO with MacWishboneSlaveIO) } //else {IO(new MacIO with MDIO with MacWishboneMasterIO)} )
 
 
-val m_wb_adr_tmp        = Wire(UInt(30.W))
 val r_ClkDiv            = Wire(UInt(8.W))
 val r_MiiNoPre          = Wire(Bool())
 val r_CtrlData          = Wire(UInt(16.W))
@@ -103,7 +73,6 @@ val RStatStart          = Wire(Bool())
 val UpdateMIIRX_DATAReg = Wire(Bool())
 
 
-dontTouch( m_wb_adr_tmp        )
 dontTouch( r_ClkDiv            )
 dontTouch( r_MiiNoPre          )
 dontTouch( r_CtrlData          )
@@ -705,7 +674,7 @@ val rxethmac = Module(new MacRx)
   io.WB_ERR_O := wishbone.io.WB_ERR_O
 
 
-  m_wb_adr_tmp  := wishbone.io.m_wb_adr_o
+  io.m_wb_adr_o := wishbone.io.m_wb_adr_o
   io.m_wb_sel_o := wishbone.io.m_wb_sel_o
   io.m_wb_we_o  := wishbone.io.m_wb_we_o
   io.m_wb_dat_o := wishbone.io.m_wb_dat_o
@@ -770,8 +739,6 @@ val rxethmac = Module(new MacRx)
   Busy_IRQ := wishbone.io.Busy_IRQ
 
 
-
-  io.m_wb_adr_o := Cat(m_wb_adr_tmp, 0.U(2.W))
 
   val macstatus = Module(new MacStatus)
 
