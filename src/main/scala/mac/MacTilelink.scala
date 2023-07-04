@@ -753,8 +753,8 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
   TxFifoClear := (TxAbortPacket | TxRetryPacket)
 
   val tx_fifo = Module( new MacFifo(dw = 32, dp = 16) )
-  tx_fifo.io.data_in := io.WB_DAT_I
-  // tx_fifo.io.data_in := (if( !isTileLink ) {io.WB_DAT_I} else { io.slvA.bits.data })
+  tx_fifo.io.data_in := io.m_wb_dat_i
+  // tx_fifo.io.data_in := (if( !isTileLink ) {io.m_wb_dat_i} else { io.slvA.bits.data })
   tx_fifo.io.write   := MasterWbTX & io.m_wb_ack_i
   tx_fifo.io.read    := ReadTxDataFromFifo_wb & ~TxBufferEmpty
   tx_fifo.io.clear   := TxFifoClear
