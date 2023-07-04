@@ -1164,7 +1164,7 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
 
 
 
-    io.tlSlv.get.A.ready := RegNext(io.RegCs.orR, false.B) | BDAck
+    io.tlSlv.get.A.ready := RegNext(io.RegCs.orR & ~io.tlSlv.get.A.fire, false.B) | BDAck
     assert( ~(io.tlSlv.get.A.ready & ~io.tlSlv.get.A.valid) )
 
     when( io.tlSlv.get.A.fire & (~(io.tlSlv.get.A.bits.mask.orR) | CsMiss) ){
