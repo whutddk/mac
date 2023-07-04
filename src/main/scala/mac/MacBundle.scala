@@ -39,7 +39,7 @@ class RxBuffDesc extends Bundle{
   val lc = Bool() //0
 }
 
-trait MacWishboneMasterIO{ this: Bundle =>
+class MacWishboneMasterIO extends Bundle{
   val m_wb_adr_o = Output(UInt(32.W))
   val m_wb_sel_o = Output(UInt(4.W))
   val m_wb_we_o  = Output(Bool())
@@ -54,7 +54,7 @@ trait MacWishboneMasterIO{ this: Bundle =>
 }
 
 
-trait MacWishboneSlaveIO{ this: Bundle =>
+class MacWishboneSlaveIO extends Bundle{
   val WB_DAT_I = Input(UInt(32.W))       // WISHBONE data input
   val WB_DAT_O = Output(UInt(32.W))       // WISHBONE data output
 

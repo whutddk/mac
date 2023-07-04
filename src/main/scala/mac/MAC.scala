@@ -8,19 +8,23 @@ import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.tilelink._
 
 class Mac(implicit p: Parameters) extends LazyModule with HasMacParameters{
-  def isTileLink = false
 
-  // val chipLinkMasterNode = TLManagerNode(Seq(TLSlavePortParameters.v1(
-  //     managers = Seq(TLSlaveParameters.v1(
-  //       address = Seq(AddressSet(0x00000000L, 0x0FFFL)),
-  //       regionType = RegionType.UNCACHED,
-  //       executable = false,
-  //       supportsGet         = TransferSizes(32/8, 32/8),
-  //       supportsPutFull     = TransferSizes(32/8, 32/8),
-  //       supportsPutPartial  = TransferSizes(32/8, 32/8)
+  val tlMasterNode = 
+    if(!isTileLink){ None } else {
+      Some(    
+        TLManagerNode(Seq(TLSlavePortParameters.v1(
+          managers = Seq(TLSlaveParameters.v1(
+          address = Seq(AddressSet(0x00000000L, 0x0FFFL)),
+          regionType = RegionType.UNCACHED,
+          executable = false,
+          supportsGet         = TransferSizes(32/8, 32/8),
+          supportsPutFull     = TransferSizes(32/8, 32/8),
+          supportsPutPartial  = TransferSizes(32/8, 32/8)
+        )),
+        beatBytes = 32/8)))
+      )
+    }
 
-  //     )),
-  //     beatBytes = 32/8)))
 
   lazy val module = new MacImp(this)
 
@@ -30,7 +34,12 @@ class Mac(implicit p: Parameters) extends LazyModule with HasMacParameters{
 
 
 
-class MacIO extends Bundle{
+class MacIO(implicit p: Parameters) extends MacBundle{
+  // def isTileLink = false
+
+  val wbSlv = if( !isTileLink ) { Some(new MacWishboneSlaveIO)  } else {None}
+  val wbMst = if( !isTileLink ) { Some(new MacWishboneMasterIO) } else {None}
+
   // Tx
   val mtx_clk_pad_i = Input(Bool())
   val mtxd_pad_o    = Output(UInt(4.W))
@@ -50,11 +59,10 @@ class MacIO extends Bundle{
   val int_o = Output(Bool())
 }
 
-class MacImp(outer: Mac) extends LazyModuleImp(outer){
-  def isTileLink = false
-  val io = IO(new MacIO with MDIO with MacWishboneMasterIO with MacWishboneSlaveIO)
-    //( if(!isTileLink) { IO(new MacIO with MDIO with MacWishboneMasterIO with MacWishboneSlaveIO) } //else {IO(new MacIO with MDIO with MacWishboneMasterIO)} )
+class MacImp(outer: Mac)(implicit p: Parameters) extends LazyModuleImp(outer) with HasMacParameters{
 
+  val io = IO(new MacIO with MDIO)
+  val ( slv_bus, slv_edge ) = (if(!isTileLink) {(None, None)} else {(Some(outer.tlMasterNode.get.in.head._1), Some(outer.tlMasterNode.get.in.head._2))} )
 
 val r_ClkDiv            = Wire(UInt(8.W))
 val r_MiiNoPre          = Wire(Bool())
@@ -294,13 +302,11 @@ dontTouch(RegCs                      )
 
 
 
-
-
 val ethReg = Module(new MacReg)
 
-ethReg.io.DataIn              := io.WB_DAT_I
-ethReg.io.Address             := io.WB_ADR_I(9,2)
-ethReg.io.Rw                  := io.WB_WE_I
+ethReg.io.DataIn              := io.wbSlv.get.WB_DAT_I
+ethReg.io.Address             := io.wbSlv.get.WB_ADR_I(9,2)
+ethReg.io.Rw                  := io.wbSlv.get.WB_WE_I
 ethReg.io.Cs                  := RegCs
 ethReg.io.WCtrlDataStart      := WCtrlDataStart
 ethReg.io.RStatStart          := RStatStart
@@ -661,30 +667,30 @@ val rxethmac = Module(new MacRx)
 
 
 
-  val wishbone = Module(new MacTileLink)
+  val wishbone = Module(new MacTileLink(slv_edge))
 
-  wishbone.io.WB_DAT_I := io.WB_DAT_I
-  io.WB_DAT_O := wishbone.io.WB_DAT_O
-  wishbone.io.WB_ADR_I := io.WB_ADR_I
-  wishbone.io.WB_WE_I  := io.WB_WE_I
-  wishbone.io.WB_SEL_I := io.WB_SEL_I
-  wishbone.io.WB_CYC_I := io.WB_CYC_I
-  wishbone.io.WB_STB_I := io.WB_STB_I
-  io.WB_ACK_O := wishbone.io.WB_ACK_O
-  io.WB_ERR_O := wishbone.io.WB_ERR_O
+  wishbone.io.wbSlv.get.WB_DAT_I := io.wbSlv.get.WB_DAT_I
+  io.wbSlv.get.WB_DAT_O := wishbone.io.wbSlv.get.WB_DAT_O
+  wishbone.io.wbSlv.get.WB_ADR_I := io.wbSlv.get.WB_ADR_I
+  wishbone.io.wbSlv.get.WB_WE_I  := io.wbSlv.get.WB_WE_I
+  wishbone.io.wbSlv.get.WB_SEL_I := io.wbSlv.get.WB_SEL_I
+  wishbone.io.wbSlv.get.WB_CYC_I := io.wbSlv.get.WB_CYC_I
+  wishbone.io.wbSlv.get.WB_STB_I := io.wbSlv.get.WB_STB_I
+  io.wbSlv.get.WB_ACK_O := wishbone.io.wbSlv.get.WB_ACK_O
+  io.wbSlv.get.WB_ERR_O := wishbone.io.wbSlv.get.WB_ERR_O
 
 
-  io.m_wb_adr_o := wishbone.io.m_wb_adr_o
-  io.m_wb_sel_o := wishbone.io.m_wb_sel_o
-  io.m_wb_we_o  := wishbone.io.m_wb_we_o
-  io.m_wb_dat_o := wishbone.io.m_wb_dat_o
-  io.m_wb_cyc_o := wishbone.io.m_wb_cyc_o
-  io.m_wb_stb_o := wishbone.io.m_wb_stb_o
-  wishbone.io.m_wb_dat_i := io.m_wb_dat_i
-  wishbone.io.m_wb_ack_i := io.m_wb_ack_i
-  wishbone.io.m_wb_err_i := io.m_wb_err_i
-  io.m_wb_cti_o := wishbone.io.m_wb_cti_o
-  io.m_wb_bte_o := wishbone.io.m_wb_bte_o
+  io.wbMst.get.m_wb_adr_o := wishbone.io.wbMst.get.m_wb_adr_o
+  io.wbMst.get.m_wb_sel_o := wishbone.io.wbMst.get.m_wb_sel_o
+  io.wbMst.get.m_wb_we_o  := wishbone.io.wbMst.get.m_wb_we_o
+  io.wbMst.get.m_wb_dat_o := wishbone.io.wbMst.get.m_wb_dat_o
+  io.wbMst.get.m_wb_cyc_o := wishbone.io.wbMst.get.m_wb_cyc_o
+  io.wbMst.get.m_wb_stb_o := wishbone.io.wbMst.get.m_wb_stb_o
+  wishbone.io.wbMst.get.m_wb_dat_i := io.wbMst.get.m_wb_dat_i
+  wishbone.io.wbMst.get.m_wb_ack_i := io.wbMst.get.m_wb_ack_i
+  wishbone.io.wbMst.get.m_wb_err_i := io.wbMst.get.m_wb_err_i
+  io.wbMst.get.m_wb_cti_o := wishbone.io.wbMst.get.m_wb_cti_o
+  io.wbMst.get.m_wb_bte_o := wishbone.io.wbMst.get.m_wb_bte_o
 
   wishbone.io.InvalidSymbol        := InvalidSymbol
   wishbone.io.LatchedCrcError      := LatchedCrcError
