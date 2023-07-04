@@ -9,6 +9,18 @@ import freechips.rocketchip.tilelink._
 
 class Mac(implicit p: Parameters) extends LazyModule with HasMacParameters{
 
+val tlClientParameters = TLMasterPortParameters.v1(
+    Seq(TLMasterParameters.v1(
+      name = "tlSlvIO",
+      sourceId = IdRange(0, 1),
+    ))
+  )
+
+  val tlClientIONode = 
+    if(!isTileLink){ None } else {
+      Some(TLClientNode(Seq(tlClientParameters)))
+    }
+
   val tlMasterNode = 
     if(!isTileLink){ None } else {
       Some(    
@@ -25,6 +37,15 @@ class Mac(implicit p: Parameters) extends LazyModule with HasMacParameters{
       )
     }
 
+  if( !isTileLink ){} else {
+    tlMasterNode.get := tlClientIONode.get
+
+    val tlSlv = InModuleBody {
+      tlClientIONode.get.makeIOs()
+    }
+  }
+
+
 
   lazy val module = new MacImp(this)
 
@@ -38,7 +59,7 @@ class MacIO(implicit p: Parameters) extends MacBundle{
   // def isTileLink = false
 
   val wbSlv = if( !isTileLink ) { Some(new MacWishboneSlaveIO)  } else {None}
-  val wbMst = if( !isTileLink ) { Some(new MacWishboneMasterIO) } else {None}
+  val wbMst = if( true ) { Some(new MacWishboneMasterIO) } else {None}
 
   // Tx
   val mtx_clk_pad_i = Input(Bool())
@@ -63,6 +84,9 @@ class MacImp(outer: Mac)(implicit p: Parameters) extends LazyModuleImp(outer) wi
 
   val io = IO(new MacIO with MDIO)
   val ( slv_bus, slv_edge ) = (if(!isTileLink) {(None, None)} else {(Some(outer.tlMasterNode.get.in.head._1), Some(outer.tlMasterNode.get.in.head._2))} )
+  
+
+
 
 val r_ClkDiv            = Wire(UInt(8.W))
 val r_MiiNoPre          = Wire(Bool())
@@ -304,9 +328,17 @@ dontTouch(RegCs                      )
 
 val ethReg = Module(new MacReg)
 
-ethReg.io.DataIn              := io.wbSlv.get.WB_DAT_I
-ethReg.io.Address             := io.wbSlv.get.WB_ADR_I(9,2)
-ethReg.io.Rw                  := io.wbSlv.get.WB_WE_I
+if( !isTileLink ){
+  ethReg.io.DataIn              := io.wbSlv.get.WB_DAT_I
+  ethReg.io.Address             := io.wbSlv.get.WB_ADR_I(9,2)
+  ethReg.io.Rw                  := io.wbSlv.get.WB_WE_I  
+} else{
+  ethReg.io.DataIn              := slv_bus.get.a.bits.data
+  ethReg.io.Address             := slv_bus.get.a.bits.address(9,2)
+  ethReg.io.Rw                  := slv_bus.get.a.bits.opcode === 0.U | slv_bus.get.a.bits.opcode === 1.U
+}
+
+
 ethReg.io.Cs                  := RegCs
 ethReg.io.WCtrlDataStart      := WCtrlDataStart
 ethReg.io.RStatStart          := RStatStart
@@ -668,16 +700,28 @@ val rxethmac = Module(new MacRx)
 
 
   val wishbone = Module(new MacTileLink(slv_edge))
+  if( !isTileLink ){
+    wishbone.io.wbSlv.get.WB_DAT_I := io.wbSlv.get.WB_DAT_I
+    io.wbSlv.get.WB_DAT_O := wishbone.io.wbSlv.get.WB_DAT_O
+    wishbone.io.wbSlv.get.WB_ADR_I := io.wbSlv.get.WB_ADR_I
+    wishbone.io.wbSlv.get.WB_WE_I  := io.wbSlv.get.WB_WE_I
+    wishbone.io.wbSlv.get.WB_SEL_I := io.wbSlv.get.WB_SEL_I
+    wishbone.io.wbSlv.get.WB_CYC_I := io.wbSlv.get.WB_CYC_I
+    wishbone.io.wbSlv.get.WB_STB_I := io.wbSlv.get.WB_STB_I
+    io.wbSlv.get.WB_ACK_O := wishbone.io.wbSlv.get.WB_ACK_O
+    io.wbSlv.get.WB_ERR_O := wishbone.io.wbSlv.get.WB_ERR_O
+  } else {
 
-  wishbone.io.wbSlv.get.WB_DAT_I := io.wbSlv.get.WB_DAT_I
-  io.wbSlv.get.WB_DAT_O := wishbone.io.wbSlv.get.WB_DAT_O
-  wishbone.io.wbSlv.get.WB_ADR_I := io.wbSlv.get.WB_ADR_I
-  wishbone.io.wbSlv.get.WB_WE_I  := io.wbSlv.get.WB_WE_I
-  wishbone.io.wbSlv.get.WB_SEL_I := io.wbSlv.get.WB_SEL_I
-  wishbone.io.wbSlv.get.WB_CYC_I := io.wbSlv.get.WB_CYC_I
-  wishbone.io.wbSlv.get.WB_STB_I := io.wbSlv.get.WB_STB_I
-  io.wbSlv.get.WB_ACK_O := wishbone.io.wbSlv.get.WB_ACK_O
-  io.wbSlv.get.WB_ERR_O := wishbone.io.wbSlv.get.WB_ERR_O
+    wishbone.io.tlSlv.get.A.valid := slv_bus.get.a.valid 
+    wishbone.io.tlSlv.get.A.bits  := slv_bus.get.a.bits 
+    slv_bus.get.a.ready := wishbone.io.tlSlv.get.A.ready
+
+    slv_bus.get.d.valid := wishbone.io.tlSlv.get.D.valid
+    slv_bus.get.d.bits  := wishbone.io.tlSlv.get.D.bits
+    wishbone.io.tlSlv.get.D.ready := slv_bus.get.d.ready
+
+  }
+
 
 
   io.wbMst.get.m_wb_adr_o := wishbone.io.wbMst.get.m_wb_adr_o
@@ -801,5 +845,7 @@ val rxethmac = Module(new MacRx)
   DeferLatched         := macstatus.io.DeferLatched
   CarrierSenseLost     := macstatus.io.CarrierSenseLost
   LatchedMRxErr        := macstatus.io.LatchedMRxErr
+
+
 
 }

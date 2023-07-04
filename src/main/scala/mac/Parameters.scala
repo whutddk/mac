@@ -14,7 +14,7 @@ case object MacParamsKey extends Field[MacSetting]
 
 
 case class MacSetting(
-  isTileLink: Boolean = false
+  isTileLink: Boolean = true
 ){
 
 }

@@ -27,7 +27,7 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn])(implicit p: Parameters) e
     val wbSlv = if( !isTileLink ) { Some(new MacWishboneSlaveIO) } else {None}
     val tlSlv = if(  isTileLink ) { Some(new MacTileLinkSlaveIO) } else {None}
 
-    val wbMst = if( !isTileLink ) { Some(new MacWishboneMasterIO) } else {None}
+    val wbMst = if( true ) { Some(new MacWishboneMasterIO) } else {None}
 
     // Rx Status signals
     val InvalidSymbol   = Input(Bool())             // Invalid symbol was received during reception in 100 Mbps mode
@@ -375,10 +375,10 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn])(implicit p: Parameters) e
     // BDWrite  := BDCs & Fill(4,io.wbSlv.get.WB_WE_I)
     // BDRead   := BDCs.orR & ~io.wbSlv.get.WB_WE_I
 
-    ram_addr := (if( !isTileLink ) {io.wbSlv.get.WB_ADR_I(9,2)} else {io.tlSlv.get.A.bits.address(9,2)}) // [11:2 ] -> [9:2];
-    ram_di   := (if( !isTileLink ) {io.wbSlv.get.WB_DAT_I} else { io.tlSlv.get.A.bits.data })
+    ram_addr := (if( !isTileLink ) {io.wbSlv.get.WB_ADR_I(9,2)}          else {io.tlSlv.get.A.bits.address(9,2)}) // [11:2 ] -> [9:2];
+    ram_di   := (if( !isTileLink ) {io.wbSlv.get.WB_DAT_I}               else { io.tlSlv.get.A.bits.data })
     BDWrite  := (if( !isTileLink ) {BDCs & Fill(4,io.wbSlv.get.WB_WE_I)} else {BDCs & Fill(4,(io.tlSlv.get.A.bits.opcode === 0.U) || (io.tlSlv.get.A.bits.opcode === 1.U))} )
-    BDRead   := (if( !isTileLink ) {BDCs.orR & ~io.wbSlv.get.WB_WE_I} else {BDCs.orR & (io.tlSlv.get.A.bits.opcode === 4.U)})
+    BDRead   := (if( !isTileLink ) {BDCs.orR & ~io.wbSlv.get.WB_WE_I}    else {BDCs.orR & (io.tlSlv.get.A.bits.opcode === 4.U)})
   } .elsewhen( RAMAccessEnable === BitPat("b010?1") ){
     WbEn := false.B
     RxEn := false.B
@@ -394,10 +394,10 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn])(implicit p: Parameters) e
     // BDWrite  := BDCs & Fill(4,io.wbSlv.get.WB_WE_I)
     // BDRead   := BDCs.orR & ~io.wbSlv.get.WB_WE_I
 
-    ram_addr := (if( !isTileLink ) {io.wbSlv.get.WB_ADR_I(9,2)} else {io.tlSlv.get.A.bits.address(9,2)}) //[11:2 ] ->[9:2]
-    ram_di   := (if( !isTileLink ) {io.wbSlv.get.WB_DAT_I} else { io.tlSlv.get.A.bits.data })
+    ram_addr := (if( !isTileLink ) {io.wbSlv.get.WB_ADR_I(9,2)}          else {io.tlSlv.get.A.bits.address(9,2)}) //[11:2 ] ->[9:2]
+    ram_di   := (if( !isTileLink ) {io.wbSlv.get.WB_DAT_I}               else {io.tlSlv.get.A.bits.data })
     BDWrite  := (if( !isTileLink ) {BDCs & Fill(4,io.wbSlv.get.WB_WE_I)} else {BDCs & Fill(4,(io.tlSlv.get.A.bits.opcode === 0.U) || (io.tlSlv.get.A.bits.opcode === 1.U))} )
-    BDRead   := (if( !isTileLink ) {BDCs.orR & ~io.wbSlv.get.WB_WE_I} else {BDCs.orR & (io.tlSlv.get.A.bits.opcode === 4.U)})
+    BDRead   := (if( !isTileLink ) {BDCs.orR & ~io.wbSlv.get.WB_WE_I}    else {BDCs.orR & (io.tlSlv.get.A.bits.opcode === 4.U)})
   } .elsewhen( RAMAccessEnable === BitPat("b10000") ){
     WbEn := false.B // WbEn access stage and there is no need for other stages. WbEn needs to be switched off for a bit
   } .elsewhen( RAMAccessEnable === BitPat("b00000") ){
@@ -409,10 +409,10 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn])(implicit p: Parameters) e
     // BDWrite  := BDCs & Fill(4,io.wbSlv.get.WB_WE_I)
     // BDRead   := BDCs.orR & ~io.wbSlv.get.WB_WE_I
 
-    ram_addr := (if( !isTileLink ) {io.wbSlv.get.WB_ADR_I(9,2)} else {io.tlSlv.get.A.bits.address(9,2)}) // [11:2 ] -> [9:2]
-    ram_di   := (if( !isTileLink ) {io.wbSlv.get.WB_DAT_I} else { io.tlSlv.get.A.bits.data })
+    ram_addr := (if( !isTileLink ) {io.wbSlv.get.WB_ADR_I(9,2)}          else {io.tlSlv.get.A.bits.address(9,2)}) // [11:2 ] -> [9:2]
+    ram_di   := (if( !isTileLink ) {io.wbSlv.get.WB_DAT_I}               else { io.tlSlv.get.A.bits.data })
     BDWrite  := (if( !isTileLink ) {BDCs & Fill(4,io.wbSlv.get.WB_WE_I)} else {BDCs & Fill(4,(io.tlSlv.get.A.bits.opcode === 0.U) || (io.tlSlv.get.A.bits.opcode === 1.U))} )
-    BDRead   := (if( !isTileLink ) {BDCs.orR & ~io.wbSlv.get.WB_WE_I} else {BDCs.orR & (io.tlSlv.get.A.bits.opcode === 4.U)})
+    BDRead   := (if( !isTileLink ) {BDCs.orR & ~io.wbSlv.get.WB_WE_I}    else {BDCs.orR & (io.tlSlv.get.A.bits.opcode === 4.U)})
   }
 
 
@@ -1139,19 +1139,21 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
     io.wbSlv.get.WB_ERR_O := RegNext(io.wbSlv.get.WB_STB_I & io.wbSlv.get.WB_CYC_I & (~(io.wbSlv.get.WB_SEL_I.orR) | CsMiss) & ~io.wbSlv.get.WB_ERR_O, false.B)
 
   } else {
-    io.RegCs := Fill(4, io.tlSlv.get.A.fire & io.tlSlv.get.A.bits.mask.orR & ~io.tlSlv.get.A.bits.address(11) & ~io.tlSlv.get.A.bits.address(10)) & io.tlSlv.get.A.bits.mask // 0x0   - 0x3FF
-       BDCs  := Fill(4, io.tlSlv.get.A.fire & io.tlSlv.get.A.bits.mask.orR & ~io.tlSlv.get.A.bits.address(11) &  io.tlSlv.get.A.bits.address(10)) & io.tlSlv.get.A.bits.mask // 0x400 - 0x7FF
-      CsMiss :=         io.tlSlv.get.A.fire & io.tlSlv.get.A.bits.mask.orR &  io.tlSlv.get.A.bits.address(11)    // 0x800 - 0xfFF     // When access to the address between 0x800 and 0xfff occurs, acknowledge is set but data is not valid.
+    io.RegCs := Fill(4, io.tlSlv.get.A.valid & io.tlSlv.get.A.bits.mask.orR & ~io.tlSlv.get.A.bits.address(11) & ~io.tlSlv.get.A.bits.address(10)) & io.tlSlv.get.A.bits.mask // 0x0   - 0x3FF
+       BDCs  := Fill(4, io.tlSlv.get.A.valid & io.tlSlv.get.A.bits.mask.orR & ~io.tlSlv.get.A.bits.address(11) &  io.tlSlv.get.A.bits.address(10)) & io.tlSlv.get.A.bits.mask // 0x400 - 0x7FF
+      CsMiss :=         io.tlSlv.get.A.valid & io.tlSlv.get.A.bits.mask.orR &  io.tlSlv.get.A.bits.address(11)    // 0x800 - 0xfFF     // When access to the address between 0x800 and 0xfff occurs, acknowledge is set but data is not valid.
     
     val slvAInfo = RegEnable( io.tlSlv.get.A.bits, io.tlSlv.get.A.fire )
     val slvDValid = RegInit(false.B); io.tlSlv.get.D.valid := slvDValid
     val slvDDat = Reg(UInt(32.W))
 
+
+
     when( io.tlSlv.get.D.fire ){
       slvDValid := false.B
-    } .elsewhen(io.RegCs.orR | BDAck){
+    } .elsewhen(io.tlSlv.get.A.fire){
       slvDValid := true.B
-      slvDDat := Mux( ((io.RegCs.orR) & ~io.wbSlv.get.WB_WE_I), io.RegDataOut, BD_WB_DAT_O )
+      slvDDat := Mux( ((io.RegCs.orR) & io.tlSlv.get.A.bits.opcode === 4.U), io.RegDataOut, BD_WB_DAT_O )
     }
 
     when(slvAInfo.opcode === 4.U) {
@@ -1160,7 +1162,12 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
       io.tlSlv.get.D.bits := edge.get.AccessAck(slvAInfo)
     }
 
-    when( io.tlSlv.get.A.fire & (~(io.wbSlv.get.WB_SEL_I.orR) | CsMiss) ){
+
+
+    io.tlSlv.get.A.ready := RegNext(io.RegCs.orR, false.B) | BDAck
+    assert( ~(io.tlSlv.get.A.ready & ~io.tlSlv.get.A.valid) )
+
+    when( io.tlSlv.get.A.fire & (~(io.tlSlv.get.A.bits.mask.orR) | CsMiss) ){
       assert( false.B, "Assert Failed, tileLink access an undefine region!" )
     }
   }
