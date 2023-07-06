@@ -655,7 +655,7 @@ val rxethmac = Module(new MacRx)
     val WillTransmit_q = ShiftRegister(WillTransmit, 2, false.B, true.B)
 
     Transmitting := ~r_FullD & WillTransmit_q
-    RxEnSync := RegEnable(r_RxEn, false.B, ~io.mrxdv_pad_i)
+    RxEnSync := RegEnable( ShiftRegister(r_RxEn, 2), false.B, ~io.mrxdv_pad_i)
   }
 
 
