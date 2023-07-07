@@ -14,20 +14,24 @@ import org.chipsalliance.cde.config._
 
 
 
-abstract class MacTileLinkBase(edge: Option[TLEdgeIn])(implicit p: Parameters) extends MacModule{
+abstract class MacTileLinkBase(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(implicit p: Parameters) extends MacModule{
 
   class MacTileLinkSlaveIO extends Bundle{
     val A = Flipped(Decoupled(new TLBundleA(edge.get.bundle)))
     val D = Decoupled(new TLBundleD(edge.get.bundle))
   }
 
-
+  class MacTileLinkMasterIO extends Bundle{
+    val A = Decoupled(new TLBundleA(edgeOut.bundle))
+    val D = Flipped(Decoupled(new TLBundleD(edgeOut.bundle)))
+  }
 
   class MacTileLinkIO(implicit p: Parameters) extends MacBundle{
     val wbSlv = if( !isTileLink ) { Some(new MacWishboneSlaveIO) } else {None}
     val tlSlv = if(  isTileLink ) { Some(new MacTileLinkSlaveIO) } else {None}
 
-    val wbMst = if( true ) { Some(new MacWishboneMasterIO) } else {None}
+
+    val tlMst = Some(new MacTileLinkMasterIO)
 
     // Rx Status signals
     val InvalidSymbol   = Input(Bool())             // Invalid symbol was received during reception in 100 Mbps mode
@@ -96,7 +100,7 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn])(implicit p: Parameters) e
   val io = IO(new MacTileLinkIO)
     
 
-
+  val (_, _, isLastD, transDCnt) = edgeOut.count(io.tlMst.get.D)
 
 
   val BDCs = Wire(UInt(4.W))
@@ -235,12 +239,6 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn])(implicit p: Parameters) e
   val TxBufferAlmostEmpty = Wire(Bool())
   val BlockReadTxDataFromMemory = RegInit(false.B)
 
-  val tx_burst_en = RegInit(true.B)
-  val rx_burst_en = RegInit(false.B)
-  val tx_burst_cnt = RegInit(0.U(3.W))
-
-  // val tx_burst = Wire(Bool())
-  val m_wb_cti_o = RegInit(0.U(3.W)); io.wbMst.get.m_wb_cti_o := m_wb_cti_o    // Cycle Type Identifier
 
   val TxData_wb = Wire(UInt(32.W))
   val ReadTxDataFromFifo_wb = Wire(Bool())
@@ -248,24 +246,13 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn])(implicit p: Parameters) e
   val txfifo_cnt = Wire(UInt(5.W))
   val rxfifo_cnt = Wire(UInt(5.W))
 
-  val rx_burst_cnt = RegInit(0.U(3.W))
-
-  val rx_burst = Wire(Bool())
-  val enough_data_in_rxfifo_for_burst = Wire(Bool())
-  val enough_data_in_rxfifo_for_burst_plus1 = Wire(Bool())
-
   val ReadTxDataFromMemory = RegInit(false.B)
   val WriteRxDataToMemory = Wire(Bool())
 
   val MasterWbTX = RegInit(false.B)
   val MasterWbRX = RegInit(false.B)
 
-  val m_wb_adr_o = RegInit(0.U(30.W)); io.wbMst.get.m_wb_adr_o := Cat(m_wb_adr_o, 0.U(2.W))
-  val m_wb_cyc_o = RegInit(false.B); io.wbMst.get.m_wb_cyc_o := m_wb_cyc_o
-  val m_wb_sel_o = RegInit(0.U(4.W)); io.wbMst.get.m_wb_sel_o := m_wb_sel_o
-  val m_wb_we_o  = RegInit(false.B); io.wbMst.get.m_wb_we_o := m_wb_we_o
 
-  val BlockingIncrementTxPointer = RegInit(false.B)
   val TxPointerMSB = RegInit(0.U(30.W)) //[31:2]
   val TxPointerLSB = RegInit(0.U(2.W))
   val TxPointerLSB_rst = RegInit(0.U(2.W))
@@ -278,10 +265,9 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn])(implicit p: Parameters) e
 
 
   val cyc_cleared = RegInit(false.B)
-  val IncrTxPointer = RegInit(false.B)
 
   val RxByteSel = Wire(UInt(4.W))
-  val MasterAccessFinished = Wire(Bool())
+
 
 
 
@@ -307,8 +293,7 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn])(implicit p: Parameters) e
   val RxStatusWriteLatched_syncb = ShiftRegister(io.RxStatusWriteLatched_sync2, 2, false.B, true.B)
 
 
-  io.wbMst.get.m_wb_bte_o := "b00".U    // Linear burst
-  io.wbMst.get.m_wb_stb_o := m_wb_cyc_o
+
 
 
   when(true.B){
@@ -416,32 +401,6 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn])(implicit p: Parameters) e
   }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   val ResetTxBDReady = TxDonePulse | TxAbortPulse | TxRetryPulse
 
 
@@ -510,7 +469,8 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn])(implicit p: Parameters) e
   //Latching length from the buffer descriptor;
   when(TxEn & TxEn_q & TxBDRead){
     TxLength := txBuffDesc.len   
-  } .elsewhen(MasterWbTX & io.wbMst.get.m_wb_ack_i){
+  } 
+  .elsewhen( MasterWbTX & io.tlMst.get.D.fire ){ //tx tileRead
     when( TxLength < 4.U ){
       TxLength := 0.U
     } .elsewhen(TxPointerLSB_rst === 0.U){
@@ -525,6 +485,7 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn])(implicit p: Parameters) e
   }
 
 
+
   //Latching length from the buffer descriptor;
   when(TxEn & TxEn_q & TxBDRead){
     LatchedTxLength := txBuffDesc.len   
@@ -536,7 +497,7 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn])(implicit p: Parameters) e
   when(TxEn & TxEn_q & TxPointerRead){
     TxPointerMSB := ram_do(31,2)  // Latching Tx buffer pointer from buffer descriptor. Only 30 MSB bits are latched because TxPointerMSB is only used for word-aligned accesses.
     TxPointerLSB := ram_do(1,0)   // Latching 2 MSB bits of the buffer descriptor. Since word accesses are performed, valid data does not necesserly start at byte 0 (could be byte 0, 1, 2 or 3). This signals are used for proper selection of the star byte (TxData and TxByteCnt) are set by this two bits.
-  } .elsewhen(IncrTxPointer & ~BlockingIncrementTxPointer){
+  } .elsewhen( io.tlMst.get.D.fire & io.tlMst.get.D.bits.opcode === 1.U ){
     TxPointerMSB := TxPointerMSB + 1.U // TxPointer is word-aligned
   }
     
@@ -544,17 +505,12 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn])(implicit p: Parameters) e
   // Latching 2 MSB bits of the buffer descriptor.  After the read access, TxLength needs to be decremented for the number of the valid bytes (1 to 4 bytes are valid in the first word). After the first read all bytes are valid so this two bits are reset to zero. 
   when(TxEn & TxEn_q & TxPointerRead){
     TxPointerLSB_rst := ram_do(1,0)    
-  } .elsewhen(MasterWbTX & io.wbMst.get.m_wb_ack_i){ // After first access pointer is word alligned
+  } .elsewhen( MasterWbTX & io.tlMst.get.D.fire ){ // After first access pointer is word alligned
     TxPointerLSB_rst := 0.U
   }
 
 
-
-  when(MasterAccessFinished){
-    BlockingIncrementTxPointer := false.B
-  } .elsewhen(IncrTxPointer){
-    BlockingIncrementTxPointer := true.B
-  }
+  val isTlMstBusy = RegInit(false.B)
 
 
   when( (TxLength === 0.U) | TxAbortPulse | TxRetryPulse){
@@ -563,159 +519,85 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn])(implicit p: Parameters) e
     ReadTxDataFromMemory := true.B
   }
 
-  val tx_burst = ReadTxDataFromMemory & ~BlockReadTxDataFromMemory & tx_burst_en
+  val ReadTxDataFromMemory_2 = ReadTxDataFromMemory & ~BlockReadTxDataFromMemory;
 
-  when((TxBufferAlmostFull | TxLength <= 4.U) & MasterWbTX & (~cyc_cleared) & (~(TxAbortPacket_NotCleared | TxRetryPacket_NotCleared))){
+  when(
+    (TxBufferAlmostFull | TxLength <= 4.U) & MasterWbTX & isTlMstBusy & (~(TxAbortPacket_NotCleared | TxRetryPacket_NotCleared))){
     BlockReadTxDataFromMemory := true.B
   } .elsewhen(ReadTxDataFromFifo_wb | TxDonePacket | TxAbortPacket | TxRetryPacket){
     BlockReadTxDataFromMemory := false.B
   }
 
-  MasterAccessFinished := io.wbMst.get.m_wb_ack_i | io.wbMst.get.m_wb_err_i
 
 
 
-// Enabling master wishbone access to the memory for two devices TX and RX.
-
-val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockReadTxDataFromMemory), WriteRxDataToMemory, MasterAccessFinished, cyc_cleared, tx_burst, rx_burst)
-
-      // Switching between two stages depends on enable signals
 
 
-  when(
-    masterStage === BitPat("b00100010") | // Idle and MRB needed
-    masterStage === BitPat("b101?101?") | // MRB continues
-    masterStage === BitPat("b10100110") | // Clear (previously MR) and MRB needed
-    masterStage === BitPat("b011?011?")
-  ){ // Clear (previously MW) and MRB needed
-    MasterWbTX    := true.B  // tx burst
-    MasterWbRX    := false.B
-    m_wb_cyc_o    := true.B
-    m_wb_we_o     := false.B
-    m_wb_sel_o    := "hf".U
-    cyc_cleared   := false.B
-    IncrTxPointer := true.B
-    tx_burst_cnt  := tx_burst_cnt + 1.U
-    when(tx_burst_cnt === 0.U){
-      m_wb_adr_o := TxPointerMSB
-    } .otherwise{
-      m_wb_adr_o := m_wb_adr_o + 1.U
-    }
 
-    when(tx_burst_cnt === 3.U) {
-      tx_burst_en := false.B
-      m_wb_cti_o  := "b111".U
-    } .otherwise{
-      m_wb_cti_o  := "b010".U
-    }
-  } .elsewhen(
-    masterStage === BitPat("b00?100?1") |            // Idle and MWB needed
-    masterStage === BitPat("b01?110?1") |            // MWB continues
-    masterStage === BitPat("b01010101") |            // Clear (previously MW) and MWB needed
-    masterStage === BitPat("b10?101?1")              // Clear (previously MR) and MWB needed
-  ){
-    MasterWbTX    := false.B  // rx burst
-    MasterWbRX    := true.B
-    m_wb_cyc_o    := true.B
-    m_wb_we_o     := true.B
-    m_wb_sel_o    := RxByteSel
-    IncrTxPointer := false.B
-    cyc_cleared   := false.B
-    rx_burst_cnt  := rx_burst_cnt + 1.U
 
-    when(rx_burst_cnt === 0.U ){
-      m_wb_adr_o := RxPointerMSB
-    } .otherwise{
-      m_wb_adr_o := m_wb_adr_o + 1.U
-    }
 
-    when(rx_burst_cnt === 3.U ){
-      rx_burst_en := false.B
-      m_wb_cti_o  := "b111".U
-    } .otherwise{
-      m_wb_cti_o := "b010".U
-    }       
-  }.elsewhen( masterStage === BitPat("b00?100?0") ){ // idle and MW is needed (data write to rx buffer)
-    MasterWbTX    := false.B
-    MasterWbRX    := true.B
-    m_wb_adr_o    := RxPointerMSB
-    m_wb_cyc_o    := true.B
-    m_wb_we_o     := true.B
-    m_wb_sel_o    := RxByteSel
-    IncrTxPointer := false.B
-  }.elsewhen( masterStage === BitPat("b00100000") ){ // idle and MR is needed (data read from tx buffer)
-    MasterWbTX    := true.B
-    MasterWbRX    := false.B
-    m_wb_adr_o    := TxPointerMSB;
-    m_wb_cyc_o    := true.B
-    m_wb_we_o     := false.B
-    m_wb_sel_o    := "hf".U
-    IncrTxPointer := true.B
-  }.elsewhen( 
-    masterStage === BitPat("b10100100") | // MR and MR is needed (data read from tx buffer)
-    masterStage === BitPat("b011?010?")   // MW and MR is needed (data read from tx buffer)
-  ){
-    MasterWbTX    := true.B
-    MasterWbRX    := false.B
-    m_wb_adr_o    := TxPointerMSB;
-    m_wb_cyc_o    := true.B
-    m_wb_we_o     := false.B
-    m_wb_sel_o    := "hf".U
-    cyc_cleared   := false.B
-    IncrTxPointer := true.B
-  }.elsewhen( 
-    masterStage === BitPat("b01010100") | // MW and MW needed (data write to rx buffer)
-    masterStage === BitPat("b10?101?0")   // MR and MW is needed (data write to rx buffer)
-  ){
-    MasterWbTX    := false.B
-    MasterWbRX    := true.B
-    m_wb_adr_o    := RxPointerMSB;
-    m_wb_cyc_o    := true.B
-    m_wb_we_o     := true.B
-    m_wb_sel_o    := RxByteSel;
-    cyc_cleared   := false.B
-    IncrTxPointer := false.B
-  }.elsewhen( 
-    masterStage === BitPat("b01011000") | // MW and MW needed (cycle is cleared between previous and next access)
-    masterStage === BitPat("b011?10?0") | // MW and MW or MR or MRB needed (cycle is cleared between previous and next access)
-    masterStage === BitPat("b10101000") | // MR and MR needed (cycle is cleared between previous and next access)
-    masterStage === BitPat("b10?1100?")   // MR and MR or MW or MWB (cycle is cleared between previous and next access)
-  ){
-    m_wb_cyc_o    := false.B// whatever and master read or write is needed. We need to clear m_wb_cyc_o before next access is started
-    cyc_cleared   := true.B
-    IncrTxPointer := false.B
-    tx_burst_cnt  := 0.U
-    tx_burst_en   := (txfifo_cnt < 12.U) & (TxLength > 20.U)
-    rx_burst_cnt  := 0.U
-    rx_burst_en   := Mux(MasterWbRX, enough_data_in_rxfifo_for_burst_plus1, enough_data_in_rxfifo_for_burst)  // Counter is not decremented, yet, so plus1 is used.
-    m_wb_cti_o    := 0.U
-  }.elsewhen( 
-    masterStage === BitPat("b??001000") | // whatever and no master read or write is needed (ack or err comes finishing previous access)
-    masterStage === BitPat("b??000100")   // Between cyc_cleared request was cleared
-  ){
-    MasterWbTX    := false.B
-    MasterWbRX    := false.B
-    m_wb_cyc_o    := false.B
-    cyc_cleared   := false.B
-    IncrTxPointer := false.B
-    rx_burst_cnt  := 0.U
-    // Counter is not decremented, yet, so plus1 is used.
-    rx_burst_en   := Mux(MasterWbRX, enough_data_in_rxfifo_for_burst_plus1, enough_data_in_rxfifo_for_burst)
-    m_wb_cti_o    := 0.U
-  }.elsewhen( masterStage === BitPat("b00000000") ){  // whatever and no master read or write is needed (ack or err comes finishing previous access)
-    tx_burst_cnt := 0.U
-    tx_burst_en  := (txfifo_cnt < 12.U) & (TxLength > 20.U)
-  } .otherwise{
 
-  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
   TxFifoClear := (TxAbortPacket | TxRetryPacket)
 
   val tx_fifo = Module( new MacFifo(dw = 32, dp = 16) )
-  tx_fifo.io.data_in := io.wbMst.get.m_wb_dat_i
-  tx_fifo.io.write   := MasterWbTX & io.wbMst.get.m_wb_ack_i
+    tx_fifo.io.data_in := io.tlMst.get.D.bits.data
+    tx_fifo.io.write   := io.tlMst.get.D.fire & io.tlMst.get.D.bits.opcode === 1.U
+
+
   tx_fifo.io.read    := ReadTxDataFromFifo_wb & ~TxBufferEmpty
   tx_fifo.io.clear   := TxFifoClear
   TxData_wb           := tx_fifo.io.data_out
@@ -820,7 +702,7 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
   val TxAbortPacketBlocked = RegInit(false.B)
 
   when(
-    TxAbort_wb(1) & (~TxAbortPacketBlocked) &   MasterWbTX  & (~tx_burst_en) & MasterAccessFinished  |
+    TxAbort_wb(1) & (~TxAbortPacketBlocked) &   MasterWbTX  & io.tlMst.get.D.fire & isLastD  |
     TxAbort_wb(1) & (~TxAbortPacketBlocked) & (~MasterWbTX) ){
     TxAbortPacket := true.B
   } .otherwise{
@@ -831,7 +713,7 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
   when(TxEn & TxEn_q & TxAbortPacket_NotCleared){
     TxAbortPacket_NotCleared := false.B
   } .elsewhen(
-    TxAbort_wb(1) & (~TxAbortPacketBlocked) &   MasterWbTX & (~tx_burst_en) & MasterAccessFinished |
+    TxAbort_wb(1) & (~TxAbortPacketBlocked) &   MasterWbTX  & io.tlMst.get.D.fire & isLastD |
     TxAbort_wb(1) & (~TxAbortPacketBlocked) & (~MasterWbTX) ){
     TxAbortPacket_NotCleared := true.B
   }
@@ -847,7 +729,7 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
   val TxRetryPacketBlocked = RegInit(false.B)
 
   when(
-    TxRetry_wb(1) & ~TxRetryPacketBlocked &  MasterWbTX & ~tx_burst_en & MasterAccessFinished |
+    TxRetry_wb(1) & ~TxRetryPacketBlocked &  MasterWbTX & io.tlMst.get.D.fire & isLastD |
     TxRetry_wb(1) & ~TxRetryPacketBlocked & ~MasterWbTX ){
     TxRetryPacket := true.B
   } .otherwise{
@@ -861,7 +743,7 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
   when(StartTxBDRead){
     TxRetryPacket_NotCleared := false.B
   } .elsewhen(
-    TxRetry_wb(1) & ~TxRetryPacketBlocked &  MasterWbTX & ~tx_burst_en & MasterAccessFinished |
+    TxRetry_wb(1) & ~TxRetryPacketBlocked &  MasterWbTX & io.tlMst.get.D.fire & isLastD |
     TxRetry_wb(1) & ~TxRetryPacketBlocked & ~MasterWbTX ){
     TxRetryPacket_NotCleared := true.B
   }
@@ -878,7 +760,7 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
   val TxDonePacketBlocked = RegInit(false.B)
 
   when(
-    TxDone_wb(1) & ~TxDonePacketBlocked &  MasterWbTX & ~tx_burst_en & MasterAccessFinished |
+    TxDone_wb(1) & ~TxDonePacketBlocked &  MasterWbTX & io.tlMst.get.D.fire & isLastD |
     TxDone_wb(1) & ~TxDonePacketBlocked & ~MasterWbTX  ){
     TxDonePacket := true.B
   }.otherwise{
@@ -888,7 +770,7 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
   when(TxEn & TxEn_q & TxDonePacket_NotCleared){
     TxDonePacket_NotCleared := false.B
   } .elsewhen(
-    TxDone_wb(1) & ~TxDonePacketBlocked &  MasterWbTX & ~tx_burst_en & MasterAccessFinished |
+    TxDone_wb(1) & ~TxDonePacketBlocked &  MasterWbTX & io.tlMst.get.D.fire & isLastD |
     TxDone_wb(1) & ~TxDonePacketBlocked & ~MasterWbTX ){
     TxDonePacket_NotCleared := true.B
   }
@@ -962,12 +844,12 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
   //Latching Rx buffer pointer from buffer descriptor;
   when(RxEn & RxEn_q & RxPointerRead){
     RxPointerMSB := ram_do(31,2)    
-  } .elsewhen(MasterWbRX & io.wbMst.get.m_wb_ack_i){
+  } .elsewhen(MasterWbRX & io.tlMst.get.D.fire ){
     RxPointerMSB := RxPointerMSB + 1.U // Word access (always word access. m_wb_sel_o are used for selecting bytes)
   }
 
   //Latching last addresses from buffer descriptor (used as byte-half-word indicator);
-  when(MasterWbRX & io.wbMst.get.m_wb_ack_i){// After first write all RxByteSel are active
+  when(MasterWbRX & io.tlMst.get.D.fire ){// After first write all RxByteSel are active
     RxPointerLSB_rst := 0.U
   } .elsewhen(RxEn & RxEn_q & RxPointerRead){
     RxPointerLSB_rst := ram_do(1,0)    
@@ -1015,10 +897,11 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
   val RxDataLatched2_rxclk = Wire(UInt(32.W))
   rx_fifo.io.data_in := RxDataLatched2_rxclk
   rx_fifo.io.write   := WriteRxDataToFifo_wb & ~RxBufferFull
-  rx_fifo.io.read    := MasterWbRX & io.wbMst.get.m_wb_ack_i
+  rx_fifo.io.read    := MasterWbRX & io.tlMst.get.A.fire
   rx_fifo.io.clear   := RxFifoReset
 
-  io.wbMst.get.m_wb_dat_o := rx_fifo.io.data_out
+
+
   RxBufferFull := rx_fifo.io.full
   RxBufferAlmostEmpty := rx_fifo.io.almost_empty
   RxBufferEmpty := rx_fifo.io.empty
@@ -1026,12 +909,10 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
 
 
 
-  enough_data_in_rxfifo_for_burst       := rxfifo_cnt >= 4.U
-  enough_data_in_rxfifo_for_burst_plus1 := rxfifo_cnt > 4.U
+
 
   WriteRxDataToMemory := ~RxBufferEmpty
-  rx_burst            := rx_burst_en & WriteRxDataToMemory
-  
+ 
 
 
 
@@ -1044,7 +925,7 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
 
 
   // Generation of the end-of-frame signal
-  when(ShiftEndedSync3 & MasterWbRX & io.wbMst.get.m_wb_ack_i & RxBufferAlmostEmpty & ~ShiftEnded){
+  when(ShiftEndedSync3 & MasterWbRX & io.tlMst.get.D.fire & RxBufferAlmostEmpty & ~ShiftEnded){
     ShiftEnded := true.B
   } .elsewhen(RxStatusWrite){
     ShiftEnded := false.B
@@ -1162,8 +1043,6 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
       io.tlSlv.get.D.bits := edge.get.AccessAck(slvAInfo)
     }
 
-
-
     io.tlSlv.get.A.ready := RegNext(io.RegCs.orR & ~io.tlSlv.get.A.fire, false.B) | BDAck
     assert( ~(io.tlSlv.get.A.ready & ~io.tlSlv.get.A.valid) )
 
@@ -1171,6 +1050,97 @@ val masterStage = Cat(MasterWbTX, MasterWbRX, (ReadTxDataFromMemory & ~BlockRead
       assert( false.B, "Assert Failed, tileLink access an undefine region!" )
     }
   }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  val mstAValid = RegInit(false.B)
+  val mstABits  = Reg(new TLBundleA(edgeOut.bundle))
+
+
+
+  // val tlMstStateDnxt = WireDefault()
+  // val tlMstState     = RegNext(  )
+
+
+
+  when( io.tlMst.get.A.fire ){
+    mstAValid := false.B
+  } 
+  .elsewhen( MasterWbRX & ~isTlMstBusy ) {
+    mstAValid := true.B
+    mstABits :=
+      edgeOut.Put(
+        fromSource = 0.U,
+        toAddress = RxPointerMSB,
+        lgSize = log2Ceil(32/8).U,
+        data = rx_fifo.io.data_out,
+        mask = RxByteSel,
+      )._2
+  }
+  .elsewhen( MasterWbTX & ~isTlMstBusy ){
+    mstAValid := true.B
+    mstABits :=
+      edgeOut.Get(
+        fromSource = 0.U,
+        toAddress = TxPointerMSB,
+        lgSize = log2Ceil(32/8).U,
+      )._2
+  }
+
+  when( io.tlMst.get.A.fire ){
+    isTlMstBusy := true.B
+  } .elsewhen( io.tlMst.get.D.fire ){
+    isTlMstBusy := false.B
+  }
+
+  when( ~MasterWbTX & ~MasterWbRX ){
+    when( WriteRxDataToMemory ){
+      MasterWbRX := true.B
+    } .elsewhen(ReadTxDataFromMemory_2) {
+      MasterWbTX := true.B
+    }
+  } .elsewhen( ~MasterWbTX & MasterWbRX){ //1.4A + 1D fifo to memory
+    when( io.tlMst.get.D.fire & isLastD & ~WriteRxDataToMemory ){
+      MasterWbRX := false.B
+    }
+  } .elsewhen( MasterWbTX & ~MasterWbRX){ //1 A + 1.4D memory to fifo
+    when( io.tlMst.get.D.fire & isLastD & ~ReadTxDataFromMemory_2 ){
+      MasterWbTX := false.B
+    }
+  }
+
+
+  when(io.tlMst.get.D.fire & io.tlMst.get.D.bits.opcode === 1.U) { assert( MasterWbTX ) }
+  when(io.tlMst.get.D.fire & io.tlMst.get.D.bits.opcode === 0.U) { assert( MasterWbRX ) }
+
+
+
+    io.tlMst.get.A.valid := mstAValid
+    io.tlMst.get.A.bits  := mstABits
+
+
+    io.tlMst.get.D.ready := true.B
+
+
+
+
+
+
+
+
+
+
 
 
 }
@@ -1517,7 +1487,7 @@ trait MacTileLinkRXClk{ this: MacTileLinkBase =>
   }
 }
 
-class MacTileLink(edge: Option[TLEdgeIn])(implicit p: Parameters) extends MacTileLinkBase(edge) with MacTileLinkTXClk with MacTileLinkRXClk
+class MacTileLink(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(implicit p: Parameters) extends MacTileLinkBase(edge, edgeOut) with MacTileLinkTXClk with MacTileLinkRXClk
 
 
 
