@@ -11,15 +11,15 @@ class Mac(implicit p: Parameters) extends LazyModule with HasMacParameters{
 
 
 
-  val tlClientIONode = 
-    if(!isTileLink){ None } else {
-      Some(TLClientNode(Seq(TLMasterPortParameters.v1(
-        Seq(TLMasterParameters.v1(
-          name = "tlSlvIO",
-          sourceId = IdRange(0, 1),
-        ))
-      ))))
-    }
+  // val tlClientIONode = 
+  //   if(!isTileLink){ None } else {
+  //     Some(TLClientNode(Seq(TLMasterPortParameters.v1(
+  //       Seq(TLMasterParameters.v1(
+  //         name = "tlSlvIO",
+  //         sourceId = IdRange(0, 1),
+  //       ))
+  //     ))))
+  //   }
 
   val tlMasterNode = 
     if(!isTileLink){ None } else {
@@ -37,25 +37,25 @@ class Mac(implicit p: Parameters) extends LazyModule with HasMacParameters{
       )
     }
 
-  if( !isTileLink ){} else {
-    tlMasterNode.get := tlClientIONode.get
-    val tlSlv = InModuleBody {
-      tlClientIONode.get.makeIOs()
-    }
-  }
+  // if( !isTileLink ){} else {
+  //   tlMasterNode.get := tlClientIONode.get
+    // val tlSlv = InModuleBody {
+    //   tlClientIONode.get.makeIOs()
+    // }
+  // }
 
 
-  val tlMasterIONode = 
-      TLManagerNode(Seq(TLSlavePortParameters.v1(
-        managers = Seq(TLSlaveParameters.v1(
-        address = Seq(AddressSet(0x00000000L, 0xFFFFFFFL)),
-        regionType = RegionType.UNCACHED,
-        executable = false,
-        supportsGet         = TransferSizes(32/8, 32*4/8),
-        supportsPutFull     = TransferSizes(32/8, 32*4/8),
-        supportsPutPartial  = TransferSizes(32/8, 32*4/8)
-      )),
-      beatBytes = 32/8)))
+  // val tlMasterIONode = 
+  //     TLManagerNode(Seq(TLSlavePortParameters.v1(
+  //       managers = Seq(TLSlaveParameters.v1(
+  //       address = Seq(AddressSet(0x00000000L, 0xFFFFFFFL)),
+  //       regionType = RegionType.UNCACHED,
+  //       executable = false,
+  //       supportsGet         = TransferSizes(32/8, 32*4/8),
+  //       supportsPutFull     = TransferSizes(32/8, 32*4/8),
+  //       supportsPutPartial  = TransferSizes(32/8, 32*4/8)
+  //     )),
+  //     beatBytes = 32/8)))
 
 
 
@@ -66,10 +66,10 @@ class Mac(implicit p: Parameters) extends LazyModule with HasMacParameters{
     ))
   )))
 
-  tlMasterIONode := tlClientNode
-  val tlmST = InModuleBody {
-    tlMasterIONode.makeIOs()
-  }
+  // tlMasterIONode := tlClientNode
+  // val tlmST = InModuleBody {
+  //   tlMasterIONode.makeIOs()
+  // }
 
   lazy val module = new MacImp(this)
 

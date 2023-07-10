@@ -844,12 +844,12 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(impli
   //Latching Rx buffer pointer from buffer descriptor;
   when(RxEn & RxEn_q & RxPointerRead){
     RxPointerMSB := ram_do(31,2)    
-  } .elsewhen(MasterWbRX & io.tlMst.get.D.fire ){
+  } .elsewhen(MasterWbRX & io.tlMst.get.A.fire ){
     RxPointerMSB := RxPointerMSB + 1.U // Word access (always word access. m_wb_sel_o are used for selecting bytes)
   }
 
   //Latching last addresses from buffer descriptor (used as byte-half-word indicator);
-  when(MasterWbRX & io.tlMst.get.D.fire ){// After first write all RxByteSel are active
+  when(MasterWbRX & io.tlMst.get.A.fire ){// After first write all RxByteSel are active
     RxPointerLSB_rst := 0.U
   } .elsewhen(RxEn & RxEn_q & RxPointerRead){
     RxPointerLSB_rst := ram_do(1,0)    
@@ -925,7 +925,7 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(impli
 
 
   // Generation of the end-of-frame signal
-  when(ShiftEndedSync3 & MasterWbRX & io.tlMst.get.D.fire & RxBufferAlmostEmpty & ~ShiftEnded){
+  when(ShiftEndedSync3 & MasterWbRX & io.tlMst.get.A.fire & RxBufferAlmostEmpty & ~ShiftEnded){
     ShiftEnded := true.B
   } .elsewhen(RxStatusWrite){
     ShiftEnded := false.B
@@ -1082,7 +1082,7 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(impli
     mstABits :=
       edgeOut.Put(
         fromSource = 0.U,
-        toAddress = RxPointerMSB,
+        toAddress = RxPointerMSB << 2,
         lgSize = log2Ceil(32/8).U,
         data = rx_fifo.io.data_out,
         mask = RxByteSel,
@@ -1093,7 +1093,7 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(impli
     mstABits :=
       edgeOut.Get(
         fromSource = 0.U,
-        toAddress = TxPointerMSB,
+        toAddress = TxPointerMSB << 2,
         lgSize = log2Ceil(32/8).U,
       )._2
   }
@@ -1125,12 +1125,16 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(impli
   when(io.tlMst.get.D.fire & io.tlMst.get.D.bits.opcode === 0.U) { assert( MasterWbRX ) }
 
 
-
-    io.tlMst.get.A.valid := mstAValid
+    val tlMstAValid_dbg = RegInit(true.B)
+    io.tlMst.get.A.valid := mstAValid & tlMstAValid_dbg
     io.tlMst.get.A.bits  := mstABits
 
 
-    io.tlMst.get.D.ready := true.B
+    val tlMstDReady = RegInit(true.B)
+
+    dontTouch(tlMstDReady)
+    dontTouch(tlMstAValid_dbg)
+    io.tlMst.get.D.ready := tlMstDReady
 
 
 
