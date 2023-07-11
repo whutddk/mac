@@ -27,7 +27,7 @@ class MacTest(implicit p: Parameters) extends LazyModule with HasMacParameters{
 
 	tlRAM := mac.tlClientNode
 
-  if( !isTileLink ){} else {
+
 
 		val tlClientIONode = 
 			TLClientNode(Seq(TLMasterPortParameters.v1(
@@ -42,7 +42,6 @@ class MacTest(implicit p: Parameters) extends LazyModule with HasMacParameters{
     val tlSlv = InModuleBody {
       tlClientIONode.makeIOs()
     }
-  }
 
 	lazy val module = new LazyModuleImp(this) {
 		val io = IO(new MacIO with MDIO)

@@ -40,7 +40,7 @@ class Mac(implicit p: Parameters) extends LazyModule with HasMacParameters{
 
 
 
-class MacIO(implicit p: Parameters) extends MacBundle with MDIO{
+class MacIO extends Bundle with MDIO{
 
   // Tx
   val mtx_clk_pad_i = Input(Bool())

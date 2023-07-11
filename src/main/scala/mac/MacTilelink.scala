@@ -14,7 +14,7 @@ import org.chipsalliance.cde.config._
 
 
 
-abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut)(implicit p: Parameters) extends MacModule{
+abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Module{
 
   class MacTileLinkSlaveIO extends Bundle{
     val A = Flipped(Decoupled(new TLBundleA(edgeIn.bundle)))
@@ -26,7 +26,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut)(implicit p:
     val D = Flipped(Decoupled(new TLBundleD(edgeOut.bundle)))
   }
 
-  class MacTileLinkIO(implicit p: Parameters) extends MacBundle{
+  class MacTileLinkIO extends Bundle{
 
     val tlSlv = new MacTileLinkSlaveIO
     val tlMst = new MacTileLinkMasterIO
@@ -1465,7 +1465,7 @@ trait MacTileLinkRXClk{ this: MacTileLinkBase =>
   }
 }
 
-class MacTileLink(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut)(implicit p: Parameters) extends MacTileLinkBase(edgeIn, edgeOut) with MacTileLinkTXClk with MacTileLinkRXClk
+class MacTileLink(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends MacTileLinkBase(edgeIn, edgeOut) with MacTileLinkTXClk with MacTileLinkRXClk
 
 
 
