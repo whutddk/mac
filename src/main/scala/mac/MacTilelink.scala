@@ -14,11 +14,11 @@ import org.chipsalliance.cde.config._
 
 
 
-abstract class MacTileLinkBase(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(implicit p: Parameters) extends MacModule{
+abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut)(implicit p: Parameters) extends MacModule{
 
   class MacTileLinkSlaveIO extends Bundle{
-    val A = Flipped(Decoupled(new TLBundleA(edge.get.bundle)))
-    val D = Decoupled(new TLBundleD(edge.get.bundle))
+    val A = Flipped(Decoupled(new TLBundleA(edgeIn.bundle)))
+    val D = Decoupled(new TLBundleD(edgeIn.bundle))
   }
 
   class MacTileLinkMasterIO extends Bundle{
@@ -27,11 +27,9 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(impli
   }
 
   class MacTileLinkIO(implicit p: Parameters) extends MacBundle{
-    val wbSlv = if( !isTileLink ) { Some(new MacWishboneSlaveIO) } else {None}
-    val tlSlv = if(  isTileLink ) { Some(new MacTileLinkSlaveIO) } else {None}
 
-
-    val tlMst = Some(new MacTileLinkMasterIO)
+    val tlSlv = new MacTileLinkSlaveIO
+    val tlMst = new MacTileLinkMasterIO
 
     // Rx Status signals
     val InvalidSymbol   = Input(Bool())             // Invalid symbol was received during reception in 100 Mbps mode
@@ -100,7 +98,7 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(impli
   val io = IO(new MacTileLinkIO)
     
 
-  val (_, _, isLastD, transDCnt) = edgeOut.count(io.tlMst.get.D)
+  val (_, _, isLastD, transDCnt) = edgeOut.count(io.tlMst.D)
 
 
   val BDCs = Wire(UInt(4.W))
@@ -355,15 +353,10 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(impli
     RxEn := false.B
     TxEn := false.B
 
-    // ram_addr := io.wbSlv.get.WB_ADR_I(9,2)
-    // ram_di   := io.wbSlv.get.WB_DAT_I
-    // BDWrite  := BDCs & Fill(4,io.wbSlv.get.WB_WE_I)
-    // BDRead   := BDCs.orR & ~io.wbSlv.get.WB_WE_I
-
-    ram_addr := (if( !isTileLink ) {io.wbSlv.get.WB_ADR_I(9,2)}          else {io.tlSlv.get.A.bits.address(9,2)}) // [11:2 ] -> [9:2];
-    ram_di   := (if( !isTileLink ) {io.wbSlv.get.WB_DAT_I}               else { io.tlSlv.get.A.bits.data })
-    BDWrite  := (if( !isTileLink ) {BDCs & Fill(4,io.wbSlv.get.WB_WE_I)} else {BDCs & Fill(4,(io.tlSlv.get.A.bits.opcode === 0.U) || (io.tlSlv.get.A.bits.opcode === 1.U))} )
-    BDRead   := (if( !isTileLink ) {BDCs.orR & ~io.wbSlv.get.WB_WE_I}    else {BDCs.orR & (io.tlSlv.get.A.bits.opcode === 4.U)})
+    ram_addr := io.tlSlv.A.bits.address(9,2) // [11:2 ] -> [9:2];
+    ram_di   :=  io.tlSlv.A.bits.data
+    BDWrite  := BDCs & Fill(4,(io.tlSlv.A.bits.opcode === 0.U) || (io.tlSlv.A.bits.opcode === 1.U))
+    BDRead   := BDCs.orR & (io.tlSlv.A.bits.opcode === 4.U)
   } .elsewhen( RAMAccessEnable === BitPat("b010?1") ){
     WbEn := false.B
     RxEn := false.B
@@ -374,30 +367,20 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(impli
     WbEn := true.B  // TxEn access stage (we always go to wb access stage)
     RxEn := false.B
     TxEn := false.B
-    // ram_addr := io.wbSlv.get.WB_ADR_I(9,2)
-    // ram_di   := io.wbSlv.get.WB_DAT_I
-    // BDWrite  := BDCs & Fill(4,io.wbSlv.get.WB_WE_I)
-    // BDRead   := BDCs.orR & ~io.wbSlv.get.WB_WE_I
-
-    ram_addr := (if( !isTileLink ) {io.wbSlv.get.WB_ADR_I(9,2)}          else {io.tlSlv.get.A.bits.address(9,2)}) //[11:2 ] ->[9:2]
-    ram_di   := (if( !isTileLink ) {io.wbSlv.get.WB_DAT_I}               else {io.tlSlv.get.A.bits.data })
-    BDWrite  := (if( !isTileLink ) {BDCs & Fill(4,io.wbSlv.get.WB_WE_I)} else {BDCs & Fill(4,(io.tlSlv.get.A.bits.opcode === 0.U) || (io.tlSlv.get.A.bits.opcode === 1.U))} )
-    BDRead   := (if( !isTileLink ) {BDCs.orR & ~io.wbSlv.get.WB_WE_I}    else {BDCs.orR & (io.tlSlv.get.A.bits.opcode === 4.U)})
+    ram_addr := io.tlSlv.A.bits.address(9,2) //[11:2 ] ->[9:2]
+    ram_di   := io.tlSlv.A.bits.data
+    BDWrite  := BDCs & Fill(4,(io.tlSlv.A.bits.opcode === 0.U) || (io.tlSlv.A.bits.opcode === 1.U)) 
+    BDRead   := BDCs.orR & (io.tlSlv.A.bits.opcode === 4.U)
   } .elsewhen( RAMAccessEnable === BitPat("b10000") ){
     WbEn := false.B // WbEn access stage and there is no need for other stages. WbEn needs to be switched off for a bit
   } .elsewhen( RAMAccessEnable === BitPat("b00000") ){
     WbEn := true.B  // Idle state. We go to WbEn access stage.
     RxEn := false.B
     TxEn := false.B
-    // ram_addr := io.wbSlv.get.WB_ADR_I(9,2)
-    // ram_di   := io.wbSlv.get.WB_DAT_I
-    // BDWrite  := BDCs & Fill(4,io.wbSlv.get.WB_WE_I)
-    // BDRead   := BDCs.orR & ~io.wbSlv.get.WB_WE_I
-
-    ram_addr := (if( !isTileLink ) {io.wbSlv.get.WB_ADR_I(9,2)}          else {io.tlSlv.get.A.bits.address(9,2)}) // [11:2 ] -> [9:2]
-    ram_di   := (if( !isTileLink ) {io.wbSlv.get.WB_DAT_I}               else { io.tlSlv.get.A.bits.data })
-    BDWrite  := (if( !isTileLink ) {BDCs & Fill(4,io.wbSlv.get.WB_WE_I)} else {BDCs & Fill(4,(io.tlSlv.get.A.bits.opcode === 0.U) || (io.tlSlv.get.A.bits.opcode === 1.U))} )
-    BDRead   := (if( !isTileLink ) {BDCs.orR & ~io.wbSlv.get.WB_WE_I}    else {BDCs.orR & (io.tlSlv.get.A.bits.opcode === 4.U)})
+    ram_addr := io.tlSlv.A.bits.address(9,2) // [11:2 ] -> [9:2]
+    ram_di   :=  io.tlSlv.A.bits.data
+    BDWrite  := BDCs & Fill(4,(io.tlSlv.A.bits.opcode === 0.U) || (io.tlSlv.A.bits.opcode === 1.U))
+    BDRead   := BDCs.orR & (io.tlSlv.A.bits.opcode === 4.U)
   }
 
 
@@ -470,7 +453,7 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(impli
   when(TxEn & TxEn_q & TxBDRead){
     TxLength := txBuffDesc.len   
   } 
-  .elsewhen( MasterWbTX & io.tlMst.get.D.fire ){ //tx tileRead
+  .elsewhen( MasterWbTX & io.tlMst.D.fire ){ //tx tileRead
     when( TxLength < 4.U ){
       TxLength := 0.U
     } .elsewhen(TxPointerLSB_rst === 0.U){
@@ -497,7 +480,7 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(impli
   when(TxEn & TxEn_q & TxPointerRead){
     TxPointerMSB := ram_do(31,2)  // Latching Tx buffer pointer from buffer descriptor. Only 30 MSB bits are latched because TxPointerMSB is only used for word-aligned accesses.
     TxPointerLSB := ram_do(1,0)   // Latching 2 MSB bits of the buffer descriptor. Since word accesses are performed, valid data does not necesserly start at byte 0 (could be byte 0, 1, 2 or 3). This signals are used for proper selection of the star byte (TxData and TxByteCnt) are set by this two bits.
-  } .elsewhen( io.tlMst.get.D.fire & io.tlMst.get.D.bits.opcode === 1.U ){
+  } .elsewhen( io.tlMst.D.fire & io.tlMst.D.bits.opcode === 1.U ){
     TxPointerMSB := TxPointerMSB + 1.U // TxPointer is word-aligned
   }
     
@@ -505,7 +488,7 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(impli
   // Latching 2 MSB bits of the buffer descriptor.  After the read access, TxLength needs to be decremented for the number of the valid bytes (1 to 4 bytes are valid in the first word). After the first read all bytes are valid so this two bits are reset to zero. 
   when(TxEn & TxEn_q & TxPointerRead){
     TxPointerLSB_rst := ram_do(1,0)    
-  } .elsewhen( MasterWbTX & io.tlMst.get.D.fire ){ // After first access pointer is word alligned
+  } .elsewhen( MasterWbTX & io.tlMst.D.fire ){ // After first access pointer is word alligned
     TxPointerLSB_rst := 0.U
   }
 
@@ -594,8 +577,8 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(impli
   TxFifoClear := (TxAbortPacket | TxRetryPacket)
 
   val tx_fifo = Module( new MacFifo(dw = 32, dp = 16) )
-    tx_fifo.io.data_in := io.tlMst.get.D.bits.data
-    tx_fifo.io.write   := io.tlMst.get.D.fire & io.tlMst.get.D.bits.opcode === 1.U
+    tx_fifo.io.data_in := io.tlMst.D.bits.data
+    tx_fifo.io.write   := io.tlMst.D.fire & io.tlMst.D.bits.opcode === 1.U
 
 
   tx_fifo.io.read    := ReadTxDataFromFifo_wb & ~TxBufferEmpty
@@ -702,7 +685,7 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(impli
   val TxAbortPacketBlocked = RegInit(false.B)
 
   when(
-    TxAbort_wb(1) & (~TxAbortPacketBlocked) &   MasterWbTX  & io.tlMst.get.D.fire & isLastD  |
+    TxAbort_wb(1) & (~TxAbortPacketBlocked) &   MasterWbTX  & io.tlMst.D.fire & isLastD  |
     TxAbort_wb(1) & (~TxAbortPacketBlocked) & (~MasterWbTX) ){
     TxAbortPacket := true.B
   } .otherwise{
@@ -713,7 +696,7 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(impli
   when(TxEn & TxEn_q & TxAbortPacket_NotCleared){
     TxAbortPacket_NotCleared := false.B
   } .elsewhen(
-    TxAbort_wb(1) & (~TxAbortPacketBlocked) &   MasterWbTX  & io.tlMst.get.D.fire & isLastD |
+    TxAbort_wb(1) & (~TxAbortPacketBlocked) &   MasterWbTX  & io.tlMst.D.fire & isLastD |
     TxAbort_wb(1) & (~TxAbortPacketBlocked) & (~MasterWbTX) ){
     TxAbortPacket_NotCleared := true.B
   }
@@ -729,7 +712,7 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(impli
   val TxRetryPacketBlocked = RegInit(false.B)
 
   when(
-    TxRetry_wb(1) & ~TxRetryPacketBlocked &  MasterWbTX & io.tlMst.get.D.fire & isLastD |
+    TxRetry_wb(1) & ~TxRetryPacketBlocked &  MasterWbTX & io.tlMst.D.fire & isLastD |
     TxRetry_wb(1) & ~TxRetryPacketBlocked & ~MasterWbTX ){
     TxRetryPacket := true.B
   } .otherwise{
@@ -743,7 +726,7 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(impli
   when(StartTxBDRead){
     TxRetryPacket_NotCleared := false.B
   } .elsewhen(
-    TxRetry_wb(1) & ~TxRetryPacketBlocked &  MasterWbTX & io.tlMst.get.D.fire & isLastD |
+    TxRetry_wb(1) & ~TxRetryPacketBlocked &  MasterWbTX & io.tlMst.D.fire & isLastD |
     TxRetry_wb(1) & ~TxRetryPacketBlocked & ~MasterWbTX ){
     TxRetryPacket_NotCleared := true.B
   }
@@ -760,7 +743,7 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(impli
   val TxDonePacketBlocked = RegInit(false.B)
 
   when(
-    TxDone_wb(1) & ~TxDonePacketBlocked &  MasterWbTX & io.tlMst.get.D.fire & isLastD |
+    TxDone_wb(1) & ~TxDonePacketBlocked &  MasterWbTX & io.tlMst.D.fire & isLastD |
     TxDone_wb(1) & ~TxDonePacketBlocked & ~MasterWbTX  ){
     TxDonePacket := true.B
   }.otherwise{
@@ -770,7 +753,7 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(impli
   when(TxEn & TxEn_q & TxDonePacket_NotCleared){
     TxDonePacket_NotCleared := false.B
   } .elsewhen(
-    TxDone_wb(1) & ~TxDonePacketBlocked &  MasterWbTX & io.tlMst.get.D.fire & isLastD |
+    TxDone_wb(1) & ~TxDonePacketBlocked &  MasterWbTX & io.tlMst.D.fire & isLastD |
     TxDone_wb(1) & ~TxDonePacketBlocked & ~MasterWbTX ){
     TxDonePacket_NotCleared := true.B
   }
@@ -844,12 +827,12 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(impli
   //Latching Rx buffer pointer from buffer descriptor;
   when(RxEn & RxEn_q & RxPointerRead){
     RxPointerMSB := ram_do(31,2)    
-  } .elsewhen(MasterWbRX & io.tlMst.get.A.fire ){
+  } .elsewhen(MasterWbRX & io.tlMst.A.fire ){
     RxPointerMSB := RxPointerMSB + 1.U // Word access (always word access. m_wb_sel_o are used for selecting bytes)
   }
 
   //Latching last addresses from buffer descriptor (used as byte-half-word indicator);
-  when(MasterWbRX & io.tlMst.get.A.fire ){// After first write all RxByteSel are active
+  when(MasterWbRX & io.tlMst.A.fire ){// After first write all RxByteSel are active
     RxPointerLSB_rst := 0.U
   } .elsewhen(RxEn & RxEn_q & RxPointerRead){
     RxPointerLSB_rst := ram_do(1,0)    
@@ -897,7 +880,7 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(impli
   val RxDataLatched2_rxclk = Wire(UInt(32.W))
   rx_fifo.io.data_in := RxDataLatched2_rxclk
   rx_fifo.io.write   := WriteRxDataToFifo_wb & ~RxBufferFull
-  rx_fifo.io.read    := MasterWbRX & io.tlMst.get.A.fire
+  rx_fifo.io.read    := MasterWbRX & io.tlMst.A.fire
   rx_fifo.io.clear   := RxFifoReset
 
 
@@ -925,7 +908,7 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(impli
 
 
   // Generation of the end-of-frame signal
-  when(ShiftEndedSync3 & MasterWbRX & io.tlMst.get.A.fire & RxBufferAlmostEmpty & ~ShiftEnded){
+  when(ShiftEndedSync3 & MasterWbRX & io.tlMst.A.fire & RxBufferAlmostEmpty & ~ShiftEnded){
     ShiftEnded := true.B
   } .elsewhen(RxStatusWrite){
     ShiftEnded := false.B
@@ -1010,46 +993,37 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(impli
   val CsMiss = Wire(Bool())
 
 
-  if( !isTileLink ){
-    io.RegCs := Fill(4, io.wbSlv.get.WB_STB_I & io.wbSlv.get.WB_CYC_I & io.wbSlv.get.WB_SEL_I.orR & ~io.wbSlv.get.WB_ADR_I.extract(11) & ~io.wbSlv.get.WB_ADR_I.extract(10)) & io.wbSlv.get.WB_SEL_I // 0x0   - 0x3FF
-    BDCs     := Fill(4, io.wbSlv.get.WB_STB_I & io.wbSlv.get.WB_CYC_I & io.wbSlv.get.WB_SEL_I.orR & ~io.wbSlv.get.WB_ADR_I.extract(11) &  io.wbSlv.get.WB_ADR_I.extract(10)) & io.wbSlv.get.WB_SEL_I // 0x400 - 0x7FF
-    CsMiss :=           io.wbSlv.get.WB_STB_I & io.wbSlv.get.WB_CYC_I & io.wbSlv.get.WB_SEL_I.orR &  io.wbSlv.get.WB_ADR_I.extract(11)    // 0x800 - 0xfFF     // When access to the address between 0x800 and 0xfff occurs, acknowledge is set but data is not valid.
 
-    io.wbSlv.get.WB_DAT_O := RegNext(Mux( ((io.RegCs.orR) & ~io.wbSlv.get.WB_WE_I), io.RegDataOut, BD_WB_DAT_O ), 0.U(32.W))
-    io.wbSlv.get.WB_ACK_O := RegNext((io.RegCs.orR | BDAck) & ~io.wbSlv.get.WB_ACK_O, false.B)
-    io.wbSlv.get.WB_ERR_O := RegNext(io.wbSlv.get.WB_STB_I & io.wbSlv.get.WB_CYC_I & (~(io.wbSlv.get.WB_SEL_I.orR) | CsMiss) & ~io.wbSlv.get.WB_ERR_O, false.B)
-
-  } else {
-    io.RegCs := Fill(4, io.tlSlv.get.A.valid & io.tlSlv.get.A.bits.mask.orR & ~io.tlSlv.get.A.bits.address(11) & ~io.tlSlv.get.A.bits.address(10)) & io.tlSlv.get.A.bits.mask // 0x0   - 0x3FF
-       BDCs  := Fill(4, io.tlSlv.get.A.valid & io.tlSlv.get.A.bits.mask.orR & ~io.tlSlv.get.A.bits.address(11) &  io.tlSlv.get.A.bits.address(10)) & io.tlSlv.get.A.bits.mask // 0x400 - 0x7FF
-      CsMiss :=         io.tlSlv.get.A.valid & io.tlSlv.get.A.bits.mask.orR &  io.tlSlv.get.A.bits.address(11)    // 0x800 - 0xfFF     // When access to the address between 0x800 and 0xfff occurs, acknowledge is set but data is not valid.
+    io.RegCs := Fill(4, io.tlSlv.A.valid & io.tlSlv.A.bits.mask.orR & ~io.tlSlv.A.bits.address(11) & ~io.tlSlv.A.bits.address(10)) & io.tlSlv.A.bits.mask // 0x0   - 0x3FF
+       BDCs  := Fill(4, io.tlSlv.A.valid & io.tlSlv.A.bits.mask.orR & ~io.tlSlv.A.bits.address(11) &  io.tlSlv.A.bits.address(10)) & io.tlSlv.A.bits.mask // 0x400 - 0x7FF
+      CsMiss :=         io.tlSlv.A.valid & io.tlSlv.A.bits.mask.orR &  io.tlSlv.A.bits.address(11)    // 0x800 - 0xfFF     // When access to the address between 0x800 and 0xfff occurs, acknowledge is set but data is not valid.
     
-    val slvAInfo = RegEnable( io.tlSlv.get.A.bits, io.tlSlv.get.A.fire )
-    val slvDValid = RegInit(false.B); io.tlSlv.get.D.valid := slvDValid
+    val slvAInfo = RegEnable( io.tlSlv.A.bits, io.tlSlv.A.fire )
+    val slvDValid = RegInit(false.B); io.tlSlv.D.valid := slvDValid
     val slvDDat = Reg(UInt(32.W))
 
 
 
-    when( io.tlSlv.get.D.fire ){
+    when( io.tlSlv.D.fire ){
       slvDValid := false.B
-    } .elsewhen(io.tlSlv.get.A.fire){
+    } .elsewhen(io.tlSlv.A.fire){
       slvDValid := true.B
-      slvDDat := Mux( ((io.RegCs.orR) & io.tlSlv.get.A.bits.opcode === 4.U), io.RegDataOut, BD_WB_DAT_O )
+      slvDDat := Mux( ((io.RegCs.orR) & io.tlSlv.A.bits.opcode === 4.U), io.RegDataOut, BD_WB_DAT_O )
     }
 
     when(slvAInfo.opcode === 4.U) {
-      io.tlSlv.get.D.bits := edge.get.AccessAck(slvAInfo, slvDDat)
+      io.tlSlv.D.bits := edgeIn.AccessAck(slvAInfo, slvDDat)
     } .otherwise {
-      io.tlSlv.get.D.bits := edge.get.AccessAck(slvAInfo)
+      io.tlSlv.D.bits := edgeIn.AccessAck(slvAInfo)
     }
 
-    io.tlSlv.get.A.ready := RegNext(io.RegCs.orR & ~io.tlSlv.get.A.fire, false.B) | BDAck
-    assert( ~(io.tlSlv.get.A.ready & ~io.tlSlv.get.A.valid) )
+    io.tlSlv.A.ready := RegNext(io.RegCs.orR & ~io.tlSlv.A.fire, false.B) | BDAck
+    assert( ~(io.tlSlv.A.ready & ~io.tlSlv.A.valid) )
 
-    when( io.tlSlv.get.A.fire & (~(io.tlSlv.get.A.bits.mask.orR) | CsMiss) ){
+    when( io.tlSlv.A.fire & (~(io.tlSlv.A.bits.mask.orR) | CsMiss) ){
       assert( false.B, "Assert Failed, tileLink access an undefine region!" )
     }
-  }
+
 
 
 
@@ -1074,7 +1048,7 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(impli
 
 
 
-  when( io.tlMst.get.A.fire ){
+  when( io.tlMst.A.fire ){
     mstAValid := false.B
   } 
   .elsewhen( MasterWbRX & ~isTlMstBusy ) {
@@ -1098,9 +1072,9 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(impli
       )._2
   }
 
-  when( io.tlMst.get.A.fire ){
+  when( io.tlMst.A.fire ){
     isTlMstBusy := true.B
-  } .elsewhen( io.tlMst.get.D.fire ){
+  } .elsewhen( io.tlMst.D.fire ){
     isTlMstBusy := false.B
   }
 
@@ -1111,30 +1085,30 @@ abstract class MacTileLinkBase(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(impli
       MasterWbTX := true.B
     }
   } .elsewhen( ~MasterWbTX & MasterWbRX){ //1.4A + 1D fifo to memory
-    when( io.tlMst.get.D.fire & isLastD & ~WriteRxDataToMemory ){
+    when( io.tlMst.D.fire & isLastD & ~WriteRxDataToMemory ){
       MasterWbRX := false.B
     }
   } .elsewhen( MasterWbTX & ~MasterWbRX){ //1 A + 1.4D memory to fifo
-    when( io.tlMst.get.D.fire & isLastD & ~ReadTxDataFromMemory_2 ){
+    when( io.tlMst.D.fire & isLastD & ~ReadTxDataFromMemory_2 ){
       MasterWbTX := false.B
     }
   }
 
 
-  when(io.tlMst.get.D.fire & io.tlMst.get.D.bits.opcode === 1.U) { assert( MasterWbTX ) }
-  when(io.tlMst.get.D.fire & io.tlMst.get.D.bits.opcode === 0.U) { assert( MasterWbRX ) }
+  when(io.tlMst.D.fire & io.tlMst.D.bits.opcode === 1.U) { assert( MasterWbTX ) }
+  when(io.tlMst.D.fire & io.tlMst.D.bits.opcode === 0.U) { assert( MasterWbRX ) }
 
 
     val tlMstAValid_dbg = RegInit(true.B)
-    io.tlMst.get.A.valid := mstAValid & tlMstAValid_dbg
-    io.tlMst.get.A.bits  := mstABits
+    io.tlMst.A.valid := mstAValid & tlMstAValid_dbg
+    io.tlMst.A.bits  := mstABits
 
 
     val tlMstDReady = RegInit(true.B)
 
     dontTouch(tlMstDReady)
     dontTouch(tlMstAValid_dbg)
-    io.tlMst.get.D.ready := tlMstDReady
+    io.tlMst.D.ready := tlMstDReady
 
 
 
@@ -1491,7 +1465,7 @@ trait MacTileLinkRXClk{ this: MacTileLinkBase =>
   }
 }
 
-class MacTileLink(edge: Option[TLEdgeIn], edgeOut: TLEdgeOut)(implicit p: Parameters) extends MacTileLinkBase(edge, edgeOut) with MacTileLinkTXClk with MacTileLinkRXClk
+class MacTileLink(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut)(implicit p: Parameters) extends MacTileLinkBase(edgeIn, edgeOut) with MacTileLinkTXClk with MacTileLinkRXClk
 
 
 

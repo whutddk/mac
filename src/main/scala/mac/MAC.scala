@@ -10,20 +10,7 @@ import freechips.rocketchip.tilelink._
 class Mac(implicit p: Parameters) extends LazyModule with HasMacParameters{
 
 
-
-  // val tlClientIONode = 
-  //   if(!isTileLink){ None } else {
-  //     Some(TLClientNode(Seq(TLMasterPortParameters.v1(
-  //       Seq(TLMasterParameters.v1(
-  //         name = "tlSlvIO",
-  //         sourceId = IdRange(0, 1),
-  //       ))
-  //     ))))
-  //   }
-
-  val tlMasterNode = 
-    if(!isTileLink){ None } else {
-      Some(    
+  val tlMasterNode =   
         TLManagerNode(Seq(TLSlavePortParameters.v1(
           managers = Seq(TLSlaveParameters.v1(
           address = Seq(AddressSet(0x00000000L, 0x0FFFL)),
@@ -34,29 +21,6 @@ class Mac(implicit p: Parameters) extends LazyModule with HasMacParameters{
           supportsPutPartial  = TransferSizes(32/8, 32/8)
         )),
         beatBytes = 32/8)))
-      )
-    }
-
-  // if( !isTileLink ){} else {
-  //   tlMasterNode.get := tlClientIONode.get
-    // val tlSlv = InModuleBody {
-    //   tlClientIONode.get.makeIOs()
-    // }
-  // }
-
-
-  // val tlMasterIONode = 
-  //     TLManagerNode(Seq(TLSlavePortParameters.v1(
-  //       managers = Seq(TLSlaveParameters.v1(
-  //       address = Seq(AddressSet(0x00000000L, 0xFFFFFFFL)),
-  //       regionType = RegionType.UNCACHED,
-  //       executable = false,
-  //       supportsGet         = TransferSizes(32/8, 32*4/8),
-  //       supportsPutFull     = TransferSizes(32/8, 32*4/8),
-  //       supportsPutPartial  = TransferSizes(32/8, 32*4/8)
-  //     )),
-  //     beatBytes = 32/8)))
-
 
 
   val tlClientNode = TLClientNode(Seq(TLMasterPortParameters.v1(
@@ -66,10 +30,7 @@ class Mac(implicit p: Parameters) extends LazyModule with HasMacParameters{
     ))
   )))
 
-  // tlMasterIONode := tlClientNode
-  // val tlmST = InModuleBody {
-  //   tlMasterIONode.makeIOs()
-  // }
+
 
   lazy val module = new MacImp(this)
 
@@ -79,11 +40,7 @@ class Mac(implicit p: Parameters) extends LazyModule with HasMacParameters{
 
 
 
-class MacIO(implicit p: Parameters) extends MacBundle{
-  // def isTileLink = false
-
-  val wbSlv = if( !isTileLink ) { Some(new MacWishboneSlaveIO)  } else {None}
-  val wbMst = if( false ) { Some(new MacWishboneMasterIO) } else {None}
+class MacIO(implicit p: Parameters) extends MacBundle with MDIO{
 
   // Tx
   val mtx_clk_pad_i = Input(Bool())
@@ -106,9 +63,9 @@ class MacIO(implicit p: Parameters) extends MacBundle{
 
 class MacImp(outer: Mac)(implicit p: Parameters) extends LazyModuleImp(outer) with HasMacParameters{
 
-  val io = IO(new MacIO with MDIO)
+  val io = IO(new MacIO)
 
-  val ( slv_bus, slv_edge ) = (if(!isTileLink) {(None, None)} else {(Some(outer.tlMasterNode.get.in.head._1), Some(outer.tlMasterNode.get.in.head._2))} )
+  val ( slv_bus, slv_edge ) = outer.tlMasterNode.in.head
   val ( mst_bus, mst_edge ) = outer.tlClientNode.out.head
   
 
@@ -354,15 +311,11 @@ dontTouch(RegCs                      )
 
 val ethReg = Module(new MacReg)
 
-if( !isTileLink ){
-  ethReg.io.DataIn              := io.wbSlv.get.WB_DAT_I
-  ethReg.io.Address             := io.wbSlv.get.WB_ADR_I(9,2)
-  ethReg.io.Rw                  := io.wbSlv.get.WB_WE_I  
-} else{
-  ethReg.io.DataIn              := slv_bus.get.a.bits.data
-  ethReg.io.Address             := slv_bus.get.a.bits.address(9,2)
-  ethReg.io.Rw                  := slv_bus.get.a.bits.opcode === 0.U | slv_bus.get.a.bits.opcode === 1.U
-}
+
+  ethReg.io.DataIn              := slv_bus.a.bits.data
+  ethReg.io.Address             := slv_bus.a.bits.address(9,2)
+  ethReg.io.Rw                  := slv_bus.a.bits.opcode === 0.U | slv_bus.a.bits.opcode === 1.U
+
 
 
 ethReg.io.Cs                  := RegCs
@@ -726,48 +679,24 @@ val rxethmac = Module(new MacRx)
 
 
   val wishbone = Module(new MacTileLink(slv_edge, mst_edge))
-  if( !isTileLink ){
-    wishbone.io.wbSlv.get.WB_DAT_I := io.wbSlv.get.WB_DAT_I
-    io.wbSlv.get.WB_DAT_O := wishbone.io.wbSlv.get.WB_DAT_O
-    wishbone.io.wbSlv.get.WB_ADR_I := io.wbSlv.get.WB_ADR_I
-    wishbone.io.wbSlv.get.WB_WE_I  := io.wbSlv.get.WB_WE_I
-    wishbone.io.wbSlv.get.WB_SEL_I := io.wbSlv.get.WB_SEL_I
-    wishbone.io.wbSlv.get.WB_CYC_I := io.wbSlv.get.WB_CYC_I
-    wishbone.io.wbSlv.get.WB_STB_I := io.wbSlv.get.WB_STB_I
-    io.wbSlv.get.WB_ACK_O := wishbone.io.wbSlv.get.WB_ACK_O
-    io.wbSlv.get.WB_ERR_O := wishbone.io.wbSlv.get.WB_ERR_O
-  } else {
 
-    wishbone.io.tlSlv.get.A.valid := slv_bus.get.a.valid 
-    wishbone.io.tlSlv.get.A.bits  := slv_bus.get.a.bits 
-    slv_bus.get.a.ready := wishbone.io.tlSlv.get.A.ready
+    wishbone.io.tlSlv.A.valid := slv_bus.a.valid 
+    wishbone.io.tlSlv.A.bits  := slv_bus.a.bits 
+    slv_bus.a.ready := wishbone.io.tlSlv.A.ready
 
-    slv_bus.get.d.valid := wishbone.io.tlSlv.get.D.valid
-    slv_bus.get.d.bits  := wishbone.io.tlSlv.get.D.bits
-    wishbone.io.tlSlv.get.D.ready := slv_bus.get.d.ready
+    slv_bus.d.valid := wishbone.io.tlSlv.D.valid
+    slv_bus.d.bits  := wishbone.io.tlSlv.D.bits
+    wishbone.io.tlSlv.D.ready := slv_bus.d.ready
 
-  }
 
-  if( false ){
-    // io.wbMst.get.m_wb_adr_o := wishbone.io.wbMst.get.m_wb_adr_o
-    // io.wbMst.get.m_wb_sel_o := wishbone.io.wbMst.get.m_wb_sel_o
-    // io.wbMst.get.m_wb_we_o  := wishbone.io.wbMst.get.m_wb_we_o
-    // io.wbMst.get.m_wb_dat_o := wishbone.io.wbMst.get.m_wb_dat_o
-    // io.wbMst.get.m_wb_cyc_o := wishbone.io.wbMst.get.m_wb_cyc_o
-    // io.wbMst.get.m_wb_stb_o := wishbone.io.wbMst.get.m_wb_stb_o
-    // wishbone.io.wbMst.get.m_wb_dat_i := io.wbMst.get.m_wb_dat_i
-    // wishbone.io.wbMst.get.m_wb_ack_i := io.wbMst.get.m_wb_ack_i
-    // wishbone.io.wbMst.get.m_wb_err_i := io.wbMst.get.m_wb_err_i
-    // io.wbMst.get.m_wb_cti_o := wishbone.io.wbMst.get.m_wb_cti_o
-    // io.wbMst.get.m_wb_bte_o := wishbone.io.wbMst.get.m_wb_bte_o    
-  } else {
-    wishbone.io.tlMst.get.D.bits  := mst_bus.d.bits
-    wishbone.io.tlMst.get.D.valid := mst_bus.d.valid
-    mst_bus.d.ready := wishbone.io.tlMst.get.D.ready
-    mst_bus.a.valid := wishbone.io.tlMst.get.A.valid
-    mst_bus.a.bits  := wishbone.io.tlMst.get.A.bits
-    wishbone.io.tlMst.get.A.ready := mst_bus.a.ready
-  }
+
+    wishbone.io.tlMst.D.bits  := mst_bus.d.bits
+    wishbone.io.tlMst.D.valid := mst_bus.d.valid
+    mst_bus.d.ready := wishbone.io.tlMst.D.ready
+    mst_bus.a.valid := wishbone.io.tlMst.A.valid
+    mst_bus.a.bits  := wishbone.io.tlMst.A.bits
+    wishbone.io.tlMst.A.ready := mst_bus.a.ready
+
 
 
 

@@ -37,7 +37,7 @@ class MacTest(implicit p: Parameters) extends LazyModule with HasMacParameters{
 				))
 			)))
 
-		mac.tlMasterNode.get := tlClientIONode
+		mac.tlMasterNode := tlClientIONode
 
     val tlSlv = InModuleBody {
       tlClientIONode.makeIOs()
