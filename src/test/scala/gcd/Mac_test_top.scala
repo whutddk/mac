@@ -6,13 +6,13 @@ import chisel3.util._
 import org.chipsalliance.cde.config._
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.tilelink._
+import freechips.rocketchip.interrupts._
 
 
 
+class MacTest(implicit p: Parameters) extends Mac{
 
-class MacTest(implicit p: Parameters) extends LazyModule with HasMacParameters{
 
-	val mac = LazyModule( new Mac )
 
 
 	val tlRAM = TLRAM(
@@ -25,27 +25,32 @@ class MacTest(implicit p: Parameters) extends LazyModule with HasMacParameters{
     devName = None,
   )
 
-	tlRAM := mac.tlClientNode
+	tlRAM := tlClientNode
 
 
 
-		val tlClientIONode = 
-			TLClientNode(Seq(TLMasterPortParameters.v1(
-				Seq(TLMasterParameters.v1(
-					name = "tlSlvIO",
-					sourceId = IdRange(0, 1),
-				))
-			)))
+	val tlClientIONode = 
+		TLClientNode(Seq(TLMasterPortParameters.v1(
+			Seq(TLMasterParameters.v1(
+				name = "tlSlvIO",
+				sourceId = IdRange(0, 1),
+			))
+		)))
 
-		mac.tlMasterNode := tlClientIONode
+	tlMasterNode := tlClientIONode
+
+
+	val intSinkNode = IntSinkNode(IntSinkPortSimple())
+	intSinkNode := int_node
 
     val tlSlv = InModuleBody {
       tlClientIONode.makeIOs()
     }
 
-	lazy val module = new LazyModuleImp(this) {
-		val io = IO(new MacIO with MDIO)
-
-		io <> mac.module.io
+	val int = InModuleBody {
+	  intSinkNode.makeIOs()
 	}
+
+
+
 }

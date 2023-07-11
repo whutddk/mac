@@ -6,6 +6,7 @@ import chisel3.util._
 import org.chipsalliance.cde.config._
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.tilelink._
+import freechips.rocketchip.interrupts._
 
 class Mac(implicit p: Parameters) extends LazyModule with HasMacParameters{
 
@@ -32,7 +33,14 @@ class Mac(implicit p: Parameters) extends LazyModule with HasMacParameters{
 
 
 
+  // DTS
+  val dtsdevice = new SimpleDevice("mac",Seq("mac_0"))
+
+  val int_node = IntSourceNode(IntSourcePortSimple(num = 1, resources = dtsdevice.int))
+
+
   lazy val module = new MacImp(this)
+
 
 
 
@@ -58,7 +66,7 @@ class MacIO extends Bundle with MDIO{
   val mcoll_pad_i = Input(Bool())
   val mcrs_pad_i  = Input(Bool())
 
-  val int_o = Output(Bool())
+  // val int_o = Output(Bool())
 }
 
 class MacImp(outer: Mac)(implicit p: Parameters) extends LazyModuleImp(outer) with HasMacParameters{
@@ -68,6 +76,7 @@ class MacImp(outer: Mac)(implicit p: Parameters) extends LazyModuleImp(outer) wi
   val ( slv_bus, slv_edge ) = outer.tlMasterNode.in.head
   val ( mst_bus, mst_edge ) = outer.tlClientNode.out.head
   
+  val (int, _) = outer.int_node.out(0)
 
 
 
@@ -377,7 +386,8 @@ r_FIAD      := ethReg.io.r_FIAD
 r_CtrlData  := ethReg.io.r_CtrlData
 r_MAC       := ethReg.io.r_MAC
 r_TxBDNum   := ethReg.io.r_TxBDNum
-io.int_o    := ethReg.io.int_o
+// io.int_o    := ethReg.io.int_o
+  int(0)   := ethReg.io.int_o
 r_TxPauseTV := ethReg.io.r_TxPauseTV
 r_TxPauseRq := ethReg.io.r_TxPauseRq
 
@@ -813,3 +823,8 @@ val rxethmac = Module(new MacRx)
 
 
 }
+
+
+
+
+
