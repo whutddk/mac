@@ -30,11 +30,8 @@ class MacAXI(implicit p: Parameters) extends Mac{
   ))
 
     memAXI4SlaveNode := 
-    AXI4UserYanker() := 
-    AXI4IdIndexer(1) :=
     AXI4Deinterleaver(32/8) :=
     TLToAXI4() := 
-    TLWidthWidget(32 / 8) :=
     tlClientNode
 
 
@@ -62,7 +59,7 @@ class MacAXI(implicit p: Parameters) extends Mac{
   val xbar = TLXbar()
 
 
-	tlMasterNode := xbar := TLFIFOFixer() := TLWidthWidget(32/8) := AXI4ToTL() := AXI4UserYanker(Some(1)) := AXI4Fragmenter() := AXI4Buffer() := AXI4IdIndexer(1) := axiConfigPort
+	tlMasterNode := xbar := AXI4ToTL() := AXI4UserYanker(Some(1)) := AXI4Fragmenter() := axiConfigPort
   tlError.node := xbar
 
 	val intSinkNode = IntSinkNode(IntSinkPortSimple())
