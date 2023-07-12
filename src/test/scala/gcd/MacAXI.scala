@@ -1,0 +1,85 @@
+package MAC
+
+import chisel3._
+import chisel3.util._
+
+import org.chipsalliance.cde.config._
+import freechips.rocketchip.diplomacy._
+import freechips.rocketchip.tilelink._
+import freechips.rocketchip.interrupts._
+import freechips.rocketchip.amba.axi4._
+import freechips.rocketchip.devices.tilelink._
+
+class MacAXI(implicit p: Parameters) extends Mac{
+
+
+
+  val memAXI4SlaveNode = AXI4SlaveNode(Seq(
+    AXI4SlavePortParameters(
+      slaves = Seq(
+        AXI4SlaveParameters(
+          address = Seq(AddressSet(0x00000000L, 0x7fffffffL)),
+          regionType = RegionType.UNCACHED,
+          executable = true,
+          supportsRead  = TransferSizes(32/8, 32/8),
+          supportsWrite = TransferSizes(32/8, 32/8)
+        )
+      ),
+      beatBytes = 32 / 8
+    )
+  ))
+
+    memAXI4SlaveNode := 
+    AXI4UserYanker() := 
+    AXI4IdIndexer(1) :=
+    AXI4Deinterleaver(32/8) :=
+    TLToAXI4() := 
+    TLWidthWidget(32 / 8) :=
+    tlClientNode
+
+
+
+
+    val axiConfigPort = 
+      AXI4MasterNode(
+        Seq(AXI4MasterPortParameters(
+          Seq(AXI4MasterParameters(
+            name = "Mac Config",
+            id = IdRange(0, 1),
+            maxFlight = Some(1),
+          ))
+        ))
+      )
+
+    val tlError = LazyModule(new TLError(
+    params = DevNullParams(
+      address = Seq(AddressSet(0x0, 0x2fffffffL)),
+      maxAtomic = 0,
+      maxTransfer = 32/8),
+    beatBytes = 32 / 8
+  ))
+
+  val xbar = TLXbar()
+
+
+	tlMasterNode := xbar := TLFIFOFixer() := TLWidthWidget(32/8) := AXI4ToTL() := AXI4UserYanker(Some(1)) := AXI4Fragmenter() := AXI4Buffer() := AXI4IdIndexer(1) := axiConfigPort
+  tlError.node := xbar
+
+	val intSinkNode = IntSinkNode(IntSinkPortSimple())
+	intSinkNode := int_node
+
+  val axiCfg = InModuleBody {
+    axiConfigPort.makeIOs()
+  }
+
+  val axiMem = InModuleBody {
+    memAXI4SlaveNode.makeIOs()
+  }
+
+	val int = InModuleBody {
+	  intSinkNode.makeIOs()
+	}
+
+
+
+}

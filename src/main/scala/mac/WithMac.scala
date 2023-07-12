@@ -12,7 +12,7 @@ trait WithManyMacMix { this: BaseSubsystem =>
     val mac = LazyModule(new Mac)
 
     fbus.coupleFrom("mac_mst") { _ := TLBuffer() := mac.tlClientNode }
-    pbus.coupleTo("mac_cfg") { mac.tlMasterNode := TLFragmenter(4, pbus.blockBytes) := TLWidthWidget(pbus.beatBytes) := _ }
+    pbus.coupleTo("mac_cfg")   { mac.tlMasterNode := _ } //TLFragmenter(4, pbus.blockBytes) := TLWidthWidget(pbus.beatBytes) := 
 
     ibus.fromSync := mac.int_node
 

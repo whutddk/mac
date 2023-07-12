@@ -14,7 +14,7 @@ class Mac(implicit p: Parameters) extends LazyModule with HasMacParameters{
   val tlMasterNode =   
         TLManagerNode(Seq(TLSlavePortParameters.v1(
           managers = Seq(TLSlaveParameters.v1(
-          address = Seq(AddressSet(0x00000000L, 0x0FFFL)),
+          address = Seq(AddressSet(0x30000000L, 0x0FFFL)),
           regionType = RegionType.UNCACHED,
           executable = false,
           supportsGet         = TransferSizes(32/8, 32/8),
