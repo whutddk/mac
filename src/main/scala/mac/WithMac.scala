@@ -1,19 +1,36 @@
 package MAC
 
 import chisel3._
-import org.chipsalliance.cde.config.Field
+
 import freechips.rocketchip.subsystem.BaseSubsystem
-import freechips.rocketchip.diplomacy.{LazyModule,BufferParams}
-import freechips.rocketchip.tilelink.{TLBuffer, TLIdentityNode, TLWidthWidget, TLFragmenter}
+import freechips.rocketchip.diplomacy._
+import freechips.rocketchip.tilelink._
+import org.chipsalliance.cde.config._
 
 
 trait WithManyMacMix { this: BaseSubsystem =>
 
-    val mac = LazyModule(new Mac)
+    val mac0 = LazyModule(new Mac)
 
-    fbus.coupleFrom("mac_mst") { _ := TLBuffer() := mac.tlClientNode }
-    pbus.coupleTo("mac_cfg")   { mac.tlMasterNode := _ } //TLFragmenter(4, pbus.blockBytes) := TLWidthWidget(pbus.beatBytes) := 
+    fbus.coupleFrom("mac_mst") { _ := TLBuffer() := mac0.tlClientNode }
+    pbus.coupleTo("mac_cfg")   { mac0.tlMasterNode := TLFragmenter(pbus) := _ }
 
-    ibus.fromSync := mac.int_node
+    ibus.fromSync := mac0.int_node
 
 }
+
+
+trait WithManyMacMixModuleImp extends LazyModuleImp {
+  val outer: WithManyMacMix
+
+  val macIO = IO(new MacIO)
+
+  macIO <> outer.mac0.module.io
+
+}
+
+class MacConfig() extends Config((site, here, up) => {
+  case MacParamsKey => MacSetting()
+})
+
+

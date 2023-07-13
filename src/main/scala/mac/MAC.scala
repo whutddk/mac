@@ -15,11 +15,12 @@ class Mac(implicit p: Parameters) extends LazyModule with HasMacParameters{
         TLManagerNode(Seq(TLSlavePortParameters.v1(
           managers = Seq(TLSlaveParameters.v1(
           address = Seq(AddressSet(0x30000000L, 0x0FFFL)),
-          regionType = RegionType.UNCACHED,
+          regionType = RegionType.VOLATILE,
           executable = false,
-          supportsGet         = TransferSizes(32/8, 32/8),
-          supportsPutFull     = TransferSizes(32/8, 32/8),
-          supportsPutPartial  = TransferSizes(32/8, 32/8)
+          fifoId = Some(2),
+          supportsGet         = TransferSizes(8/8, 32/8),
+          supportsPutFull     = TransferSizes(8/8, 32/8),
+          supportsPutPartial  = TransferSizes(8/8, 32/8)
         )),
         beatBytes = 32/8)))
 
