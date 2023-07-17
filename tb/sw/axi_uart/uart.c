@@ -28,13 +28,10 @@ int32_t uart_init()
 
 int32_t uart_sendByte( uint8_t data )
 {
-
+	uint64_t sent = (uint64_t)data << 32;
+	#if(0)
 	//wait unitl tx fifo not full
 	while( ((*uart_status) & 0x08) != 0);
-
-	uint64_t sent = (uint64_t)data << 32;
-
-	#if(0)
 	(*(volatile uint64_t*)(UART_BASE)) = sent;
 	#else
 	(*(volatile uint64_t*)(0x60000000)) = sent;
