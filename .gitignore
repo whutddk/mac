@@ -345,3 +345,4 @@ hs_err_pid*
 generated/
 project/.bloop/riscv-mac-swich-build.json
 src/main/scala/mac/MacTilelink.scala
+doc/
