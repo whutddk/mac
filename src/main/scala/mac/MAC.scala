@@ -11,13 +11,10 @@ import freechips.rocketchip.interrupts._
 class Mac(implicit p: Parameters) extends LazyModule with HasMacParameters{
 
 
-
-
-
   val tlMasterNode =   
         TLManagerNode(Seq(TLSlavePortParameters.v1(
           managers = Seq(TLSlaveParameters.v1(
-          address = Seq(AddressSet(0x30000400L, 0x03FFL)),
+          address = Seq(AddressSet(0x30000000L, 0x0FFFL)),
           regionType = RegionType.VOLATILE,
           executable = false,
           fifoId = Some(2),
@@ -41,15 +38,6 @@ class Mac(implicit p: Parameters) extends LazyModule with HasMacParameters{
   val dtsdevice = new SimpleDevice("mac",Seq("mac_0"))
 
   val int_node = IntSourceNode(IntSourcePortSimple(num = 1, resources = dtsdevice.int))
-
-  val configNode = TLRegisterNode(
-    address = Seq(AddressSet(0x30000000L, 0x0000ffffL)),
-    device = dtsdevice,
-    concurrency = 1,
-    beatBytes = 32/8,
-    executable = true
-  )
-
 
 
   lazy val module = new MacImp(this)
@@ -191,8 +179,10 @@ val miim = Module(new MIIM)
 
 
 
+val RegDataOut                 = Wire(UInt(32.W))
 val r_RecSmall                 = Wire(Bool())
 val r_LoopBck                  = Wire(Bool())
+val r_TxEn                     = Wire(Bool())
 val r_RxEn                     = Wire(Bool())
 val MRxDV_Lb                   = Wire(Bool())
 val MRxErr_Lb                  = Wire(Bool())
@@ -209,6 +199,7 @@ val r_MAC                      = Wire(UInt(48.W))
 val LoadRxStatus               = Wire(Bool())
 val r_HASH0                    = Wire(UInt(32.W))
 val r_HASH1                    = Wire(UInt(32.W))
+val r_TxBDNum                  = Wire(UInt(8.W))
 val r_IPGT                     = Wire(UInt(7.W))
 val r_IPGR1                    = Wire(UInt(7.W))
 val r_IPGR2                    = Wire(UInt(7.W))
@@ -220,6 +211,11 @@ val r_NoBckof                  = Wire(Bool())
 val r_ExDfrEn                  = Wire(Bool())
 val r_TxFlow                   = Wire(Bool())
 val r_IFG                      = Wire(Bool())
+val TxB_IRQ                    = Wire(Bool())
+val TxE_IRQ                    = Wire(Bool())
+val RxB_IRQ                    = Wire(Bool())
+val RxE_IRQ                    = Wire(Bool())
+val Busy_IRQ                   = Wire(Bool())
 val r_Pad                      = Wire(Bool())
 val r_CrcEn                    = Wire(Bool())
 val r_FullD                    = Wire(Bool())
@@ -249,10 +245,12 @@ val LateCollLatched            = Wire(Bool())
 val DeferLatched               = Wire(Bool())
 val RstDeferLatched            = Wire(Bool())
 val CarrierSenseLost           = Wire(Bool())
+val RegCs                      = Wire(UInt(4.W))
 
-
+dontTouch(RegDataOut                 )
 dontTouch(r_RecSmall                 )
 dontTouch(r_LoopBck                  )
+dontTouch(r_TxEn                     )
 dontTouch(r_RxEn                     )
 dontTouch(MRxDV_Lb                   )
 dontTouch(MRxErr_Lb                  )
@@ -269,6 +267,7 @@ dontTouch(r_MAC                      )
 dontTouch(LoadRxStatus               )
 dontTouch(r_HASH0                    )
 dontTouch(r_HASH1                    )
+dontTouch(r_TxBDNum                  )
 dontTouch(r_IPGT                     )
 dontTouch(r_IPGR1                    )
 dontTouch(r_IPGR2                    )
@@ -280,6 +279,11 @@ dontTouch(r_NoBckof                  )
 dontTouch(r_ExDfrEn                  )
 dontTouch(r_TxFlow                   )
 dontTouch(r_IFG                      )
+dontTouch(TxB_IRQ                    )
+dontTouch(TxE_IRQ                    )
+dontTouch(RxB_IRQ                    )
+dontTouch(RxE_IRQ                    )
+dontTouch(Busy_IRQ                   )
 dontTouch(r_Pad                      )
 dontTouch(r_CrcEn                    )
 dontTouch(r_FullD                    )
@@ -309,68 +313,84 @@ dontTouch(LateCollLatched            )
 dontTouch(DeferLatched               )
 dontTouch(RstDeferLatched            )
 dontTouch(CarrierSenseLost           )
+dontTouch(RegCs                      )
 
 
 
 
 
-// val ethReg = Module(new MacReg)
+val ethReg = Module(new MacReg)
+
+
+  ethReg.io.DataIn              := slv_bus.a.bits.data
+  ethReg.io.Address             := slv_bus.a.bits.address(9,2)
+  ethReg.io.Rw                  := slv_bus.a.bits.opcode === 0.U | slv_bus.a.bits.opcode === 1.U
 
 
 
+ethReg.io.Cs                  := RegCs
+ethReg.io.WCtrlDataStart      := WCtrlDataStart
+ethReg.io.RStatStart          := RStatStart
+ethReg.io.UpdateMIIRX_DATAReg := UpdateMIIRX_DATAReg
+ethReg.io.Prsd                := Prsd
+ethReg.io.NValid_stat         := NValid_stat
+ethReg.io.Busy_stat           := Busy_stat
+ethReg.io.LinkFail            := LinkFail
+ethReg.io.TxB_IRQ             := TxB_IRQ
+ethReg.io.TxE_IRQ             := TxE_IRQ
+ethReg.io.RxB_IRQ             := RxB_IRQ
+ethReg.io.RxE_IRQ             := RxE_IRQ
+ethReg.io.Busy_IRQ            := Busy_IRQ
+ethReg.io.RstTxPauseRq        := RstTxPauseRq
+ethReg.io.TxCtrlEndFrm        := TxCtrlEndFrm
+ethReg.io.StartTxDone         := StartTxDone
+ethReg.io.TxClk               := io.mtx_clk_pad_i
+ethReg.io.RxClk               := io.mrx_clk_pad_i
+ethReg.io.SetPauseTimer       := SetPauseTimer
+ethReg.io.dbg_dat             := 0.U
 
-
-wishbone.io.WCtrlDataStart      := WCtrlDataStart
-wishbone.io.RStatStart          := RStatStart
-wishbone.io.UpdateMIIRX_DATAReg := UpdateMIIRX_DATAReg
-wishbone.io.Prsd                := Prsd
-wishbone.io.NValid_stat         := NValid_stat
-wishbone.io.Busy_stat           := Busy_stat
-wishbone.io.LinkFail            := LinkFail
-wishbone.io.RstTxPauseRq        := RstTxPauseRq
-wishbone.io.TxCtrlEndFrm        := TxCtrlEndFrm
-wishbone.io.StartTxDone         := StartTxDone
-wishbone.io.TxClk               := io.mtx_clk_pad_i
-wishbone.io.RxClk               := io.mrx_clk_pad_i
-wishbone.io.SetPauseTimer       := SetPauseTimer
-
-
-r_RecSmall  := wishbone.io.r_RecSmall
-r_Pad       := wishbone.io.r_Pad
-r_HugEn     := wishbone.io.r_HugEn
-r_CrcEn     := wishbone.io.r_CrcEn
-r_DlyCrcEn  := wishbone.io.r_DlyCrcEn
-r_FullD     := wishbone.io.r_FullD
-r_ExDfrEn   := wishbone.io.r_ExDfrEn
-r_NoBckof   := wishbone.io.r_NoBckof
-r_LoopBck   := wishbone.io.r_LoopBck
-r_IFG       := wishbone.io.r_IFG
-r_Pro       := wishbone.io.r_Pro
-r_Bro       := wishbone.io.r_Bro
-r_NoPre     := wishbone.io.r_NoPre
-r_HASH0     := wishbone.io.r_HASH0
-r_HASH1     := wishbone.io.r_HASH1
-r_IPGT      := wishbone.io.r_IPGT
-r_IPGR1     := wishbone.io.r_IPGR1
-r_IPGR2     := wishbone.io.r_IPGR2
-r_MinFL     := wishbone.io.r_MinFL
-r_MaxFL     := wishbone.io.r_MaxFL
-r_MaxRet    := wishbone.io.r_MaxRet
-r_CollValid := wishbone.io.r_CollValid
-r_TxFlow    := wishbone.io.r_TxFlow
-r_MiiNoPre  := wishbone.io.r_MiiNoPre
-r_ClkDiv    := wishbone.io.r_ClkDiv
-r_WCtrlData := wishbone.io.r_WCtrlData
-r_RStat     := wishbone.io.r_RStat
-r_ScanStat  := wishbone.io.r_ScanStat
-r_RGAD      := wishbone.io.r_RGAD
-r_FIAD      := wishbone.io.r_FIAD
-r_CtrlData  := wishbone.io.r_CtrlData
-r_MAC       := wishbone.io.r_MAC
-// io.int_o    := wishbone.io.int_o
-  int(0)    := wishbone.io.int_o
-r_TxPauseTV := wishbone.io.r_TxPauseTV
-r_TxPauseRq := wishbone.io.r_TxPauseRq
+RegDataOut  := ethReg.io.DataOut
+r_RecSmall  := ethReg.io.r_RecSmall
+r_Pad       := ethReg.io.r_Pad
+r_HugEn     := ethReg.io.r_HugEn
+r_CrcEn     := ethReg.io.r_CrcEn
+r_DlyCrcEn  := ethReg.io.r_DlyCrcEn
+r_FullD     := ethReg.io.r_FullD
+r_ExDfrEn   := ethReg.io.r_ExDfrEn
+r_NoBckof   := ethReg.io.r_NoBckof
+r_LoopBck   := ethReg.io.r_LoopBck
+r_IFG       := ethReg.io.r_IFG
+r_Pro       := ethReg.io.r_Pro
+r_Bro       := ethReg.io.r_Bro
+r_NoPre     := ethReg.io.r_NoPre
+r_TxEn      := ethReg.io.r_TxEn
+r_RxEn      := ethReg.io.r_RxEn
+r_HASH0     := ethReg.io.r_HASH0
+r_HASH1     := ethReg.io.r_HASH1
+r_IPGT      := ethReg.io.r_IPGT
+r_IPGR1     := ethReg.io.r_IPGR1
+r_IPGR2     := ethReg.io.r_IPGR2
+r_MinFL     := ethReg.io.r_MinFL
+r_MaxFL     := ethReg.io.r_MaxFL
+r_MaxRet    := ethReg.io.r_MaxRet
+r_CollValid := ethReg.io.r_CollValid
+r_TxFlow    := ethReg.io.r_TxFlow
+r_RxFlow    := ethReg.io.r_RxFlow
+r_PassAll   := ethReg.io.r_PassAll
+r_MiiNoPre  := ethReg.io.r_MiiNoPre
+r_ClkDiv    := ethReg.io.r_ClkDiv
+r_WCtrlData := ethReg.io.r_WCtrlData
+r_RStat     := ethReg.io.r_RStat
+r_ScanStat  := ethReg.io.r_ScanStat
+r_RGAD      := ethReg.io.r_RGAD
+r_FIAD      := ethReg.io.r_FIAD
+r_CtrlData  := ethReg.io.r_CtrlData
+r_MAC       := ethReg.io.r_MAC
+r_TxBDNum   := ethReg.io.r_TxBDNum
+// io.int_o    := ethReg.io.int_o
+  int(0)   := ethReg.io.int_o
+r_TxPauseTV := ethReg.io.r_TxPauseTV
+r_TxPauseRq := ethReg.io.r_TxPauseRq
 
 
 
@@ -701,8 +721,8 @@ val rxethmac = Module(new MacRx)
   wishbone.io.LoadRxStatus         := LoadRxStatus
   wishbone.io.ReceivedPacketGood   := ReceivedPacketGood
   wishbone.io.AddressMiss          := AddressMiss
-  r_RxFlow := wishbone.io.r_RxFlow
-  r_PassAll := wishbone.io.r_PassAll
+  wishbone.io.r_RxFlow             := r_RxFlow
+  wishbone.io.r_PassAll            := r_PassAll
   wishbone.io.ReceivedPauseFrm     := ReceivedPauseFrm
 
   wishbone.io.RetryCntLatched  := RetryCntLatched
@@ -732,7 +752,17 @@ val rxethmac = Module(new MacRx)
   wishbone.io.RxAbort        := RxAbort_wb
   RxStatusWriteLatched_sync2 := wishbone.io.RxStatusWriteLatched_sync2
 
-  r_RxEn := wishbone.io.r_RxEn
+  wishbone.io.r_TxEn     := r_TxEn
+  wishbone.io.r_RxEn     := r_RxEn
+  wishbone.io.r_TxBDNum  := r_TxBDNum
+  wishbone.io.RegDataOut := RegDataOut
+  RegCs := wishbone.io.RegCs
+  TxB_IRQ  := wishbone.io.TxB_IRQ
+  TxE_IRQ  := wishbone.io.TxE_IRQ
+  RxB_IRQ  := wishbone.io.RxB_IRQ
+  RxE_IRQ  := wishbone.io.RxE_IRQ
+  Busy_IRQ := wishbone.io.Busy_IRQ
+
 
 
   val macstatus = Module(new MacStatus)
