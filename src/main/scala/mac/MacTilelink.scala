@@ -42,8 +42,6 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
     val LoadRxStatus         = Input(Bool())        // Rx status was loaded
     val ReceivedPacketGood   = Input(Bool())        // Received packet's length and CRC are good
     val AddressMiss          = Input(Bool())        // When a packet is received AddressMiss status is written to the Rx BD
-    val r_RxFlow             = Input(Bool())
-    val r_PassAll            = Input(Bool())
     val ReceivedPauseFrm     = Input(Bool())
 
     // Tx Status signals
@@ -76,20 +74,66 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
     val RxAbort    = Input(Bool())        // This signal is set when address doesn't match.
     val RxStatusWriteLatched_sync2 = Output(Bool())
 
-    //Register
-    val r_TxEn    = Input(Bool())          // Transmit enable
-    val r_RxEn    = Input(Bool())         // Receive enable
-    val r_TxBDNum = Input(UInt(8.W))      // Receive buffer descriptor number
-    val RegDataOut = Input(UInt(32.W))
-    val RegCs = Output(UInt(4.W))
+                //Register
+                val RegDataOut = Input(UInt(32.W))
 
-    // Interrupts
-    val TxB_IRQ  = Output(Bool())
-    val TxE_IRQ  = Output(Bool())
-    val RxB_IRQ  = Output(Bool())
-    val RxE_IRQ  = Output(Bool())
-    val Busy_IRQ = Output(Bool())
 
+
+
+  val WCtrlDataStart      = Input(Bool())
+  val RStatStart          = Input(Bool())
+  val UpdateMIIRX_DATAReg = Input(Bool())
+  val Prsd                = Input(UInt(16.W))
+  val NValid_stat         = Input(Bool())
+  val Busy_stat           = Input(Bool())
+  val LinkFail            = Input(Bool())
+  val RstTxPauseRq        = Input(Bool())
+  val TxCtrlEndFrm        = Input(Bool())
+  val StartTxDone         = Input(Bool())
+  val TxClk               = Input(Bool())
+  val RxClk               = Input(Bool())
+  val SetPauseTimer       = Input(Bool())
+
+  // val DataOut     = Output(UInt(32.W))
+  val r_RecSmall  = Output(Bool())
+  val r_Pad       = Output(Bool())
+  val r_HugEn     = Output(Bool())
+  val r_CrcEn     = Output(Bool())
+  val r_DlyCrcEn  = Output(Bool())
+  val r_FullD     = Output(Bool())
+  val r_ExDfrEn   = Output(Bool())
+  val r_NoBckof   = Output(Bool())
+  val r_LoopBck   = Output(Bool())
+  val r_IFG       = Output(Bool())
+  val r_Pro       = Output(Bool())
+  val r_Iam       = Output(Bool())
+  val r_Bro       = Output(Bool())
+  val r_NoPre     = Output(Bool())
+  val r_RxEn      = Output(Bool())
+  val r_HASH0     = Output(UInt(32.W))
+  val r_HASH1     = Output(UInt(32.W))
+  val r_IPGT      = Output(UInt(7.W))
+  val r_IPGR1     = Output(UInt(7.W))
+  val r_IPGR2     = Output(UInt(7.W))
+  val r_MinFL     = Output(UInt(16.W))
+  val r_MaxFL     = Output(UInt(16.W))
+  val r_MaxRet    = Output(UInt(4.W))
+  val r_CollValid = Output(UInt(6.W))
+  val r_TxFlow    = Output(Bool())
+  val r_RxFlow    = Output(Bool())
+  val r_PassAll   = Output(Bool())
+  val r_MiiNoPre  = Output(Bool())
+  val r_ClkDiv    = Output(UInt(8.W))
+  val r_WCtrlData = Output(Bool())
+  val r_RStat     = Output(Bool())
+  val r_ScanStat  = Output(Bool())
+  val r_RGAD      = Output(UInt(5.W))
+  val r_FIAD      = Output(UInt(5.W))
+  val r_CtrlData  = Output(UInt(16.W))
+  val r_MAC       = Output(UInt(48.W))
+  val int_o       = Output(Bool())
+  val r_TxPauseTV = Output(UInt(16.W))
+  val r_TxPauseRq = Output(Bool())
 
   }
 
@@ -103,10 +147,10 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
   val BDCs = Wire(UInt(4.W))
 
-  val TxB_IRQ = RegInit(false.B); io.TxB_IRQ := TxB_IRQ
-  val TxE_IRQ = RegInit(false.B); io.TxE_IRQ := TxE_IRQ
-  val RxB_IRQ = RegInit(false.B); io.RxB_IRQ := RxB_IRQ
-  val RxE_IRQ = RegInit(false.B); io.RxE_IRQ := RxE_IRQ
+  val TxB_IRQ = RegInit(false.B)
+  val TxE_IRQ = RegInit(false.B)
+  val RxB_IRQ = RegInit(false.B)
+  val RxE_IRQ = RegInit(false.B)
 
 
 
@@ -197,8 +241,8 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
   val RxEn_q = RegNext(RxEn, false.B)
   val TxEn   = RegInit(false.B)
   val TxEn_q = RegNext(TxEn, false.B)
-  val r_TxEn_q = RegNext(io.r_TxEn, false.B) 
-  val r_RxEn_q = RegNext(io.r_RxEn, false.B)
+  val r_TxEn_q = RegNext(r_TxEn, false.B) 
+  val r_RxEn_q = RegNext(r_RxEn, false.B)
 
   val ram_ce = true.B
   val ram_we = Wire(UInt(4.W))
@@ -323,7 +367,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
     (RxEn & RxEn_q & (RxBDRead | RxPointerRead))
 
 
-  when(~TxBDReady & io.r_TxEn & WbEn & ~WbEn_q){
+  when(~TxBDReady & r_TxEn & WbEn & ~WbEn_q){
     TxEn_needed := true.B
   } .elsewhen(TxPointerRead & TxEn & TxEn_q){
     TxEn_needed := false.B
@@ -644,11 +688,11 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
   // Temporary Tx and Rx buffer descriptor address//[7:1]
   val TempTxBDAddress = Mux( TxStatusWrite & ~WrapTxStatusBit, (TxBDAddress + 1.U), 0.U ) // Tx BD increment or wrap (last BD)
-  val TempRxBDAddress = Mux( WrapRxStatusBit,                    io.r_TxBDNum(6,0), (RxBDAddress + 1.U) ) // Using first Rx BD / Using next Rx BD
+  val TempRxBDAddress = Mux( WrapRxStatusBit,                    r_TxBDNum(6,0), (RxBDAddress + 1.U) ) // Using first Rx BD / Using next Rx BD
 
 
   // Latching Tx buffer descriptor address
-  when(io.r_TxEn & (~r_TxEn_q)){
+  when(r_TxEn & (~r_TxEn_q)){
     TxBDAddress := 0.U
   } .elsewhen(TxStatusWrite){
     TxBDAddress := TempTxBDAddress  
@@ -656,7 +700,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
   // Latching Rx buffer descriptor address
   when(io.r_RxEn & (~r_RxEn_q)){
-    RxBDAddress := io.r_TxBDNum(6,0)
+    RxBDAddress := r_TxBDNum(6,0)
   } .elsewhen(RxStatusWrite){
     RxBDAddress := TempRxBDAddress;    
   }
@@ -846,7 +890,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
   ))
 
 
-  when(~RxReady & io.r_RxEn & WbEn & ~WbEn_q){
+  when(~RxReady & r_RxEn & WbEn & ~WbEn_q){
     RxEn_needed := true.B
   } .elsewhen(RxPointerRead & RxEn & RxEn_q){
     RxEn_needed := false.B
@@ -964,14 +1008,14 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
   }
 
   // Rx Done Interrupt
-  when(RxStatusWrite & RxIRQEn & io.ReceivedPacketGood & (~io.ReceivedPauseFrm | io.ReceivedPauseFrm & io.r_PassAll & (~io.r_RxFlow))){
+  when(RxStatusWrite & RxIRQEn & io.ReceivedPacketGood & (~io.ReceivedPauseFrm | io.ReceivedPauseFrm & passAll & (~rxFlow))){
     RxB_IRQ := (~RxError)
   } .otherwise{
     RxB_IRQ := false.B
   }
 
   // Rx Error Interrupt
-  when(RxStatusWrite & RxIRQEn & (~io.ReceivedPauseFrm | io.ReceivedPauseFrm & io.r_PassAll & (~io.r_RxFlow))){
+  when(RxStatusWrite & RxIRQEn & (~io.ReceivedPauseFrm | io.ReceivedPauseFrm & passAll & (~rxFlow))){
     RxE_IRQ := RxError
   } .otherwise{
     RxE_IRQ := false.B
@@ -989,14 +1033,18 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-  // Connected to registers
-  val CsMiss = Wire(Bool())
 
 
 
-    io.RegCs := Fill(4, io.tlSlv.A.valid & io.tlSlv.A.bits.mask.orR & ~io.tlSlv.A.bits.address(11) & ~io.tlSlv.A.bits.address(10)) & io.tlSlv.A.bits.mask // 0x0   - 0x3FF
+
+  // // Connected to registers
+  // val CsMiss = Wire(Bool())
+
+
+
+  val RegCs = Fill(4, io.tlSlv.A.valid & io.tlSlv.A.bits.mask.orR & ~io.tlSlv.A.bits.address(11) & ~io.tlSlv.A.bits.address(10)) & io.tlSlv.A.bits.mask // 0x0   - 0x3FF
        BDCs  := Fill(4, io.tlSlv.A.valid & io.tlSlv.A.bits.mask.orR & ~io.tlSlv.A.bits.address(11) &  io.tlSlv.A.bits.address(10)) & io.tlSlv.A.bits.mask // 0x400 - 0x7FF
-      CsMiss :=         io.tlSlv.A.valid & io.tlSlv.A.bits.mask.orR &  io.tlSlv.A.bits.address(11)    // 0x800 - 0xfFF     // When access to the address between 0x800 and 0xfff occurs, acknowledge is set but data is not valid.
+      // CsMiss :=         io.tlSlv.A.valid & io.tlSlv.A.bits.mask.orR &  io.tlSlv.A.bits.address(11)    // 0x800 - 0xfFF     // When access to the address between 0x800 and 0xfff occurs, acknowledge is set but data is not valid.
     
     val slvAInfo = RegEnable( io.tlSlv.A.bits, io.tlSlv.A.fire )
     val slvDValid = RegInit(false.B); io.tlSlv.D.valid := slvDValid
@@ -1008,7 +1056,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
       slvDValid := false.B
     } .elsewhen(io.tlSlv.A.fire){
       slvDValid := true.B
-      slvDDat := Mux( ((io.RegCs.orR) & io.tlSlv.A.bits.opcode === 4.U), io.RegDataOut, BD_WB_DAT_O )
+      slvDDat := Mux( ((RegCs.orR) & io.tlSlv.A.bits.opcode === 4.U), io.RegDataOut, BD_WB_DAT_O )
     }
 
     when(slvAInfo.opcode === 4.U) {
@@ -1017,16 +1065,12 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
       io.tlSlv.D.bits := edgeIn.AccessAck(slvAInfo)
     }
 
-    io.tlSlv.A.ready := RegNext(io.RegCs.orR & ~io.tlSlv.A.fire, false.B) | BDAck
+    io.tlSlv.A.ready := RegNext(RegCs.orR & ~io.tlSlv.A.fire, false.B) | BDAck
     assert( ~(io.tlSlv.A.ready & ~io.tlSlv.A.valid) )
 
-    when( io.tlSlv.A.fire & (~(io.tlSlv.A.bits.mask.orR) | CsMiss) ){
-      assert( false.B, "Assert Failed, tileLink access an undefine region!" )
-    }
-
-
-
-
+    // when( io.tlSlv.A.fire & (~(io.tlSlv.A.bits.mask.orR) | CsMiss) ){
+    //   assert( false.B, "Assert Failed, tileLink access an undefine region!" )
+    // }
 
 
 
