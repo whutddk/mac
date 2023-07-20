@@ -37,11 +37,13 @@ class MacTest(implicit p: Parameters) extends Mac{
 			))
 		)))
 
-	tlMasterNode := tlClientIONode
+		val tlBar = TLXbar()
 
+	tlMasterNode := tlBar := tlClientIONode
+	ethReg.configNode  := tlBar
 
 	val intSinkNode = IntSinkNode(IntSinkPortSimple())
-	intSinkNode := int_node
+	intSinkNode := ethReg.int_node
 
     val tlSlv = InModuleBody {
       tlClientIONode.makeIOs()

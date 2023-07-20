@@ -3,11 +3,14 @@ package MAC
 import chisel3._
 import chisel3.util._
 
+import freechips.rocketchip.regmapper._
+import freechips.rocketchip.tilelink._
+import org.chipsalliance.cde.config._
+import freechips.rocketchip.diplomacy._
+import freechips.rocketchip.interrupts._
+
 class MacRegIO extends Bundle{
-  val DataIn              = Input(UInt(32.W))
-  val Address             = Input(UInt(8.W))
-  val Rw                  = Input(Bool())
-  val Cs                  = Input(UInt(4.W))
+
   val WCtrlDataStart      = Input(Bool())
   val RStatStart          = Input(Bool())
   val UpdateMIIRX_DATAReg = Input(Bool())
@@ -26,9 +29,7 @@ class MacRegIO extends Bundle{
   val TxClk               = Input(Bool())
   val RxClk               = Input(Bool())
   val SetPauseTimer       = Input(Bool())
-  val dbg_dat             = Input(UInt(32.W)) // debug data input
 
-  val DataOut     = Output(UInt(32.W))
   val r_RecSmall  = Output(Bool())
   val r_Pad       = Output(Bool())
   val r_HugEn     = Output(Bool())
@@ -67,372 +68,399 @@ class MacRegIO extends Bundle{
   val r_CtrlData  = Output(UInt(16.W))
   val r_MAC       = Output(UInt(48.W))
   val r_TxBDNum   = Output(UInt(8.W))
-  val int_o       = Output(Bool())
+  // val int_o       = Output(Bool())
   val r_TxPauseTV = Output(UInt(16.W))
   val r_TxPauseRq = Output(Bool())
 
 }
 
-class MacReg extends Module{
-  val io: MacRegIO = IO(new MacRegIO)
+class MacReg(implicit p: Parameters) extends LazyModule{
+
+  // DTS
+  val dtsdevice = new SimpleDevice("mac",Seq("mac_0"))
+  val int_node = IntSourceNode(IntSourcePortSimple(num = 1, resources = dtsdevice.int))
 
 
-
-  val Write = io.Cs & Fill(4, io.Rw)
-  val Read  = io.Cs.orR & ~io.Rw
-
-  val MODER_Sel      = ( io.Address === "h0".U )
-  val INT_SOURCE_Sel = ( io.Address === "h1".U )
-  val INT_MASK_Sel   = ( io.Address === "h2".U )
-  val IPGT_Sel       = ( io.Address === "h3".U )
-  val IPGR1_Sel      = ( io.Address === "h4".U )
-  val IPGR2_Sel      = ( io.Address === "h5".U )
-  val PACKETLEN_Sel  = ( io.Address === "h6".U )
-  val COLLCONF_Sel   = ( io.Address === "h7".U )
-  val CTRLMODER_Sel  = ( io.Address === "h9".U )
-  val MIIMODER_Sel   = ( io.Address === "hA".U )
-  val MIICOMMAND_Sel = ( io.Address === "hB".U )
-  val MIIADDRESS_Sel = ( io.Address === "hC".U )
-  val MIITX_DATA_Sel = ( io.Address === "hD".U )
-  val MAC_ADDR0_Sel  = ( io.Address === "h10".U )
-  val MAC_ADDR1_Sel  = ( io.Address === "h11".U )
-  val HASH0_Sel      = ( io.Address === "h12".U )
-  val HASH1_Sel      = ( io.Address === "h13".U )
-  val TXCTRL_Sel     = ( io.Address === "h14".U )
-  val RXCTRL_Sel     = ( io.Address === "h15".U )
-  val DBG_REG_Sel    = ( io.Address === "h16".U )
-  val TX_BD_NUM_Sel  = ( io.Address === "h8".U )
-
-
-  val MODER_Wr      = Write(2,0)       & Fill(3, MODER_Sel)
-  val INT_SOURCE_Wr = Write.extract(0) & INT_SOURCE_Sel
-  val INT_MASK_Wr   = Write.extract(0) & INT_MASK_Sel
-  val IPGT_Wr       = Write.extract(0) & IPGT_Sel
-  val IPGR1_Wr      = Write.extract(0) & IPGR1_Sel
-  val IPGR2_Wr      = Write.extract(0) & IPGR2_Sel
-  val PACKETLEN_Wr  = Write            & Fill(4, PACKETLEN_Sel)
-  val COLLCONF_Wr   = Cat( Write.extract(2) & COLLCONF_Sel, 0.U(1.W), Write.extract(0) & COLLCONF_Sel)
-  val CTRLMODER_Wr  = Write.extract(0) & CTRLMODER_Sel
-  val MIIMODER_Wr   = Write(1,0)       & Fill(2, MIIMODER_Sel)
-  val MIICOMMAND_Wr = Write.extract(0) & MIICOMMAND_Sel; 
-  val MIIADDRESS_Wr = Write(1,0)       & Fill(2, MIIADDRESS_Sel)
-  val MIITX_DATA_Wr = Write(1,0)       & Fill(2, MIITX_DATA_Sel)
-  val MIIRX_DATA_Wr = io.UpdateMIIRX_DATAReg
-  val MAC_ADDR0_Wr  = Write            & Fill(4, MAC_ADDR0_Sel)
-  val MAC_ADDR1_Wr  = Write(1,0)       & Fill(2, MAC_ADDR1_Sel)
-  val HASH0_Wr      = Write            & Fill(4, HASH0_Sel)
-  val HASH1_Wr      = Write            & Fill(4, HASH1_Sel)
-  val TXCTRL_Wr     = Write(2,0)       & Fill(3, TXCTRL_Sel)
-  val TX_BD_NUM_Wr  = Write.extract(0) & TX_BD_NUM_Sel & (io.DataIn <= "h80".U)
-
-
-  val INT_SOURCEOut = Wire(UInt(32.W))
-  val MIISTATUSOut = Cat( io.NValid_stat, io.Busy_stat, io.LinkFail )
-
-
-
-
-
-  val MODEROut = Cat(                                               // MODER Register
-    RegEnable( io.DataIn.extract(16), 0.U(1.W), MODER_Wr.extract(2) ),
-    RegEnable( io.DataIn(15,8),   "hA0".U(8.W), MODER_Wr.extract(1) ),
-    RegEnable( io.DataIn( 7,0),       0.U(8.W), MODER_Wr.extract(0) ),
+  val configNode = TLRegisterNode(
+    address = Seq(AddressSet(0x30000000L, 0x000003ffL)),
+    device = dtsdevice,
+    concurrency = 1,
+    beatBytes = 32/8,
+    executable = true
   )
+  lazy val module = new MacRegImp(this)
+}
+
+class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(outer){
+
+    val io: MacRegIO = IO(new MacRegIO)
+    val (int, _) = outer.int_node.out(0)
 
 
-  val INT_MASKOut = RegEnable(io.DataIn(6,0),     0.U(7.W), INT_MASK_Wr) // INT_MASK Register
-  val IPGTOut     = RegEnable(io.DataIn(6,0), "h12".U(7.W), IPGT_Wr )    // IPGT Register
-  val IPGR1Out    = RegEnable(io.DataIn(6,0), "h0C".U(7.W), IPGR1_Wr)    // IPGR1 Register
-  val IPGR2Out    = RegEnable(io.DataIn(6,0), "h12".U(7.W), IPGR2_Wr)
+    val RecSmall  = RegInit(false.B)
+    val Pad       = RegInit(true.B)
+    val HugEn     = RegInit(false.B)
+    val CrcEn     = RegInit(true.B)
+    val DlyCrcEn  = RegInit(false.B)
 
+    val FullD     = RegInit(false.B)
+    val ExDfrEn   = RegInit(false.B)
+    val NoBckof   = RegInit(false.B)
+    val LoopBck   = RegInit(false.B)
+    val IFG       = RegInit(false.B)
+    val Pro       = RegInit(false.B)
+    val Iam       = RegInit(false.B)
+    val Bro       = RegInit(false.B)
+    val NoPre     = RegInit(false.B)
+    val TxEn      = RegInit(false.B)
+    val RxEn      = RegInit(false.B)
 
-  val PACKETLENOut = Cat(                                           // PACKETLEN Register
-    RegEnable(io.DataIn(31,24),     0.U(8.W), PACKETLEN_Wr.extract(3)),
-    RegEnable(io.DataIn(23,16), "h40".U(8.W), PACKETLEN_Wr.extract(2)),
-    RegEnable(io.DataIn(15,8 ),     6.U(8.W), PACKETLEN_Wr.extract(1)),
-    RegEnable(io.DataIn( 7,0 ),     0.U(8.W), PACKETLEN_Wr.extract(0))
-  )
+    // Interrupt generation
+    val irq_txb  = RegInit(false.B)  
+    val irq_txe  = RegInit(false.B)
+    val irq_rxb  = RegInit(false.B)
+    val irq_rxe  = RegInit(false.B)
+    val irq_busy = RegInit(false.B)
+    val irq_txc  = RegInit(false.B)
+    val irq_rxc  = RegInit(false.B)
 
-  val COLLCONFOut = Cat(    // COLLCONF Register
-    RegEnable(io.DataIn(19,16), "hF".U(4.W), COLLCONF_Wr.extract(2)),
-    0.U(10.W),
-    RegEnable(io.DataIn(5,0),  "h3f".U(6.W), COLLCONF_Wr.extract(0))
-  )
-
-  val TX_BD_NUMOut = RegEnable(io.DataIn(7,0), "h40".U(8.W), TX_BD_NUM_Wr)        // TX_BD_NUM Register
-  val CTRLMODEROut = RegEnable(io.DataIn(2,0),     0.U(3.W), CTRLMODER_Wr.extract(0)) // CTRLMODER Register
-
-  val MIIMODEROut = Cat(                                                     // MIIMODER Register
-    RegEnable(io.DataIn.extract(8), 0.U(1.W), MIIMODER_Wr.extract(1)),
-    RegEnable(io.DataIn(7,0),   "h64".U(8.W), MIIMODER_Wr.extract(0))
-  )
-
-  val MIICOMMANDOut0 = RegEnable(io.DataIn.extract(0), 0.U(1.W), MIICOMMAND_Wr)
-  val MIICOMMANDOut1 = RegInit(false.B)
-  val MIICOMMANDOut2 = RegInit(false.B)
-
-  when(io.RStatStart){
-    MIICOMMANDOut1 := false.B
-  } .elsewhen(MIICOMMAND_Wr){
-    MIICOMMANDOut1 := io.DataIn.extract(1)
-  }
-
-  when(io.WCtrlDataStart){
-    MIICOMMANDOut2 := false.B
-  } .elsewhen(MIICOMMAND_Wr){
-    MIICOMMANDOut2 := io.DataIn.extract(2)
-  }
-  val MIICOMMANDOut = Cat(MIICOMMANDOut2, MIICOMMANDOut1, MIICOMMANDOut0) // MIICOMMAND Register
-
-
-  val MIIADDRESSOut = Cat(                                          // MIIADDRESSRegister
-    RegEnable(io.DataIn(12,8), 0.U(5.W), MIIADDRESS_Wr.extract(1)),
-    0.U(3.W),
-    RegEnable(io.DataIn( 4,0), 0.U(5.W), MIIADDRESS_Wr.extract(0))
-  )
-
-
-  val MIITX_DATAOut = Cat(                                          // MIITX_DATA Register
-    RegEnable(io.DataIn(15,8), 0.U(8.W), MIITX_DATA_Wr.extract(1)),
-    RegEnable(io.DataIn( 7,0), 0.U(8.W), MIITX_DATA_Wr.extract(0))
-  )
-
-  val MIIRX_DATAOut = RegEnable(io.Prsd, 0.U(16.W), MIIRX_DATA_Wr)        // MIIRX_DATA Register
-
-  val MAC_ADDR0Out = Cat(                                   // MAC_ADDR0 Register
-    RegEnable(io.DataIn(31,24), 0.U(8.W), MAC_ADDR0_Wr.extract(3)),
-    RegEnable(io.DataIn(23,16), 0.U(8.W), MAC_ADDR0_Wr.extract(2)),
-    RegEnable(io.DataIn(15, 8), 0.U(8.W), MAC_ADDR0_Wr.extract(1)),
-    RegEnable(io.DataIn(7 , 0), 0.U(8.W), MAC_ADDR0_Wr.extract(0))
-  )
-
-  val MAC_ADDR1Out = Cat(                                   // MAC_ADDR1 Register
-    RegEnable(io.DataIn(15,8), 0.U(8.W), MAC_ADDR1_Wr.extract(1)),
-    RegEnable(io.DataIn(7 ,0), 0.U(8.W), MAC_ADDR1_Wr.extract(0))
-  )
+    
 
 
 
-  val HASH0Out = Cat(                                       // RXHASH0 Register
-    RegEnable(io.DataIn(31,24), 0.U(8.W), HASH0_Wr.extract(3)),
-    RegEnable(io.DataIn(23,16), 0.U(8.W), HASH0_Wr.extract(2)),
-    RegEnable(io.DataIn(15, 8), 0.U(8.W), HASH0_Wr.extract(1)),
-    RegEnable(io.DataIn(7 , 0), 0.U(8.W), HASH0_Wr.extract(0))
-  )
+    val INT_MASK = RegInit(0.U(7.W))        // INT_MASK Register
+    val IPGT     = RegInit("h12".U(7.W))    // IPGT Register
+    val IPGR1    = RegInit("h0C".U(7.W))    // IPGR1 Register
+    val IPGR2    = RegInit("h12".U(7.W))
 
-  val HASH1Out = Cat(                                       // RXHASH1 Register
-    RegEnable(io.DataIn(31,24), 0.U(8.W), HASH1_Wr.extract(3)),
-    RegEnable(io.DataIn(23,16), 0.U(8.W), HASH1_Wr.extract(2)),
-    RegEnable(io.DataIn(15, 8), 0.U(8.W), HASH1_Wr.extract(1)),
-    RegEnable(io.DataIn(7 , 0), 0.U(8.W), HASH1_Wr.extract(0))
-  )
+    val maxFL = RegInit("h0600".U(16.W))
+    val minFL = RegInit("h0040".U(16.W))
 
+    val collValid = RegInit("h3f".U(6.W))
+    val maxRet = RegInit("hF".U(4.U))
 
-  val TXCTRLOut16 = RegInit(false.B)
-  when( io.RstTxPauseRq ){
-    TXCTRLOut16 := false.B
-  } .elsewhen( TXCTRL_Wr.extract(2) ){
-    TXCTRLOut16 := io.DataIn.extract(16)
-  }
+    val TX_BD_NUM = RegInit("h40".U(8.W))        // TX_BD_NUM Register
 
-  val TXCTRLOut = Cat(                                     // TXCTRL Register
-    TXCTRLOut16,
-    RegEnable(io.DataIn(15,8), 0.U(8.W), TXCTRL_Wr.extract(1)),
-    RegEnable(io.DataIn(7, 0), 0.U(8.W), TXCTRL_Wr.extract(0))
-  )
+    val txFlow  = RegInit(false.B)
+    val rxFlow  = RegInit(false.B)
+    val passAll = RegInit(false.B)
+
+    val clkDiv = RegInit("h64".U(8.W))
+    val miiNoPre = RegInit(false.B)
 
 
+    val scanStat = RegInit(false.B)
+    val readStat = RegInit(false.B)
+    val wCtrlData = RegInit(false.B)
 
-  // Reading data from registers
-  io.DataOut := 
-    Mux(
-      Read,
-      Mux1H(Seq(
-        (io.Address === 0.U  )  ->  MODEROut,
-        (io.Address === 1.U  )  ->  INT_SOURCEOut,
-        (io.Address === 2.U  )  ->  INT_MASKOut,
-        (io.Address === 3.U  )  ->  IPGTOut,
-        (io.Address === 4.U  )  ->  IPGR1Out,
-        (io.Address === 5.U  )  ->  IPGR2Out,
-        (io.Address === 6.U  )  ->  PACKETLENOut,
-        (io.Address === 7.U  )  ->  COLLCONFOut,
-        (io.Address === 9.U  )  ->  CTRLMODEROut,
-        (io.Address === 10.U )  ->  MIIMODEROut,
-        (io.Address === 11.U )  ->  MIICOMMANDOut,
-        (io.Address === 12.U )  ->  MIIADDRESSOut,
-        (io.Address === 13.U )  ->  MIITX_DATAOut,
-        (io.Address === 14.U )  ->  MIIRX_DATAOut,
-        (io.Address === 15.U )  ->  MIISTATUSOut,
-        (io.Address === 16.U )  ->  MAC_ADDR0Out,
-        (io.Address === 17.U )  ->  MAC_ADDR1Out,
-        (io.Address === 8.U  )  ->  TX_BD_NUMOut,
-        (io.Address === 18.U )  ->  HASH0Out,
-        (io.Address === 19.U )  ->  HASH1Out,
-        (io.Address === 20.U )  ->  TXCTRLOut,
-        (io.Address === 22.U )  ->  io.dbg_dat,
-      )),
-      0.U
+    when(io.RStatStart){ readStat := false.B }
+    when(io.WCtrlDataStart){ wCtrlData := false.B }
+
+    val FIAD = RegInit(0.U(5.W))
+    val RGAD = RegInit(0.U(5.W))
+
+    val MIITX_DATA = RegInit(0.U(16.W)) // MIITX_DATA Register
+
+    val MIIRX_DATA = RegEnable(io.Prsd, 0.U(16.W), io.UpdateMIIRX_DATAReg)        // MIIRX_DATA Register
+
+    val Mac_ADDR0 = RegInit(0.U(32.W))
+    val Mac_ADDR1 = RegInit(0.U(16.W))
+
+    val HASH0 = RegInit(0.U(32.W))
+    val HASH1 = RegInit(0.U(32.W))
+
+    val txPauseRq = RegInit(false.B)
+    val txPauseTV = RegInit(0.U(16.W))
+
+    when( io.RstTxPauseRq ){ txPauseRq := false.B }
+
+
+
+
+
+    outer.configNode.regmap(
+      ( 0 << 2 ) -> 
+        RegFieldGroup("MODER", Some("Mode Register"), Seq(
+          RegField(1, RxEn   , RegFieldDesc( "RxEn", "RxEn", reset = Some(0))) ,
+          RegField(1, TxEn   , RegFieldDesc( "TxEn", "TxEn", reset = Some(0) ) ),
+          RegField(1, NoPre  , RegFieldDesc( "NoPre", "NoPre", reset = Some(0) ) ),
+          RegField(1, Bro    , RegFieldDesc( "Bro", "Bro", reset = Some(0) ) ),
+          RegField(1, Iam    , RegFieldDesc( "Iam", "Iam", reset = Some(0) ) ),
+          RegField(1, Pro    , RegFieldDesc( "Pro", "Pro", reset = Some(0) ) ),
+          RegField(1, IFG    , RegFieldDesc( "IFG", "IFG", reset = Some(0) ) ),
+          RegField(1, LoopBck, RegFieldDesc( "LoopBck", "LoopBck", reset = Some(0) ) ),
+          RegField(1, NoBckof, RegFieldDesc( "NoBckof", "NoBckof", reset = Some(0) ) ),
+          RegField(1, ExDfrEn, RegFieldDesc( "ExDfrEn", "ExDfrEn", reset = Some(0) ) ),
+          RegField(1, FullD  , RegFieldDesc( "FullD", "FullD", reset = Some(0) ) ),
+          RegField.r(1, 0.U),
+          RegField(1, DlyCrcEn, RegFieldDesc( "DlyCrcEn", "DlyCrcEn", reset=Some(0)) ),
+          RegField(1, CrcEn   , RegFieldDesc( "CrcEn", "CrcEn",       reset=Some(1)) ),
+          RegField(1, HugEn   , RegFieldDesc( "HugEn", "HugEn",       reset=Some(0)) ),
+          RegField(1, Pad     , RegFieldDesc( "Pad", "Pad",           reset=Some(1)) ),
+          RegField(1, RecSmall, RegFieldDesc( "RecSmall", "RecSmall", reset=Some(0)) )
+        )),
+
+      ( 1 << 2 ) ->
+        RegFieldGroup("INT_SOURCE", Some("Interrupt Source Register"), Seq(
+          RegField(1, irq_txb,  RegWriteFn((valid, data) => { when ((valid & data) === 1.U) { irq_txb := 0.U }; true.B }),  RegFieldDesc("txb", "txb", reset=Some(0))), 
+          RegField(1, irq_txe,  RegWriteFn((valid, data) => { when ((valid & data) === 1.U) { irq_txe := 0.U }; true.B }),  RegFieldDesc("txe", "txe", reset=Some(0))),
+          RegField(1, irq_rxb,  RegWriteFn((valid, data) => { when ((valid & data) === 1.U) { irq_rxb := 0.U }; true.B }),  RegFieldDesc("rxb", "rxb", reset=Some(0))),
+          RegField(1, irq_rxe,  RegWriteFn((valid, data) => { when ((valid & data) === 1.U) { irq_rxe := 0.U }; true.B }),  RegFieldDesc("rxe", "rxe", reset=Some(0))),
+          RegField(1, irq_busy, RegWriteFn((valid, data) => { when ((valid & data) === 1.U) { irq_busy := 0.U }; true.B }), RegFieldDesc("busy", "busy", reset=Some(0))),
+          RegField(1, irq_txc,  RegWriteFn((valid, data) => { when ((valid & data) === 1.U) { irq_txc := 0.U }; true.B }),  RegFieldDesc("txc", "txc", reset=Some(0))),
+          RegField(1, irq_rxc,  RegWriteFn((valid, data) => { when ((valid & data) === 1.U) { irq_rxc := 0.U }; true.B }),  RegFieldDesc("rxc", "rxc", reset=Some(0))),
+        )),
+
+      ( 2 << 2 ) -> 
+        RegFieldGroup("INT_MASK", Some("Interrupt Mask Register"), Seq(
+          RegField(7, INT_MASK)
+        )),
+
+      ( 3 << 2 ) -> 
+        RegFieldGroup("IPGT", Some("Back to Back Inter Packet Gap Register"), Seq(
+          RegField(7, IPGT, RegFieldDesc("IPGT", "IPGT", reset=Some(0x12)))
+        )),
+
+      ( 4 << 2 ) ->
+        RegFieldGroup("IPGR1", Some("Non Back to Back Inter Packet Gap Register 1"), Seq(
+          RegField(7, IPGR1, RegFieldDesc("IPGR1", "IPGR1", reset=Some(0xc)))
+        )),
+
+      ( 5 << 2 ) ->
+        RegFieldGroup("IPGR2", Some("Non Back to Back Inter Packet Gap Register 2"), Seq(
+          RegField(7, IPGR2, RegFieldDesc("IPGR2", "IPGR2", reset=Some(0x12)))
+        )),
+
+      ( 6 << 2 ) ->
+        RegFieldGroup("PACKETLEN", Some("Packet Length Register"), Seq(
+          RegField(16, maxFL, RegFieldDesc("maxFL", "Maximum Frame Length", reset=Some(0x0600))),
+          RegField(16, minFL, RegFieldDesc("minFL", "Minimum Frame Length", reset=Some(0x0040))),
+        )),
+      ( 7 << 2 ) ->
+        RegFieldGroup("COLLCONF", Some("Collision and Retry Configuration Register"), Seq(
+          RegField(6, collValid, RegFieldDesc("collValid", "Collision Valid", reset=Some(0x3f))),
+          RegField.r(10,0.U),
+          RegField(4, maxRet, RegFieldDesc("maxRet", "Maximum Retry", reset=Some(0xf))),
+        )),
+
+      ( 8 << 2 ) ->
+        RegFieldGroup("TX_BD_NUM", Some("Transmit BD Number Register"), Seq(
+          RegField(8, TX_BD_NUM, RegFieldDesc("TX_BD_NUM", "TX_BD_NUM", reset=Some(0x40))),
+        )),
+
+      ( 9 << 2 ) ->
+        RegFieldGroup("CTRLMODER", Some("Control Module Mode Register"), Seq(
+          RegField(1, passAll, RegFieldDesc("PassAll", "Pass All Receive Frames", reset=Some(0))),
+          RegField(1, rxFlow , RegFieldDesc("RxFlow", "Receive Flow Control", reset=Some(0))),
+          RegField(1, txFlow , RegFieldDesc("TxFlow", "Transmit Flow Control", reset=Some(0))),
+        )),
+
+      ( 10 << 2 ) ->
+        RegFieldGroup("MIIMODER", Some("MII Mode Register"), Seq(
+          RegField(8, clkDiv,   RegFieldDesc("clkDiv", "Clock Divider", reset=Some(0x64))),
+          RegField(1, miiNoPre, RegFieldDesc("MIINoPre", "NO Preamble", reset=Some(0x0))),
+        )),
+
+      ( 11 << 2 ) ->
+        RegFieldGroup("MIICOMMAND", Some("MII Command Register"), Seq(
+          RegField(1, scanStat,  RegFieldDesc("scanStat", "Scan Status", reset=Some(0x0))),
+          RegField(1, readStat,  RegFieldDesc("readStat", "Read Status", reset=Some(0x0))),
+          RegField(1, wCtrlData, RegFieldDesc("wCtrlData", "Write Control Data", reset=Some(0x0))),
+        )),
+
+      ( 12 << 2 ) ->
+        RegFieldGroup("MIIADDRESS", Some("MII Address Register"), Seq(
+          RegField(5, FIAD,  RegFieldDesc("FIAD", "PHY Address", reset=Some(0x0))),
+          RegField.r(3 ,0.U),
+          RegField(5, RGAD,  RegFieldDesc("RGAD", "Register Address", reset=Some(0x0))),
+        )),
+
+      ( 13 << 2 ) ->
+        RegFieldGroup("MIITX_DATA", Some("MII Transmit Data"), Seq(
+          RegField(16, MIITX_DATA)
+        )),
+
+      ( 14 << 2 ) -> 
+        RegFieldGroup("MIIRX_DATA", Some("MII Receive Data"), Seq(
+          RegField.r(16, MIIRX_DATA)
+        )),
+
+      ( 15 << 2 ) ->
+        RegFieldGroup("MIISTATUS", Some("MII Status Register"), Seq(
+          RegField.r(1, io.LinkFail),
+          RegField.r(1, io.Busy_stat),
+          RegField.r(1, io.NValid_stat),
+        )),
+
+      ( 16 << 2 ) ->
+        RegFieldGroup("MAC_ADDR0", Some("MAC Address Register 0"), Seq(
+          RegField(32, Mac_ADDR0)
+        )),
+
+      ( 17 << 2 ) ->
+        RegFieldGroup("MAC_ADDR1", Some("MAC Address Register 1"), Seq(
+          RegField(16, Mac_ADDR1)
+        )),
+
+      ( 18 << 2 ) ->
+        RegFieldGroup("HASH0", Some("HASH Register 0"), Seq(
+          RegField(32, HASH0)
+        )),
+
+      ( 19 << 2 ) ->
+        RegFieldGroup("HASH1", Some("HASH Register 1"), Seq(
+          RegField(32, HASH1)
+        )),
+        
+      ( 20 << 2 ) ->
+        RegFieldGroup("TXCTRL", Some("Tx Control Register"), Seq(
+          RegField(16, txPauseTV, RegFieldDesc("TxPauseTV", "Tx Pause Timer Value", reset=Some(0x0))),
+          RegField(1,  txPauseRq, RegFieldDesc("TxPauseRQ", "Tx Pause Request", reset=Some(0x0))),
+        )),
     )
 
 
-  io.r_RecSmall  := MODEROut.extract(16)
-  io.r_Pad       := MODEROut.extract(15)
-  io.r_HugEn     := MODEROut.extract(14)
-  io.r_CrcEn     := MODEROut.extract(13)
-  io.r_DlyCrcEn  := MODEROut.extract(12)
-  io.r_FullD     := MODEROut.extract(10)
-  io.r_ExDfrEn   := MODEROut.extract( 9)
-  io.r_NoBckof   := MODEROut.extract( 8)
-  io.r_LoopBck   := MODEROut.extract( 7)
-  io.r_IFG       := MODEROut.extract( 6)
-  io.r_Pro       := MODEROut.extract( 5)
-  io.r_Iam       := MODEROut.extract( 4)
-  io.r_Bro       := MODEROut.extract( 3)
-  io.r_NoPre     := MODEROut.extract( 2)
-  io.r_TxEn      := MODEROut.extract( 1) & (TX_BD_NUMOut > 0.U)      // Transmission is enabled when there is at least one TxBD.
-  io.r_RxEn      := MODEROut.extract( 0) & (TX_BD_NUMOut < "h80".U)  // Reception is enabled when there is  at least one RxBD.
-
-  io.r_IPGT      := IPGTOut
-  io.r_IPGR1     := IPGR1Out
-  io.r_IPGR2     := IPGR2Out
-  io.r_MinFL     := PACKETLENOut(31,16)
-  io.r_MaxFL     := PACKETLENOut(15, 0)
-  io.r_MaxRet    := COLLCONFOut(19,16)
-  io.r_CollValid := COLLCONFOut( 5, 0)
-  io.r_TxFlow    := CTRLMODEROut.extract(2)
-  io.r_RxFlow    := CTRLMODEROut.extract(1)
-  io.r_PassAll   := CTRLMODEROut.extract(0)
-  io.r_MiiNoPre  := MIIMODEROut.extract(8)
-  io.r_ClkDiv    := MIIMODEROut(7,0)
-  io.r_WCtrlData := MIICOMMANDOut.extract(2)
-  io.r_RStat     := MIICOMMANDOut.extract(1)
-  io.r_ScanStat  := MIICOMMANDOut.extract(0)
-  io.r_RGAD      := MIIADDRESSOut(12,8)
-  io.r_FIAD      := MIIADDRESSOut( 4,0)
-  io.r_CtrlData  := MIITX_DATAOut(15,0)
-
-  io.r_MAC := Cat( MAC_ADDR1Out(15,0), MAC_ADDR0Out(31,0) )
-  io.r_HASH1 := HASH1Out
-  io.r_HASH0 := HASH0Out
-  io.r_TxBDNum := TX_BD_NUMOut
-  io.r_TxPauseTV := TXCTRLOut(15,0)
-  io.r_TxPauseRq := TXCTRLOut.extract(16)
-
-
-  val SetTxCIrq_txclk_wire = Wire(Bool())
-  val SetTxCIrq_sync1 = RegNext(SetTxCIrq_txclk_wire, false.B)
-  val SetTxCIrq_sync2 = RegNext(SetTxCIrq_sync1, false.B)
-  val SetTxCIrq_sync3 = RegNext(SetTxCIrq_sync2, false.B)
-  val SetTxCIrq       = RegNext(SetTxCIrq_sync2 & ~SetTxCIrq_sync3, false.B)
-
-  val SetRxCIrq_rxclk_wire = Wire(Bool())
-  val SetRxCIrq_sync1 = RegNext(SetRxCIrq_rxclk_wire, false.B)
-  val SetRxCIrq_sync2 = RegNext(SetRxCIrq_sync1, false.B)
-  val SetRxCIrq_sync3 = RegNext(SetRxCIrq_sync2, false.B)
-  val SetRxCIrq       = RegNext(SetRxCIrq_sync2 & ~SetRxCIrq_sync3, false.B)
 
 
 
-  // Interrupt generation
-  val irq_txb  = RegInit(false.B)  
-  val irq_txe  = RegInit(false.B)
-  val irq_rxb  = RegInit(false.B)
-  val irq_rxe  = RegInit(false.B)
-  val irq_busy = RegInit(false.B)
-  val irq_txc  = RegInit(false.B)
-  val irq_rxc  = RegInit(false.B)
+    io.r_RecSmall  := RecSmall
+    io.r_Pad       := Pad
+    io.r_HugEn     := HugEn
+    io.r_CrcEn     := CrcEn
+    io.r_DlyCrcEn  := DlyCrcEn
+    io.r_FullD     := FullD
+    io.r_ExDfrEn   := ExDfrEn
+    io.r_NoBckof   := NoBckof
+    io.r_LoopBck   := LoopBck
+    io.r_IFG       := IFG
+    io.r_Pro       := Pro
+    io.r_Iam       := Iam
+    io.r_Bro       := Bro
+    io.r_NoPre     := NoPre
+    io.r_TxEn     := TxEn & (TX_BD_NUM > 0.U)      // Transmission is enabled when there is at least one TxBD.
+    io.r_RxEn     := RxEn & (TX_BD_NUM < "h80".U)  // Reception is enabled when there is  at least one RxBD.
+
+    io.r_IPGT      := IPGT
+    io.r_IPGR1     := IPGR1
+    io.r_IPGR2     := IPGR2
+    io.r_MinFL     := minFL
+    io.r_MaxFL     := maxFL
+    io.r_MaxRet    := maxRet
+    io.r_CollValid := collValid
+    io.r_TxFlow    := txFlow
+    io.r_RxFlow    := rxFlow
+    io.r_PassAll   := passAll
+    io.r_MiiNoPre  := miiNoPre
+    io.r_ClkDiv    := clkDiv
+    io.r_WCtrlData := wCtrlData
+    io.r_RStat     := readStat
+    io.r_ScanStat  := scanStat
+    io.r_RGAD      := RGAD
+    io.r_FIAD      := FIAD
+    io.r_CtrlData  := MIITX_DATA
+
+    io.r_MAC := Cat( Mac_ADDR1(15,0), Mac_ADDR0(31,0) )
+    io.r_HASH1 := HASH1
+    io.r_HASH0 := HASH0
+    io.r_TxBDNum := TX_BD_NUM
+    io.r_TxPauseTV := txPauseTV
+    io.r_TxPauseRq := txPauseRq
 
 
-  when(io.TxB_IRQ){
-    irq_txb := true.B
-  }.elsewhen(INT_SOURCE_Wr & io.DataIn.extract(0)){
-    irq_txb := false.B
-  }
-
-  when(io.TxE_IRQ){
-    irq_txe := true.B
-  } .elsewhen(INT_SOURCE_Wr & io.DataIn.extract(1)){
-    irq_txe := false.B
-  }
 
 
-  when(io.RxB_IRQ){
-    irq_rxb := true.B
-  } .elsewhen(INT_SOURCE_Wr & io.DataIn.extract(2)){
-    irq_rxb := false.B
-  }
 
 
-  when(io.RxE_IRQ){
-    irq_rxe := true.B
-  } .elsewhen(INT_SOURCE_Wr & io.DataIn.extract(3)){
-    irq_rxe := false.B
-  }
-
-  when(io.Busy_IRQ){
-    irq_busy := true.B
-  } .elsewhen(INT_SOURCE_Wr & io.DataIn.extract(4)){
-    irq_busy := false.B
-  }
 
 
-  when(SetTxCIrq){
-    irq_txc := true.B
-  } .elsewhen(INT_SOURCE_Wr & io.DataIn.extract(5)){
-    irq_txc := false.B
-  }
-
-  when(SetRxCIrq){
-    irq_rxc := true.B
-  } .elsewhen(INT_SOURCE_Wr & io.DataIn.extract(6)){
-    irq_rxc := false.B
-  }
 
 
-  withClockAndReset( io.TxClk.asClock, reset ) {
-    // val ResetTxCIrq_sync1 = Reg(Bool())
-    val ResetTxCIrq_sync2 = RegNext(SetTxCIrq_sync1, false.B)
-    val SetTxCIrq_txclk   = RegInit(false.B); SetTxCIrq_txclk_wire := SetTxCIrq_txclk
-
-    // Synchronizing TxC Interrupt
-    when(io.TxCtrlEndFrm & io.StartTxDone & io.r_TxFlow){
-      SetTxCIrq_txclk := true.B
-    } .elsewhen(ResetTxCIrq_sync2){
-      SetTxCIrq_txclk := false.B
-    }
-
-  }
 
 
-  withClockAndReset( io.RxClk.asClock, reset ) {
-    val ResetRxCIrq_sync1 = RegNext(SetRxCIrq_sync2, false.B)
-    val ResetRxCIrq_sync2 = RegNext(ResetRxCIrq_sync1, false.B)
-    val ResetRxCIrq_sync3 = RegNext(ResetRxCIrq_sync2, false.B)
-    val SetRxCIrq_rxclk   = RegInit(false.B); SetRxCIrq_rxclk_wire := SetRxCIrq_rxclk
 
-    // Synchronizing RxC Interrupt
-    when(io.SetPauseTimer & io.r_RxFlow){
-      SetRxCIrq_rxclk := true.B
-    } .elsewhen(ResetRxCIrq_sync2 & (~ResetRxCIrq_sync3)){
-      SetRxCIrq_rxclk := false.B
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    val SetTxCIrq_txclk_wire = Wire(Bool())
+    val SetTxCIrq_sync1 = RegNext(SetTxCIrq_txclk_wire, false.B)
+    val SetTxCIrq_sync2 = RegNext(SetTxCIrq_sync1, false.B)
+    val SetTxCIrq_sync3 = RegNext(SetTxCIrq_sync2, false.B)
+    val SetTxCIrq       = RegNext(SetTxCIrq_sync2 & ~SetTxCIrq_sync3, false.B)
+
+    val SetRxCIrq_rxclk_wire = Wire(Bool())
+    val SetRxCIrq_sync1 = RegNext(SetRxCIrq_rxclk_wire, false.B)
+    val SetRxCIrq_sync2 = RegNext(SetRxCIrq_sync1, false.B)
+    val SetRxCIrq_sync3 = RegNext(SetRxCIrq_sync2, false.B)
+    val SetRxCIrq       = RegNext(SetRxCIrq_sync2 & ~SetRxCIrq_sync3, false.B)
+
+    when(io.TxB_IRQ){ irq_txb := true.B }
+    when(io.TxE_IRQ){ irq_txe := true.B }
+    when(io.RxB_IRQ){ irq_rxb := true.B }
+    when(io.RxE_IRQ){ irq_rxe := true.B }
+    when(io.Busy_IRQ){ irq_busy := true.B }
+    when(SetTxCIrq){ irq_txc := true.B }
+    when(SetRxCIrq){ irq_rxc := true.B }
+
+
+
+
+
+    withClockAndReset( io.TxClk.asClock, reset ) {
+      // val ResetTxCIrq_sync1 = Reg(Bool())
+      val ResetTxCIrq_sync2 = RegNext(SetTxCIrq_sync1, false.B)
+      val SetTxCIrq_txclk   = RegInit(false.B); SetTxCIrq_txclk_wire := SetTxCIrq_txclk
+
+      // Synchronizing TxC Interrupt
+      when(io.TxCtrlEndFrm & io.StartTxDone & io.r_TxFlow){
+        SetTxCIrq_txclk := true.B
+      } .elsewhen(ResetTxCIrq_sync2){
+        SetTxCIrq_txclk := false.B
+      }
+
     }
 
 
-  }
+    withClockAndReset( io.RxClk.asClock, reset ) {
+      val ResetRxCIrq_sync1 = RegNext(SetRxCIrq_sync2, false.B)
+      val ResetRxCIrq_sync2 = RegNext(ResetRxCIrq_sync1, false.B)
+      val ResetRxCIrq_sync3 = RegNext(ResetRxCIrq_sync2, false.B)
+      val SetRxCIrq_rxclk   = RegInit(false.B); SetRxCIrq_rxclk_wire := SetRxCIrq_rxclk
+
+      // Synchronizing RxC Interrupt
+      when(io.SetPauseTimer & io.r_RxFlow){
+        SetRxCIrq_rxclk := true.B
+      } .elsewhen(ResetRxCIrq_sync2 & (~ResetRxCIrq_sync3)){
+        SetRxCIrq_rxclk := false.B
+      }
 
 
-  // Generating interrupt signal
-  io.int_o :=
-    (irq_txb  & INT_MASKOut.extract(0) ) | 
-    (irq_txe  & INT_MASKOut.extract(1) ) | 
-    (irq_rxb  & INT_MASKOut.extract(2) ) | 
-    (irq_rxe  & INT_MASKOut.extract(3) ) | 
-    (irq_busy & INT_MASKOut.extract(4) ) | 
-    (irq_txc  & INT_MASKOut.extract(5) ) | 
-    (irq_rxc  & INT_MASKOut.extract(6) )
+    }
 
-  // For reading interrupt status
-  INT_SOURCEOut := Cat( irq_rxc, irq_txc, irq_busy, irq_rxe, irq_rxb, irq_txe, irq_txb )
+
+    // Generating interrupt signal
+    // io.int_o :=
+    int(0)    :=
+      (irq_txb  & INT_MASK.extract(0) ) | 
+      (irq_txe  & INT_MASK.extract(1) ) | 
+      (irq_rxb  & INT_MASK.extract(2) ) | 
+      (irq_rxe  & INT_MASK.extract(3) ) | 
+      (irq_busy & INT_MASK.extract(4) ) | 
+      (irq_txc  & INT_MASK.extract(5) ) | 
+      (irq_rxc  & INT_MASK.extract(6) )
+
 
 
 }

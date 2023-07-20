@@ -14,7 +14,7 @@ class Mac(implicit p: Parameters) extends LazyModule with HasMacParameters{
   val tlMasterNode =   
         TLManagerNode(Seq(TLSlavePortParameters.v1(
           managers = Seq(TLSlaveParameters.v1(
-          address = Seq(AddressSet(0x30000000L, 0x0FFFL)),
+          address = Seq(AddressSet(0x30000400L, 0x03FFL)),
           regionType = RegionType.VOLATILE,
           executable = false,
           fifoId = Some(2),
@@ -34,10 +34,9 @@ class Mac(implicit p: Parameters) extends LazyModule with HasMacParameters{
 
 
 
-  // DTS
-  val dtsdevice = new SimpleDevice("mac",Seq("mac_0"))
 
-  val int_node = IntSourceNode(IntSourcePortSimple(num = 1, resources = dtsdevice.int))
+
+  val ethReg = LazyModule(new MacReg)
 
 
   lazy val module = new MacImp(this)
@@ -77,7 +76,7 @@ class MacImp(outer: Mac)(implicit p: Parameters) extends LazyModuleImp(outer) wi
   val ( slv_bus, slv_edge ) = outer.tlMasterNode.in.head
   val ( mst_bus, mst_edge ) = outer.tlClientNode.out.head
   
-  val (int, _) = outer.int_node.out(0)
+
 
 
 
@@ -179,7 +178,6 @@ val miim = Module(new MIIM)
 
 
 
-val RegDataOut                 = Wire(UInt(32.W))
 val r_RecSmall                 = Wire(Bool())
 val r_LoopBck                  = Wire(Bool())
 val r_TxEn                     = Wire(Bool())
@@ -245,9 +243,7 @@ val LateCollLatched            = Wire(Bool())
 val DeferLatched               = Wire(Bool())
 val RstDeferLatched            = Wire(Bool())
 val CarrierSenseLost           = Wire(Bool())
-val RegCs                      = Wire(UInt(4.W))
 
-dontTouch(RegDataOut                 )
 dontTouch(r_RecSmall                 )
 dontTouch(r_LoopBck                  )
 dontTouch(r_TxEn                     )
@@ -313,84 +309,78 @@ dontTouch(LateCollLatched            )
 dontTouch(DeferLatched               )
 dontTouch(RstDeferLatched            )
 dontTouch(CarrierSenseLost           )
-dontTouch(RegCs                      )
 
 
 
 
 
-val ethReg = Module(new MacReg)
-
-
-  ethReg.io.DataIn              := slv_bus.a.bits.data
-  ethReg.io.Address             := slv_bus.a.bits.address(9,2)
-  ethReg.io.Rw                  := slv_bus.a.bits.opcode === 0.U | slv_bus.a.bits.opcode === 1.U
+// val ethReg = Module(new MacReg(outer.configNode))
 
 
 
-ethReg.io.Cs                  := RegCs
-ethReg.io.WCtrlDataStart      := WCtrlDataStart
-ethReg.io.RStatStart          := RStatStart
-ethReg.io.UpdateMIIRX_DATAReg := UpdateMIIRX_DATAReg
-ethReg.io.Prsd                := Prsd
-ethReg.io.NValid_stat         := NValid_stat
-ethReg.io.Busy_stat           := Busy_stat
-ethReg.io.LinkFail            := LinkFail
-ethReg.io.TxB_IRQ             := TxB_IRQ
-ethReg.io.TxE_IRQ             := TxE_IRQ
-ethReg.io.RxB_IRQ             := RxB_IRQ
-ethReg.io.RxE_IRQ             := RxE_IRQ
-ethReg.io.Busy_IRQ            := Busy_IRQ
-ethReg.io.RstTxPauseRq        := RstTxPauseRq
-ethReg.io.TxCtrlEndFrm        := TxCtrlEndFrm
-ethReg.io.StartTxDone         := StartTxDone
-ethReg.io.TxClk               := io.mtx_clk_pad_i
-ethReg.io.RxClk               := io.mrx_clk_pad_i
-ethReg.io.SetPauseTimer       := SetPauseTimer
-ethReg.io.dbg_dat             := 0.U
 
-RegDataOut  := ethReg.io.DataOut
-r_RecSmall  := ethReg.io.r_RecSmall
-r_Pad       := ethReg.io.r_Pad
-r_HugEn     := ethReg.io.r_HugEn
-r_CrcEn     := ethReg.io.r_CrcEn
-r_DlyCrcEn  := ethReg.io.r_DlyCrcEn
-r_FullD     := ethReg.io.r_FullD
-r_ExDfrEn   := ethReg.io.r_ExDfrEn
-r_NoBckof   := ethReg.io.r_NoBckof
-r_LoopBck   := ethReg.io.r_LoopBck
-r_IFG       := ethReg.io.r_IFG
-r_Pro       := ethReg.io.r_Pro
-r_Bro       := ethReg.io.r_Bro
-r_NoPre     := ethReg.io.r_NoPre
-r_TxEn      := ethReg.io.r_TxEn
-r_RxEn      := ethReg.io.r_RxEn
-r_HASH0     := ethReg.io.r_HASH0
-r_HASH1     := ethReg.io.r_HASH1
-r_IPGT      := ethReg.io.r_IPGT
-r_IPGR1     := ethReg.io.r_IPGR1
-r_IPGR2     := ethReg.io.r_IPGR2
-r_MinFL     := ethReg.io.r_MinFL
-r_MaxFL     := ethReg.io.r_MaxFL
-r_MaxRet    := ethReg.io.r_MaxRet
-r_CollValid := ethReg.io.r_CollValid
-r_TxFlow    := ethReg.io.r_TxFlow
-r_RxFlow    := ethReg.io.r_RxFlow
-r_PassAll   := ethReg.io.r_PassAll
-r_MiiNoPre  := ethReg.io.r_MiiNoPre
-r_ClkDiv    := ethReg.io.r_ClkDiv
-r_WCtrlData := ethReg.io.r_WCtrlData
-r_RStat     := ethReg.io.r_RStat
-r_ScanStat  := ethReg.io.r_ScanStat
-r_RGAD      := ethReg.io.r_RGAD
-r_FIAD      := ethReg.io.r_FIAD
-r_CtrlData  := ethReg.io.r_CtrlData
-r_MAC       := ethReg.io.r_MAC
-r_TxBDNum   := ethReg.io.r_TxBDNum
-// io.int_o    := ethReg.io.int_o
-  int(0)   := ethReg.io.int_o
-r_TxPauseTV := ethReg.io.r_TxPauseTV
-r_TxPauseRq := ethReg.io.r_TxPauseRq
+
+outer.ethReg.module.io.WCtrlDataStart      := WCtrlDataStart
+outer.ethReg.module.io.RStatStart          := RStatStart
+outer.ethReg.module.io.UpdateMIIRX_DATAReg := UpdateMIIRX_DATAReg
+outer.ethReg.module.io.Prsd                := Prsd
+outer.ethReg.module.io.NValid_stat         := NValid_stat
+outer.ethReg.module.io.Busy_stat           := Busy_stat
+outer.ethReg.module.io.LinkFail            := LinkFail
+outer.ethReg.module.io.TxB_IRQ             := TxB_IRQ
+outer.ethReg.module.io.TxE_IRQ             := TxE_IRQ
+outer.ethReg.module.io.RxB_IRQ             := RxB_IRQ
+outer.ethReg.module.io.RxE_IRQ             := RxE_IRQ
+outer.ethReg.module.io.Busy_IRQ            := Busy_IRQ
+outer.ethReg.module.io.RstTxPauseRq        := RstTxPauseRq
+outer.ethReg.module.io.TxCtrlEndFrm        := TxCtrlEndFrm
+outer.ethReg.module.io.StartTxDone         := StartTxDone
+outer.ethReg.module.io.TxClk               := io.mtx_clk_pad_i
+outer.ethReg.module.io.RxClk               := io.mrx_clk_pad_i
+outer.ethReg.module.io.SetPauseTimer       := SetPauseTimer
+
+
+r_RecSmall  := outer.ethReg.module.io.r_RecSmall
+r_Pad       := outer.ethReg.module.io.r_Pad
+r_HugEn     := outer.ethReg.module.io.r_HugEn
+r_CrcEn     := outer.ethReg.module.io.r_CrcEn
+r_DlyCrcEn  := outer.ethReg.module.io.r_DlyCrcEn
+r_FullD     := outer.ethReg.module.io.r_FullD
+r_ExDfrEn   := outer.ethReg.module.io.r_ExDfrEn
+r_NoBckof   := outer.ethReg.module.io.r_NoBckof
+r_LoopBck   := outer.ethReg.module.io.r_LoopBck
+r_IFG       := outer.ethReg.module.io.r_IFG
+r_Pro       := outer.ethReg.module.io.r_Pro
+r_Bro       := outer.ethReg.module.io.r_Bro
+r_NoPre     := outer.ethReg.module.io.r_NoPre
+r_TxEn      := outer.ethReg.module.io.r_TxEn
+r_RxEn      := outer.ethReg.module.io.r_RxEn
+r_HASH0     := outer.ethReg.module.io.r_HASH0
+r_HASH1     := outer.ethReg.module.io.r_HASH1
+r_IPGT      := outer.ethReg.module.io.r_IPGT
+r_IPGR1     := outer.ethReg.module.io.r_IPGR1
+r_IPGR2     := outer.ethReg.module.io.r_IPGR2
+r_MinFL     := outer.ethReg.module.io.r_MinFL
+r_MaxFL     := outer.ethReg.module.io.r_MaxFL
+r_MaxRet    := outer.ethReg.module.io.r_MaxRet
+r_CollValid := outer.ethReg.module.io.r_CollValid
+r_TxFlow    := outer.ethReg.module.io.r_TxFlow
+r_RxFlow    := outer.ethReg.module.io.r_RxFlow
+r_PassAll   := outer.ethReg.module.io.r_PassAll
+r_MiiNoPre  := outer.ethReg.module.io.r_MiiNoPre
+r_ClkDiv    := outer.ethReg.module.io.r_ClkDiv
+r_WCtrlData := outer.ethReg.module.io.r_WCtrlData
+r_RStat     := outer.ethReg.module.io.r_RStat
+r_ScanStat  := outer.ethReg.module.io.r_ScanStat
+r_RGAD      := outer.ethReg.module.io.r_RGAD
+r_FIAD      := outer.ethReg.module.io.r_FIAD
+r_CtrlData  := outer.ethReg.module.io.r_CtrlData
+r_MAC       := outer.ethReg.module.io.r_MAC
+r_TxBDNum   := outer.ethReg.module.io.r_TxBDNum
+// io.int_o    := outer.ethReg.module.io.int_o
+  // int(0)    := outer.ethReg.module.io.int_o
+r_TxPauseTV := outer.ethReg.module.io.r_TxPauseTV
+r_TxPauseRq := outer.ethReg.module.io.r_TxPauseRq
 
 
 
@@ -755,8 +745,6 @@ val rxethmac = Module(new MacRx)
   wishbone.io.r_TxEn     := r_TxEn
   wishbone.io.r_RxEn     := r_RxEn
   wishbone.io.r_TxBDNum  := r_TxBDNum
-  wishbone.io.RegDataOut := RegDataOut
-  RegCs := wishbone.io.RegCs
   TxB_IRQ  := wishbone.io.TxB_IRQ
   TxE_IRQ  := wishbone.io.TxE_IRQ
   RxB_IRQ  := wishbone.io.RxB_IRQ

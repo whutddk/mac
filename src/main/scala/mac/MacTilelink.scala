@@ -80,8 +80,6 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
     val r_TxEn    = Input(Bool())          // Transmit enable
     val r_RxEn    = Input(Bool())         // Receive enable
     val r_TxBDNum = Input(UInt(8.W))      // Receive buffer descriptor number
-    val RegDataOut = Input(UInt(32.W))
-    val RegCs = Output(UInt(4.W))
 
     // Interrupts
     val TxB_IRQ  = Output(Bool())
@@ -994,7 +992,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-    io.RegCs := Fill(4, io.tlSlv.A.valid & io.tlSlv.A.bits.mask.orR & ~io.tlSlv.A.bits.address(11) & ~io.tlSlv.A.bits.address(10)) & io.tlSlv.A.bits.mask // 0x0   - 0x3FF
+   
        BDCs  := Fill(4, io.tlSlv.A.valid & io.tlSlv.A.bits.mask.orR & ~io.tlSlv.A.bits.address(11) &  io.tlSlv.A.bits.address(10)) & io.tlSlv.A.bits.mask // 0x400 - 0x7FF
       CsMiss :=         io.tlSlv.A.valid & io.tlSlv.A.bits.mask.orR &  io.tlSlv.A.bits.address(11)    // 0x800 - 0xfFF     // When access to the address between 0x800 and 0xfff occurs, acknowledge is set but data is not valid.
     
@@ -1008,7 +1006,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
       slvDValid := false.B
     } .elsewhen(io.tlSlv.A.fire){
       slvDValid := true.B
-      slvDDat := Mux( ((io.RegCs.orR) & io.tlSlv.A.bits.opcode === 4.U), io.RegDataOut, BD_WB_DAT_O )
+      slvDDat := BD_WB_DAT_O
     }
 
     when(slvAInfo.opcode === 4.U) {
@@ -1017,7 +1015,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
       io.tlSlv.D.bits := edgeIn.AccessAck(slvAInfo)
     }
 
-    io.tlSlv.A.ready := RegNext(io.RegCs.orR & ~io.tlSlv.A.fire, false.B) | BDAck
+    io.tlSlv.A.ready := BDAck
     assert( ~(io.tlSlv.A.ready & ~io.tlSlv.A.valid) )
 
     when( io.tlSlv.A.fire & (~(io.tlSlv.A.bits.mask.orR) | CsMiss) ){

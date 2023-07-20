@@ -60,7 +60,7 @@ class MacAXI(implicit p: Parameters) extends Mac{
 
 
 	tlMasterNode := xbar := AXI4ToTL() := AXI4UserYanker(Some(1)) := AXI4Fragmenter() := axiConfigPort
-  tlError.node := xbar
+  // tlError.node := xbar
 
 	val intSinkNode = IntSinkNode(IntSinkPortSimple())
 	intSinkNode := int_node
