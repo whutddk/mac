@@ -137,7 +137,7 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
     val minFL = RegInit("h0040".U(16.W))
 
     val collValid = RegInit("h3f".U(6.W))
-    val maxRet = RegInit("hF".U(4.U))
+    val maxRet = RegInit("hF".U(4.W))
 
     val TX_BD_NUM = RegInit("h40".U(8.W))        // TX_BD_NUM Register
 
@@ -232,20 +232,19 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
         )),
 
       ( 6 << 2 ) ->
-        RegFieldGroup("PACKETLEN", Some("Packet Length Register"), Seq(
-          RegField(16, maxFL, RegFieldDesc("maxFL", "Maximum Frame Length", reset=Some(0x0600))),
-          RegField(16, minFL, RegFieldDesc("minFL", "Minimum Frame Length", reset=Some(0x0040))),
-        )),
+        RegFieldGroup("PACKETLEN", Some("Packet Length Register"), 
+          RegField.bytes(maxFL, Some(RegFieldDesc("maxFL", "Maximum Frame Length", reset=Some(0x0600)))) ++
+          RegField.bytes(minFL, Some(RegFieldDesc("minFL", "Minimum Frame Length", reset=Some(0x0040))))
+        ),
       ( 7 << 2 ) ->
         RegFieldGroup("COLLCONF", Some("Collision and Retry Configuration Register"), Seq(
           RegField(6, collValid, RegFieldDesc("collValid", "Collision Valid", reset=Some(0x3f))),
           RegField.r(10,0.U),
           RegField(4, maxRet, RegFieldDesc("maxRet", "Maximum Retry", reset=Some(0xf))),
         )),
-
       ( 8 << 2 ) ->
         RegFieldGroup("TX_BD_NUM", Some("Transmit BD Number Register"), Seq(
-          RegField(8, TX_BD_NUM, RegFieldDesc("TX_BD_NUM", "TX_BD_NUM", reset=Some(0x40))),
+          RegField(8, TX_BD_NUM, RegWriteFn((valid, data) => { when (valid & data <= "h80".U) { TX_BD_NUM := data }; true.B }), RegFieldDesc("TX_BD_NUM", "TX_BD_NUM", reset=Some(0x40))),
         )),
 
       ( 9 << 2 ) ->
@@ -276,9 +275,9 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
         )),
 
       ( 13 << 2 ) ->
-        RegFieldGroup("MIITX_DATA", Some("MII Transmit Data"), Seq(
-          RegField(16, MIITX_DATA)
-        )),
+        RegFieldGroup("MIITX_DATA", Some("MII Transmit Data"), 
+          RegField.bytes(MIITX_DATA)
+        ),
 
       ( 14 << 2 ) -> 
         RegFieldGroup("MIIRX_DATA", Some("MII Receive Data"), Seq(
@@ -293,28 +292,28 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
         )),
 
       ( 16 << 2 ) ->
-        RegFieldGroup("MAC_ADDR0", Some("MAC Address Register 0"), Seq(
-          RegField(32, Mac_ADDR0)
-        )),
+        RegFieldGroup("MAC_ADDR0", Some("MAC Address Register 0"), 
+          RegField.bytes(Mac_ADDR0)
+        ),
 
       ( 17 << 2 ) ->
-        RegFieldGroup("MAC_ADDR1", Some("MAC Address Register 1"), Seq(
-          RegField(16, Mac_ADDR1)
-        )),
+        RegFieldGroup("MAC_ADDR1", Some("MAC Address Register 1"), 
+          RegField.bytes(Mac_ADDR1)
+        ),
 
       ( 18 << 2 ) ->
-        RegFieldGroup("HASH0", Some("HASH Register 0"), Seq(
-          RegField(32, HASH0)
-        )),
+        RegFieldGroup("HASH0", Some("HASH Register 0"), 
+          RegField.bytes(HASH0)
+        ),
 
       ( 19 << 2 ) ->
-        RegFieldGroup("HASH1", Some("HASH Register 1"), Seq(
-          RegField(32, HASH1)
-        )),
+        RegFieldGroup("HASH1", Some("HASH Register 1"), 
+          RegField.bytes(HASH1)
+        ),
         
       ( 20 << 2 ) ->
-        RegFieldGroup("TXCTRL", Some("Tx Control Register"), Seq(
-          RegField(16, txPauseTV, RegFieldDesc("TxPauseTV", "Tx Pause Timer Value", reset=Some(0x0))),
+        RegFieldGroup("TXCTRL", Some("Tx Control Register"), 
+          RegField.bytes(txPauseTV, Some(RegFieldDesc("TxPauseTV", "Tx Pause Timer Value", reset=Some(0x0)))) ++ Seq(
           RegField(1,  txPauseRq, RegFieldDesc("TxPauseRQ", "Tx Pause Request", reset=Some(0x0))),
         )),
     )

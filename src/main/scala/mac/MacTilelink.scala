@@ -988,13 +988,13 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
   // Connected to registers
-  val CsMiss = Wire(Bool())
+  // val CsMiss = Wire(Bool())
 
 
 
    
-       BDCs  := Fill(4, io.tlSlv.A.valid & io.tlSlv.A.bits.mask.orR & ~io.tlSlv.A.bits.address(11) &  io.tlSlv.A.bits.address(10)) & io.tlSlv.A.bits.mask // 0x400 - 0x7FF
-      CsMiss :=         io.tlSlv.A.valid & io.tlSlv.A.bits.mask.orR &  io.tlSlv.A.bits.address(11)    // 0x800 - 0xfFF     // When access to the address between 0x800 and 0xfff occurs, acknowledge is set but data is not valid.
+       BDCs  := Fill(4, io.tlSlv.A.valid & io.tlSlv.A.bits.mask.orR & io.tlSlv.A.bits.address(10)) & io.tlSlv.A.bits.mask // 0x400 - 0x7FF
+      // CsMiss :=         io.tlSlv.A.valid & io.tlSlv.A.bits.mask.orR &  io.tlSlv.A.bits.address(11)    // 0x800 - 0xfFF     // When access to the address between 0x800 and 0xfff occurs, acknowledge is set but data is not valid.
     
     val slvAInfo = RegEnable( io.tlSlv.A.bits, io.tlSlv.A.fire )
     val slvDValid = RegInit(false.B); io.tlSlv.D.valid := slvDValid
@@ -1018,9 +1018,9 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
     io.tlSlv.A.ready := BDAck
     assert( ~(io.tlSlv.A.ready & ~io.tlSlv.A.valid) )
 
-    when( io.tlSlv.A.fire & (~(io.tlSlv.A.bits.mask.orR) | CsMiss) ){
-      assert( false.B, "Assert Failed, tileLink access an undefine region!" )
-    }
+    // when( io.tlSlv.A.fire & (~(io.tlSlv.A.bits.mask.orR) | CsMiss) ){
+    //   assert( false.B, "Assert Failed, tileLink access an undefine region!" )
+    // }
 
 
 
