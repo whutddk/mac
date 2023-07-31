@@ -310,7 +310,7 @@ ExampleRocketSystem i_rocketChip(
       .O(mdi),     // Buffer output
       .IO(mdio),   // Buffer inout port (connect directly to top-level port)
       .I(mdo),     // Buffer input
-      .T(mdoEn)      // 3-state enable input, high=input, low=output
+      .T(~mdoEn)      // 3-state enable input, high=input, low=output
    );
 
 endmodule
