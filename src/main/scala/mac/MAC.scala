@@ -492,7 +492,7 @@ dontTouch(Collision       )
 dontTouch(CarrierSense_Tx2)
 dontTouch(RxEnSync        )
 
-
+printf("Warning! clock doesn't switch when loopBck!")
 // Muxed MII receive data valid
 MRxDV_Lb := Mux(r_LoopBck, io.mtxen_pad_o, io.mrxdv_pad_i & RxEnSync)
 
@@ -529,7 +529,7 @@ txethmac.io.ExDfrEn         := r_ExDfrEn
 
 io.mtxd_pad_o    := txethmac.io.MTxD
 io.mtxen_pad_o   := txethmac.io.MTxEn
-io. mtxerr_pad_o := txethmac.io.MTxErr
+io.mtxerr_pad_o := txethmac.io.MTxErr
 TxDoneIn := txethmac.io.TxDone
 TxRetry := txethmac.io.TxRetry
 TxAbortIn := txethmac.io.TxAbort

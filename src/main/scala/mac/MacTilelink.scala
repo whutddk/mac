@@ -1206,19 +1206,19 @@ trait MacTileLinkTXClk{ this: MacTileLinkBase =>
     // Tx data selection (latching)
     when( TxStartFrm_sync & ~TxStartFrm ){
       TxData := Mux1H(Seq(
-        ( TxPointerLSB === 0.U ) -> TxData_wb(31,24),// Big Endian Byte Ordering
-        ( TxPointerLSB === 1.U ) -> TxData_wb(23,16),// Big Endian Byte Ordering
-        ( TxPointerLSB === 2.U ) -> TxData_wb(15, 8),// Big Endian Byte Ordering
-        ( TxPointerLSB === 3.U ) -> TxData_wb( 7, 0),// Big Endian Byte Ordering
+        ( TxPointerLSB === 0.U ) -> TxData_wb( 7, 0),// little Endian Byte Ordering
+        ( TxPointerLSB === 1.U ) -> TxData_wb(15, 8),// little Endian Byte Ordering
+        ( TxPointerLSB === 2.U ) -> TxData_wb(23,16),// little Endian Byte Ordering
+        ( TxPointerLSB === 3.U ) -> TxData_wb(31,24),// little Endian Byte Ordering
       ))     
     } .elsewhen( TxStartFrm & io.TxUsedData & TxPointerLSB === 3.U ){
-      TxData := TxData_wb(31,24) // Big Endian Byte Ordering        
+      TxData := TxData_wb( 7, 0) // little Endian Byte Ordering        
     } .elsewhen(io.TxUsedData & Flop){
       TxData := Mux1H(Seq(
-        (TxByteCnt === 0.U) -> TxDataLatched(31,24),// Big Endian Byte Ordering
-        (TxByteCnt === 1.U) -> TxDataLatched(23,16),
-        (TxByteCnt === 2.U) -> TxDataLatched(15, 8),
-        (TxByteCnt === 3.U) -> TxDataLatched( 7, 0),
+        (TxByteCnt === 0.U) -> TxDataLatched( 7, 0),// little Endian Byte Ordering
+        (TxByteCnt === 1.U) -> TxDataLatched(15, 8),
+        (TxByteCnt === 2.U) -> TxDataLatched(23,16),
+        (TxByteCnt === 3.U) -> TxDataLatched(31,24),
       ))
     }
 
