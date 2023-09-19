@@ -67,6 +67,8 @@ class MacIO extends Bundle with MDIO{
   val mcrs_pad_i  = Input(Bool())
 
   // val int_o = Output(Bool())
+
+  val isLoopBack = Output(Bool())
 }
 
 class MacImp(outer: Mac)(implicit p: Parameters) extends LazyModuleImp(outer) with HasMacParameters{
@@ -492,7 +494,9 @@ dontTouch(Collision       )
 dontTouch(CarrierSense_Tx2)
 dontTouch(RxEnSync        )
 
-printf("Warning! clock doesn't switch when loopBck!")
+
+io.isLoopBack := r_LoopBck
+
 // Muxed MII receive data valid
 MRxDV_Lb := Mux(r_LoopBck, io.mtxen_pad_o, io.mrxdv_pad_i & RxEnSync)
 
