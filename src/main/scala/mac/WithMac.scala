@@ -12,7 +12,7 @@ trait WithManyMacMix { this: BaseSubsystem =>
 
     val mac0 = LazyModule(new Mac)
 
-    mbus.coupleFrom("mac_mst") { _ := TLBuffer() := mac0.tlClientNode }
+    sbus.coupleFrom("mac_mst") { _ := TLBuffer() := mac0.tlClientNode }
     pbus.coupleTo("mac_cfg")   { mac0.tlMasterNode := TLFragmenter(pbus) := _ }
     pbus.coupleTo("mac_cfg")   { mac0.ethReg.configNode   := TLFragmenter(pbus) := _ }
 
@@ -27,6 +27,12 @@ trait WithManyMacMixModuleImp extends LazyModuleImp {
   val macIO = IO(new MacIO)
 
   macIO <> outer.mac0.module.io
+
+  println("Warning, did you delete the rocket-chip.jar on top to reflash?")
+  println("Warning, did you delete the rocket-chip.jar on top to reflash?")
+  println("Warning, did you delete the rocket-chip.jar on top to reflash?")
+  println("Warning, did you delete the rocket-chip.jar on top to reflash?")
+  println("Warning, did you delete the rocket-chip.jar on top to reflash?")
 
 }
 
