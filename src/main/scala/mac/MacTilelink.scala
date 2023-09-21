@@ -1316,7 +1316,7 @@ trait MacTileLinkRXClk{ this: MacTileLinkBase =>
   withClockAndReset( io.MRxClk.asClock, reset.asAsyncReset ){
 
     val RxDataLatched2 = RegInit(0.U(32.W)); RxDataLatched2_rxclk := RxDataLatched2
-    val RxDataLatched1 = RegInit(0.U(24.W))     // Big Endian Byte Ordering[31:8] 
+    val RxDataLatched1 = RegInit(0.U(24.W))     // Little Endian Byte Ordering[23:0] 
     val RxValidBytes = RegInit(1.U(2.W))
     val RxByteCnt    = RegInit(0.U(2.W)); RxByteCnt_rxclk := RxByteCnt
     val LastByteIn   = RegInit(false.B); LastByteIn_rxclk := LastByteIn
@@ -1380,16 +1380,16 @@ trait MacTileLinkRXClk{ this: MacTileLinkBase =>
     when(io.RxValid & RxReady & ~LastByteIn){
       when(io.RxStartFrm){
         RxDataLatched1 := Mux1H(Seq(
-          ( RxPointerLSB_rst === 0.U ) -> Cat(                       io.RxData, RxDataLatched1(15,0)),// Big Endian Byte Ordering
+          ( RxPointerLSB_rst === 0.U ) -> Cat(RxDataLatched1(23, 8), io.RxData),// Little Endian Byte Ordering
           ( RxPointerLSB_rst === 1.U ) -> Cat(RxDataLatched1(23,16), io.RxData, RxDataLatched1( 7,0)),
-          ( RxPointerLSB_rst === 2.U ) -> Cat(RxDataLatched1(23, 8), io.RxData),
+          ( RxPointerLSB_rst === 2.U ) -> Cat(                       io.RxData, RxDataLatched1(15,0)),
           ( RxPointerLSB_rst === 3.U ) -> RxDataLatched1,
         ))
       } .elsewhen(RxEnableWindow){
         RxDataLatched1 := Mux1H(Seq(
-          ( RxByteCnt === 0.U ) -> Cat(                       io.RxData, RxDataLatched1(15,0)),// Big Endian Byte Ordering
+          ( RxByteCnt === 0.U ) -> Cat(RxDataLatched1(23, 8), io.RxData),// Little Endian Byte Ordering
           ( RxByteCnt === 1.U ) -> Cat(RxDataLatched1(23,16), io.RxData, RxDataLatched1( 7,0)),
-          ( RxByteCnt === 2.U ) -> Cat(RxDataLatched1(23, 8), io.RxData),
+          ( RxByteCnt === 2.U ) -> Cat(                       io.RxData, RxDataLatched1(15,0)),
           ( RxByteCnt === 3.U ) -> RxDataLatched1,
         ))
       }
@@ -1398,13 +1398,13 @@ trait MacTileLinkRXClk{ this: MacTileLinkBase =>
 
     // Assembling data that will be written to the rx_fifo
     when(SetWriteRxDataToFifo & ~ShiftWillEnd){
-      RxDataLatched2 := Cat(RxDataLatched1, io.RxData)// Big Endian Byte Ordering
+      RxDataLatched2 := Cat(io.RxData, RxDataLatched1)// Little Endian Byte Ordering
     } .elsewhen(SetWriteRxDataToFifo & ShiftWillEnd){
-      RxDataLatched2 := Mux1H(Seq(
-        ( RxValidBytes === 0.U ) -> Cat(RxDataLatched1,        io.RxData),
-        ( RxValidBytes === 1.U ) -> Cat(RxDataLatched1(23,16), 0.U(24.W)),
-        ( RxValidBytes === 2.U ) -> Cat(RxDataLatched1(23, 8), 0.U(16.W)),
-        ( RxValidBytes === 3.U ) -> Cat(RxDataLatched1,        0.U(8.W)),       
+      RxDataLatched2 := Mux1H(Seq(                    // Little Endian Byte Ordering
+        ( RxValidBytes === 0.U ) -> Cat(io.RxData, RxDataLatched1),
+        ( RxValidBytes === 1.U ) -> Cat(0.U(24.W), RxDataLatched1(7,0) ),
+        ( RxValidBytes === 2.U ) -> Cat(0.U(16.W), RxDataLatched1(15, 0) ),
+        ( RxValidBytes === 3.U ) -> Cat(0.U(8.W),  RxDataLatched1        ),       
       ))
     }
 
