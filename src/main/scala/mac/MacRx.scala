@@ -40,7 +40,7 @@ class MacRxIO extends Bundle{
 }
 
 
-abstract class MacRxBase extends Module{
+abstract class MacRxBase extends Module with RequireAsyncReset{
   val io: MacRxIO = IO(new MacRxIO)
 
   val MRxDEqD = io.MRxD === "hd".U

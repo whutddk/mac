@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 
 class MacStatusIO extends Bundle{
-  val reset               = Input(Bool())
+  val asyncReset = Input(AsyncReset())
 
   val MRxClk              = Input(Bool())
   val RxCrcError          = Input(Bool())
@@ -63,7 +63,7 @@ class MacStatusIO extends Bundle{
 class MacStatus extends RawModule{
   val io: MacStatusIO = IO(new MacStatusIO)
 
-  withClockAndReset( io.MRxClk.asClock, io.reset ) {
+  withClockAndReset( io.MRxClk.asClock, io.asyncReset ) {
 
     val LatchedCrcError = RegInit(false.B); io.LatchedCrcError := LatchedCrcError // Crc error
 
@@ -149,7 +149,7 @@ class MacStatus extends RawModule{
 
 
 
-  withClockAndReset( io.MTxClk.asClock, io.reset ) {
+  withClockAndReset( io.MTxClk.asClock, io.asyncReset ) {
     val RetryCntLatched = RegEnable( io.RetryCnt, 0.U(4.W), io.StartTxDone | io.StartTxAbort); io.RetryCntLatched := RetryCntLatched
     val RetryLimit      = RegEnable( io.MaxCollisionOccured, false.B, io.StartTxDone | io.StartTxAbort ); io.RetryLimit := RetryLimit // Latched Retransmission limit
     val LateCollLatched = RegEnable( io.LateCollision, false.B, io.StartTxDone | io.StartTxAbort); io.LateCollLatched := LateCollLatched // Latched Late Collision

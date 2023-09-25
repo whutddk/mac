@@ -69,6 +69,7 @@ class MacIO extends Bundle with MDIO{
   // val int_o = Output(Bool())
 
   val isLoopBack = Output(Bool())
+  val asyncReset = Input(AsyncReset())
 }
 
 class MacImp(outer: Mac)(implicit p: Parameters) extends LazyModuleImp(outer) with HasMacParameters{
@@ -439,8 +440,8 @@ val maccontrol = Module(new MacControl)
 
 maccontrol.io.MTxClk                     := io.mtx_clk_pad_i
 maccontrol.io.MRxClk                     := io.mrx_clk_pad_i
-maccontrol.io.TxReset                    := reset.asBool
-maccontrol.io.RxReset                    := reset.asBool
+maccontrol.io.asyncReset                 := io.asyncReset
+
 maccontrol.io.TPauseRq                   := TPauseRq
 maccontrol.io.TxDataIn                   := TxData
 maccontrol.io.TxStartFrmIn               := TxStartFrm
@@ -507,9 +508,8 @@ MRxErr_Lb := Mux(r_LoopBck, io.mtxerr_pad_o, io.mrxerr_pad_i & RxEnSync)
 MRxD_Lb := Mux(r_LoopBck, io.mtxd_pad_o, io.mrxd_pad_i)
 
 
-val txethmac = Module(new MacTx)
-txethmac.clock := io.mtx_clk_pad_i.asClock
-txethmac.reset := reset.asBool
+val txethmac = withClockAndReset(io.mtx_clk_pad_i.asClock, io.asyncReset)( Module(new MacTx))
+
 txethmac.io.TxStartFrm      := TxStartFrmOut
 txethmac.io.TxEndFrm        := TxEndFrmOut
 txethmac.io.TxUnderRun      := TxUnderRun
@@ -576,9 +576,8 @@ dontTouch(RxStateSFD       )
 dontTouch(RxStateData      )
 dontTouch(AddressMiss      )
 
-val rxethmac = Module(new MacRx)
-  rxethmac.clock := io.mrx_clk_pad_i.asClock
-  rxethmac.reset := reset.asBool
+val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Module(new MacRx))
+
   rxethmac.io.MRxDV               := MRxDV_Lb
   rxethmac.io.MRxD                := MRxD_Lb
   rxethmac.io.Transmitting        := Transmitting
@@ -611,7 +610,7 @@ val rxethmac = Module(new MacRx)
   AddressMiss       := rxethmac.io.AddressMiss
 
 
-  withClockAndReset( io.mtx_clk_pad_i.asClock, reset ) {
+  withClockAndReset( io.mtx_clk_pad_i.asClock, reset.asAsyncReset ) {
     // MII Carrier Sense Synchronization
     CarrierSense_Tx2 := ShiftRegister(io.mcrs_pad_i, 2, false.B, true.B)
 
@@ -635,7 +634,7 @@ val rxethmac = Module(new MacRx)
 
 
 
-  withClockAndReset( io.mrx_clk_pad_i.asClock, reset ) {
+  withClockAndReset( io.mrx_clk_pad_i.asClock, reset.asAsyncReset ) {
     val WillTransmit_q = ShiftRegister(WillTransmit, 2, false.B, true.B)
 
     Transmitting := ~r_FullD & WillTransmit_q
@@ -653,7 +652,7 @@ val rxethmac = Module(new MacRx)
   }
 
 
-  withClockAndReset( io.mtx_clk_pad_i.asClock, reset ) {
+  withClockAndReset( io.mtx_clk_pad_i.asClock, reset.asAsyncReset ) {
     val TxPauseRq_sync = ShiftRegisters((r_TxPauseRq & r_TxFlow), 3, false.B, true.B )
 
     TPauseRq := RegNext( TxPauseRq_sync(1) & (~TxPauseRq_sync(2)), false.B )
@@ -667,7 +666,7 @@ val rxethmac = Module(new MacRx)
   val RxAbort_latch_wire = Wire(Bool())
   val RxAbort_wb = ShiftRegister( RxAbort_latch_wire, 2, false.B, true.B )
 
-  withClockAndReset( io.mrx_clk_pad_i.asClock, reset ) {
+  withClockAndReset( io.mrx_clk_pad_i.asClock, reset.asAsyncReset ) {
     val RxAbort_latch = RegInit(false.B); RxAbort_latch_wire := RxAbort_latch
     val RxAbortRst = ShiftRegister( RxAbort_wb, 2, false.B, true.B )
     
@@ -684,6 +683,7 @@ val rxethmac = Module(new MacRx)
 
 
   val wishbone = Module(new MacTileLink(slv_edge, mst_edge))
+    wishbone.io.asyncReset := io.asyncReset
 
     wishbone.io.tlSlv.A.valid := slv_bus.a.valid 
     wishbone.io.tlSlv.A.bits  := slv_bus.a.bits 
@@ -759,7 +759,7 @@ val rxethmac = Module(new MacRx)
 
   val macstatus = Module(new MacStatus)
 
-  macstatus.io.reset               := reset.asBool
+  macstatus.io.asyncReset          := io.asyncReset
   macstatus.io.MRxClk              := io.mrx_clk_pad_i
   macstatus.io.RxCrcError          := RxCrcError
   macstatus.io.MRxErr              := MRxErr_Lb

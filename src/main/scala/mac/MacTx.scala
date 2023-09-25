@@ -46,7 +46,7 @@ class MacTxIO extends Bundle{
   val StateData          = Output(UInt(2.W))    
 }
 
-abstract class MacTxBase extends Module{
+abstract class MacTxBase extends Module with RequireAsyncReset{
   val io: MacTxIO = IO(new MacTxIO)
 
 

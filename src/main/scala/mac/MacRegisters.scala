@@ -72,6 +72,7 @@ class MacRegIO extends Bundle{
   val r_TxPauseTV = Output(UInt(16.W))
   val r_TxPauseRq = Output(Bool())
 
+  val asyncReset = Input(AsyncReset())
 }
 
 class MacReg(implicit p: Parameters) extends LazyModule{
@@ -417,7 +418,7 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
 
 
 
-    withClockAndReset( io.TxClk.asClock, reset ) {
+    withClockAndReset( io.TxClk.asClock, io.asyncReset ) {
       // val ResetTxCIrq_sync1 = Reg(Bool())
       val ResetTxCIrq_sync2 = RegNext(SetTxCIrq_sync1, false.B)
       val SetTxCIrq_txclk   = RegInit(false.B); SetTxCIrq_txclk_wire := SetTxCIrq_txclk
@@ -432,7 +433,7 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
     }
 
 
-    withClockAndReset( io.RxClk.asClock, reset ) {
+    withClockAndReset( io.RxClk.asClock, io.asyncReset ) {
       val ResetRxCIrq_sync1 = RegNext(SetRxCIrq_sync2, false.B)
       val ResetRxCIrq_sync2 = RegNext(ResetRxCIrq_sync1, false.B)
       val ResetRxCIrq_sync3 = RegNext(ResetRxCIrq_sync2, false.B)

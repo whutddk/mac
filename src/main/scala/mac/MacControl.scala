@@ -6,8 +6,9 @@ import chisel3.util._
 class MacControlIO extends Bundle{
 val MTxClk                     = Input(Bool())             // Transmit clock (from PHY)
 val MRxClk                     = Input(Bool())             // Receive clock (from PHY)
-val TxReset                    = Input(Bool())             // Transmit reset
-val RxReset                    = Input(Bool())             // Receive reset
+
+val asyncReset = Input(AsyncReset())
+
 val TPauseRq                   = Input(Bool())             // Transmit control frame (from host)
 val TxDataIn                   = Input(UInt(8.W))          // Transmit packet data byte (from host)
 val TxStartFrmIn               = Input(Bool())             // Transmit packet start frame input (from host)
@@ -96,7 +97,7 @@ class MacControl extends RawModule{
 
 
 
-  withClockAndReset( io.MTxClk.asClock, io.TxReset ) {
+  withClockAndReset( io.MTxClk.asClock, io.asyncReset ) {
     val BlockTxDone = RegInit(false.B)
     val SendingCtrlFrm = RegInit(false.B)         // Sending Control Frame (enables padding and CRC)  
     val CtrlMux = RegInit(false.B)
@@ -193,7 +194,7 @@ class MacControl extends RawModule{
     }
 
     val IncrementDlyCrcCnt = CtrlMux & io.TxUsedDataIn & ~DlyCrcCnt.extract(2)
-    val ResetByteCnt = io.TxReset | (~TxCtrlStartFrm & (io.TxDoneIn | io.TxAbortIn))
+    val ResetByteCnt = io.asyncReset.asBool | (~TxCtrlStartFrm & (io.TxDoneIn | io.TxAbortIn))
 
     // Delayed CRC counter
     when(ResetByteCnt){
@@ -277,7 +278,7 @@ class MacControl extends RawModule{
 
 
 
-  withClockAndReset( io.MRxClk.asClock, io.RxReset ) {
+  withClockAndReset( io.MRxClk.asClock, io.asyncReset.asAsyncReset ) {
     val AddressOK = RegInit(false.B); io.ControlFrmAddressOK := AddressOK                // Multicast or unicast address detected 
     val TypeLengthOK = RegInit(false.B)             // Type/Length field contains 0x8808
     val DetectionWindow = RegInit(true.B)           // Detection of the PAUSE frame is possible within this window
@@ -411,7 +412,7 @@ class MacControl extends RawModule{
 
     val SlotTimer = RegInit(0.U(6.W))  // SlotTimer
 
-    when(io.RxReset){
+    when(io.asyncReset.asBool()){
       SlotTimer := 0.U
     } .elsewhen(Pause_wire & io.RxFlow & Divider2){
       SlotTimer :=  SlotTimer + 1.U

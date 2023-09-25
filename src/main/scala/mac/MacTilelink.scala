@@ -88,7 +88,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
     val RxE_IRQ  = Output(Bool())
     val Busy_IRQ = Output(Bool())
 
-
+    val asyncReset = Input(AsyncReset())
   }
 
 
@@ -1140,7 +1140,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 trait MacTileLinkTXClk{ this: MacTileLinkBase =>
-  withClockAndReset( io.MTxClk.asClock, reset.asAsyncReset ) {
+  withClockAndReset( io.MTxClk.asClock, io.asyncReset ) {
 
     val Flop = RegInit(false.B)
     // Synchronizing BlockingTxStatusWrite to MTxClk
@@ -1313,7 +1313,7 @@ trait MacTileLinkTXClk{ this: MacTileLinkBase =>
 
 trait MacTileLinkRXClk{ this: MacTileLinkBase =>
 
-  withClockAndReset( io.MRxClk.asClock, reset.asAsyncReset ){
+  withClockAndReset( io.MRxClk.asClock, io.asyncReset ){
 
     val RxDataLatched2 = RegInit(0.U(32.W)); RxDataLatched2_rxclk := RxDataLatched2
     val RxDataLatched1 = RegInit(0.U(24.W))     // Little Endian Byte Ordering[23:0] 
