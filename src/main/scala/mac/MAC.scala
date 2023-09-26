@@ -322,7 +322,7 @@ dontTouch(CarrierSenseLost           )
 
 
 
-
+outer.ethReg.module.io.asyncReset          := io.asyncReset
 outer.ethReg.module.io.WCtrlDataStart      := WCtrlDataStart
 outer.ethReg.module.io.RStatStart          := RStatStart
 outer.ethReg.module.io.UpdateMIIRX_DATAReg := UpdateMIIRX_DATAReg
