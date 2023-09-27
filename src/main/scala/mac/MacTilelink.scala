@@ -854,10 +854,10 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
   }
 
   RxByteSel := Mux1H(Seq(
-    (RxPointerLSB_rst === 0.U) -> "hf".U,
-    (RxPointerLSB_rst === 1.U) -> "h7".U,
-    (RxPointerLSB_rst === 2.U) -> "h3".U,
-    (RxPointerLSB_rst === 3.U) -> "h1".U,
+    (RxPointerLSB_rst === 0.U) -> "b1111".U,
+    (RxPointerLSB_rst === 1.U) -> "b1110".U,
+    (RxPointerLSB_rst === 2.U) -> "b1100".U,
+    (RxPointerLSB_rst === 3.U) -> "b1000".U,
   ))
 
 
