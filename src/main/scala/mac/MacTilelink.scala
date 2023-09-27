@@ -264,10 +264,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
   val TxPointerMSB = RegInit(0.U(30.W)) //[31:2]
-  val TxPointerLSB = RegInit(0.U(2.W))
-  val TxPointerLSB_rst = RegInit(0.U(2.W))
   val RxPointerMSB = RegInit(0.U(30.W)) //[31:2]
-  val RxPointerLSB_rst = RegInit(0.U(2.W))
 
 
 
@@ -276,7 +273,6 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
   val cyc_cleared = RegInit(false.B)
 
-  val RxByteSel = Wire(UInt(4.W))
 
 
 
@@ -475,14 +471,8 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
   .elsewhen( MasterWbTX & io.tlMst.D.fire ){ //tx tileRead
     when( TxLength < 4.U ){
       TxLength := 0.U
-    } .elsewhen(TxPointerLSB_rst === 0.U){
+    } .otherwise{
       TxLength := TxLength - 4.U    // Length is subtracted at the data request
-    } .elsewhen(TxPointerLSB_rst === 1.U){
-      TxLength := TxLength - 3.U    // Length is subtracted at the data request
-    } .elsewhen(TxPointerLSB_rst === 2.U){
-      TxLength := TxLength - 2.U    // Length is subtracted at the data request
-    } .elsewhen(TxPointerLSB_rst === 3.U){
-      TxLength := TxLength - 1.U    // Length is subtracted at the data request
     }
   }
 
@@ -498,18 +488,13 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
   when(stateNxt === StateTX & stateCur === StateTX & TxPointerRead){
     TxPointerMSB := ram_do(31,2)  // Latching Tx buffer pointer from buffer descriptor. Only 30 MSB bits are latched because TxPointerMSB is only used for word-aligned accesses.
-    TxPointerLSB := ram_do(1,0)   // Latching 2 MSB bits of the buffer descriptor. Since word accesses are performed, valid data does not necesserly start at byte 0 (could be byte 0, 1, 2 or 3). This signals are used for proper selection of the star byte (TxData and TxByteCnt) are set by this two bits.
+    when( ram_do(1,0) =/= 0.U ){
+      printf("Warning, force to align at tx ram")
+    }
   } .elsewhen( io.tlMst.D.fire & io.tlMst.D.bits.opcode === 1.U ){
     TxPointerMSB := TxPointerMSB + 1.U // TxPointer is word-aligned
   }
     
-
-  // Latching 2 MSB bits of the buffer descriptor.  After the read access, TxLength needs to be decremented for the number of the valid bytes (1 to 4 bytes are valid in the first word). After the first read all bytes are valid so this two bits are reset to zero. 
-  when(stateNxt === StateTX & stateCur === StateTX & TxPointerRead){
-    TxPointerLSB_rst := ram_do(1,0)    
-  } .elsewhen( MasterWbTX & io.tlMst.D.fire ){ // After first access pointer is word alligned
-    TxPointerLSB_rst := 0.U
-  }
 
 
   val isTlMstBusy = RegInit(false.B)
@@ -846,19 +831,6 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
     RxPointerMSB := RxPointerMSB + 1.U // Word access (always word access. m_wb_sel_o are used for selecting bytes)
   }
 
-  //Latching last addresses from buffer descriptor (used as byte-half-word indicator);
-  when(MasterWbRX & io.tlMst.A.fire ){// After first write all RxByteSel are active
-    RxPointerLSB_rst := 0.U
-  } .elsewhen(stateNxt === StateRX & stateCur === StateRX & RxPointerRead){
-    RxPointerLSB_rst := ram_do(1,0)    
-  }
-
-  RxByteSel := Mux1H(Seq(
-    (RxPointerLSB_rst === 0.U) -> "b1111".U,
-    (RxPointerLSB_rst === 1.U) -> "b1110".U,
-    (RxPointerLSB_rst === 2.U) -> "b1100".U,
-    (RxPointerLSB_rst === 3.U) -> "b1000".U,
-  ))
 
 
   when(~RxReady & io.r_RxEn & stateNxt === StateWB & stateCur =/= StateWB){
@@ -884,9 +856,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
   val ShiftWillEnd_rxclk = Wire(Bool())
   val SetWriteRxDataToFifo =
     (io.RxValid & RxReady & ~io.RxStartFrm & RxEnableWindow_rxclk & (RxByteCnt_rxclk.andR)) |
-    (io.RxValid & RxReady &  io.RxStartFrm & (RxPointerLSB_rst.andR)) |
     (ShiftWillEnd_rxclk & LastByteIn_rxclk & (RxByteCnt_rxclk.andR))
-
 
   val WriteRxDataToFifo_wb  = WriteRxDataToFifoSync(1) & ~WriteRxDataToFifoSync(2)
   val RxFifoReset = SyncRxStartFrm(1) & ~SyncRxStartFrm(2)
@@ -1074,7 +1044,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
         toAddress = RxPointerMSB << 2,
         lgSize = log2Ceil(32/8).U,
         data = rx_fifo.io.data_out,
-        mask = RxByteSel,
+        mask = "b1111".U,
       )._2
   }
   .elsewhen( MasterWbTX & ~isTlMstBusy ){
@@ -1222,14 +1192,7 @@ trait MacTileLinkTXClk{ this: MacTileLinkBase =>
 
     // Tx data selection (latching)
     when( TxStartFrm_sync & ~TxStartFrm ){
-      TxData := Mux1H(Seq(
-        ( TxPointerLSB === 0.U ) -> TxData_wb( 7, 0),// little Endian Byte Ordering
-        ( TxPointerLSB === 1.U ) -> TxData_wb(15, 8),// little Endian Byte Ordering
-        ( TxPointerLSB === 2.U ) -> TxData_wb(23,16),// little Endian Byte Ordering
-        ( TxPointerLSB === 3.U ) -> TxData_wb(31,24),// little Endian Byte Ordering
-      ))     
-    } .elsewhen( TxStartFrm & io.TxUsedData & TxPointerLSB === 3.U ){
-      TxData := TxData_wb( 7, 0) // little Endian Byte Ordering        
+      TxData := TxData_wb( 7, 0) // little Endian Byte Ordering
     } .elsewhen(io.TxUsedData & Flop){
       TxData := Mux1H(Seq(
         (TxByteCnt === 0.U) -> TxDataLatched( 7, 0),// little Endian Byte Ordering
@@ -1273,12 +1236,7 @@ trait MacTileLinkTXClk{ this: MacTileLinkBase =>
     when(TxAbort_q | TxRetry_q){
       TxByteCnt := 0.U
     } .elsewhen(TxStartFrm & ~io.TxUsedData){
-      TxByteCnt := Mux1H(Seq(
-        ( TxPointerLSB === 0.U ) -> 1.U,
-        ( TxPointerLSB === 1.U ) -> 2.U,
-        ( TxPointerLSB === 2.U ) -> 3.U,
-        ( TxPointerLSB === 3.U ) -> 0.U,
-      ))
+      TxByteCnt := 1.U
     } .elsewhen(io.TxUsedData & Flop){
       TxByteCnt := TxByteCnt + 1.U
     }
@@ -1372,36 +1330,21 @@ trait MacTileLinkRXClk{ this: MacTileLinkBase =>
     when(ShiftEnded_rck | io.RxAbort){
       RxByteCnt := 0.U
     } .elsewhen(io.RxValid & io.RxStartFrm & RxReady){
-      RxByteCnt := Mux1H(Seq(
-        ( RxPointerLSB_rst === 0.U ) -> 1.U,
-        ( RxPointerLSB_rst === 1.U ) -> 2.U,
-        ( RxPointerLSB_rst === 2.U ) -> 3.U,
-        ( RxPointerLSB_rst === 3.U ) -> 0.U,
-      ))       
+      RxByteCnt := 1.U     
     } .elsewhen(io.RxValid & RxEnableWindow & RxReady | LastByteIn){
       RxByteCnt := RxByteCnt + 1.U
     }
 
     // Indicates how many bytes are valid within the last word
     when(io.RxValid & io.RxStartFrm){
-      RxValidBytes := Mux1H(Seq(
-        ( RxPointerLSB_rst === 0.U ) -> 1.U,
-        ( RxPointerLSB_rst === 1.U ) -> 2.U,
-        ( RxPointerLSB_rst === 2.U ) -> 3.U,
-        ( RxPointerLSB_rst === 3.U ) -> 0.U,
-      ))
+      RxValidBytes := 1.U
     } .elsewhen(io.RxValid & ~LastByteIn & ~io.RxStartFrm & RxEnableWindow){
       RxValidBytes := RxValidBytes + 1.U        
     }
 
     when(io.RxValid & RxReady & ~LastByteIn){
       when(io.RxStartFrm){
-        RxDataLatched1 := Mux1H(Seq(
-          ( RxPointerLSB_rst === 0.U ) -> Cat(RxDataLatched1(23, 8), io.RxData),// Little Endian Byte Ordering
-          ( RxPointerLSB_rst === 1.U ) -> Cat(RxDataLatched1(23,16), io.RxData, RxDataLatched1( 7,0)),
-          ( RxPointerLSB_rst === 2.U ) -> Cat(                       io.RxData, RxDataLatched1(15,0)),
-          ( RxPointerLSB_rst === 3.U ) -> RxDataLatched1,
-        ))
+        RxDataLatched1 := Cat(RxDataLatched1(23, 8), io.RxData)// Little Endian Byte Ordering
       } .elsewhen(RxEnableWindow){
         RxDataLatched1 := Mux1H(Seq(
           ( RxByteCnt === 0.U ) -> Cat(RxDataLatched1(23, 8), io.RxData),// Little Endian Byte Ordering
