@@ -443,9 +443,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-  val BlockingTxStatusWrite_sync2_txclk = Wire(Bool())
-  val BlockingTxStatusWrite_sync3_txclk = Wire(Bool())
-  io.RstDeferLatched := BlockingTxStatusWrite_sync2_txclk & ~BlockingTxStatusWrite_sync3_txclk
+
 
   // TxBDRead state is activated only once. 
   when(StartTxBDRead){
@@ -1110,147 +1108,299 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
+class MacTileLinkTXIO extends Bundle{
+  val BlockingTxStatusWrite_sync = Input(Bool())
+  val TxStartFrm_sync            = Input(Bool())
+
+  val TxStartFrm     = Output(Bool())     // Transmit packet start frame
+  val TxEndFrm       = Output(Bool())     // Transmit packet end frame
+  val TxData         = Output(UInt(8.W))  // Transmit packet data byte
+  val TxUnderRun     = Output(Bool())     // Transmit packet under-run
+
+  val TxUsedData     = Input(Bool())      // Transmit packet used data
+  val TxRetry        = Input(Bool())      // Transmit packet retry
+  val TxAbort        = Input(Bool())      // Transmit packet abort
+  val TxDone         = Input(Bool())      // Transmission ended
+
+  val ReadTxDataFromFifo_tck = Output(Bool())
+  val ReadTxDataFromFifo_syncb = Output(Bool())
+
+  val TxEndFrm_wb = Input(Bool())
+  val TxValidBytesLatched = Input(UInt(2.U))
+  val TxData_wb = Input(UInt(32.W))
+  val TxUnderRun_wb = Input(Bool())
+}
 
 
 
+  val macTileLinkTX = Module(new MacTileLinkTX)
+  macTileLinkTX.clock := io.MTxClk.asClock
+  macTileLinkTX.reset := io.asyncReset
+
+  macTileLinkTX.io.BlockingTxStatusWrite_sync := ShiftRegister(BlockingTxStatusWrite, 2, false.B, true.B)
+  macTileLinkTX.io.TxStartFrm_sync            := ShiftRegister( TxStartFrm_wb, 2, false.B, true.B ); TxStartFrm_sync_txclk := TxStartFrm_sync// Synchronizing TxStartFrm_wb to MTxClk
+  macTileLinkTX.io.ReadTxDataFromFifo_syncb   := ShiftRegister(ReadTxDataFromFifo_sync(1), 2, false.B, true.B)
+
+
+  io.TxStartFrm := macTileLinkTX.io.TxStartFrm
+  io.TxEndFrm   := macTileLinkTX.io.TxEndFrm
+  io.TxData     := macTileLinkTX.io.TxData
+  io.TxUnderRun := macTileLinkTX.io.TxUnderRun
+
+  macTileLinkTX.io.TxUsedData := io.TxUsedData
+  macTileLinkTX.io.TxRetry    := io.TxRetry
+  macTileLinkTX.io.TxAbort    := io.TxAbort
+  macTileLinkTX.io.TxDone     := io.TxDone
 
 
 
+class MacTileLinkTX extends Module with RequireAsyncReset{
+  val io = IO(new MacTileLinkTXIO)
 
 
 
+  io.RstDeferLatched := BlockingTxStatusWrite_sync & ~RegNext(io.BlockingTxStatusWrite_sync, false.B)
 
+  val TxStartFrm = RegInit(false.B);  io.TxStartFrm := TxStartFrm
+  val TxEndFrm   = RegInit(false.B);  io.TxEndFrm   := TxEndFrm
+  val TxData     = RegInit(0.U(8.W)); io.TxData     := TxData
+  val TxUnderRun = RegInit(false.B);  io.TxUnderRun := TxUnderRun
+  val TxDataLatched = RegInit(0.U(32.W))
+  val TxByteCnt = RegInit(0.U(2.W))
+  val LastWord = RegInit(false.B)
+  val ReadTxDataFromFifo_tck = RegInit(false.B); io.ReadTxDataFromFifo_tck := ReadTxDataFromFifo_tck
 
+  // Generating delayed signals
+  val TxAbort_q    = RegNext( io.TxAbort, false.B)
+  val TxRetry_q    = RegNext( io.TxRetry, false.B)
+  val TxUsedData_q = RegNext( io.TxUsedData, false.B)
 
+  // Changes for tx occur every second clock. Flop is used for this manner.
+  val Flop = RegInit(false.B)
+  when( io.TxDone | io.TxAbort | TxRetry_q){
+    Flop := false.B
+  } .elsewhen ( io.TxUsedData ){
+    Flop := ~Flop
+  }
+  
+  when(io.TxStartFrm_sync){
+    TxStartFrm := true.B
+  } .elsewhen(TxUsedData_q | ~io.TxStartFrm_sync & (io.TxRetry & (~TxRetry_q) | io.TxAbort & (~TxAbort_q))){
+    TxStartFrm := false.B
+  }
 
+  // Indication of the last word
+  when( (TxEndFrm | io.TxAbort | io.TxRetry) & Flop ){
+    LastWord := false.B
+  } .elsewhen( io.TxUsedData & Flop & TxByteCnt === 3.U ){
+    LastWord := io.TxEndFrm_wb
+  }
+
+  // Tx end frame generation
+  when(Flop & TxEndFrm | io.TxAbort | TxRetry_q){
+    TxEndFrm := false.B
+  } .elsewhen(Flop & LastWord){
+    TxEndFrm := 
+      Mux1H(Seq(
+        (io.TxValidBytesLatched === 1.U) -> (TxByteCnt === 0.U),
+        (io.TxValidBytesLatched === 2.U) -> (TxByteCnt === 1.U),
+        (io.TxValidBytesLatched === 3.U) -> (TxByteCnt === 2.U),
+        (io.TxValidBytesLatched === 0.U) -> (TxByteCnt === 3.U),
+      ))  
+  }
+
+  // Tx data selection (latching)
+  when( io.TxStartFrm_sync & ~TxStartFrm ){
+    TxData := io.TxData_wb( 7, 0) // little Endian Byte Ordering
+  } .elsewhen(io.TxUsedData & Flop){
+    TxData := Mux1H(Seq(
+      (TxByteCnt === 0.U) -> TxDataLatched( 7, 0),// little Endian Byte Ordering
+      (TxByteCnt === 1.U) -> TxDataLatched(15, 8),
+      (TxByteCnt === 2.U) -> TxDataLatched(23,16),
+      (TxByteCnt === 3.U) -> TxDataLatched(31,24),
+    ))
+  }
+
+  // Latching tx data
+  when(
+    io.TxStartFrm_sync & ~TxStartFrm |
+    io.TxUsedData & Flop & TxByteCnt === 3.U |
+    TxStartFrm & io.TxUsedData & Flop & TxByteCnt === 0.U){
+    TxDataLatched := io.TxData_wb
+  }
+
+  val TxUnderRun_sync1 = RegInit(false.B)
+
+  // Tx under run
+  when(io.TxUnderRun_wb){
+    TxUnderRun_sync1 := true.B
+  } .elsewhen(io.BlockingTxStatusWrite_sync){
+    TxUnderRun_sync1 := false.B
+  }
+
+  // Tx under run
+  when(io.BlockingTxStatusWrite_sync){
+    TxUnderRun := false.B
+  } .elsewhen(TxUnderRun_sync1){
+    TxUnderRun := true.B
+  }
+
+  // Tx Byte counter
+  when(TxAbort_q | TxRetry_q){
+    TxByteCnt := 0.U
+  } .elsewhen(TxStartFrm & ~io.TxUsedData){
+    TxByteCnt := 1.U
+  } .elsewhen(io.TxUsedData & Flop){
+    TxByteCnt := TxByteCnt + 1.U
+  }
+
+  when(io.TxStartFrm_sync & ~TxStartFrm | io.TxUsedData & Flop & TxByteCnt === 3.U &
+    ~LastWord | TxStartFrm & io.TxUsedData & Flop & TxByteCnt === 0.U ){
+    ReadTxDataFromFifo_tck := true.B
+  } .elsewhen(ReadTxDataFromFifo_syncb & ~RegNext(ReadTxDataFromFifo_syncb, false.B)){
+    ReadTxDataFromFifo_tck := false.B
+  }
+
+}
 
 
 
 trait MacTileLinkTXClk{ this: MacTileLinkBase =>
   withClockAndReset( io.MTxClk.asClock, io.asyncReset ) {
 
-    val Flop = RegInit(false.B)
-    // Synchronizing BlockingTxStatusWrite to MTxClk
-    val BlockingTxStatusWrite_sync1 = RegNext(BlockingTxStatusWrite, false.B)
-    val BlockingTxStatusWrite_sync2 = RegNext(BlockingTxStatusWrite_sync1, false.B); BlockingTxStatusWrite_sync2_txclk := BlockingTxStatusWrite_sync2
-    val BlockingTxStatusWrite_sync3 = RegNext(BlockingTxStatusWrite_sync2, false.B); BlockingTxStatusWrite_sync3_txclk := BlockingTxStatusWrite_sync3
-
-    // Synchronizing TxStartFrm_wb to MTxClk
-    val TxStartFrm_sync = ShiftRegister( TxStartFrm_wb, 2, false.B, true.B ); TxStartFrm_sync_txclk := TxStartFrm_sync
-
-    val TxStartFrm = RegInit(false.B);   io.TxStartFrm := TxStartFrm
-    val TxEndFrm   = RegInit(false.B);   io.TxEndFrm   := TxEndFrm
-    val TxData     = RegInit(0.U(8.W)); io.TxData := TxData
-    val TxUnderRun = RegInit(false.B); io.TxUnderRun := TxUnderRun
-    val TxDataLatched = RegInit(0.U(32.W))
-    val TxByteCnt = RegInit(0.U(2.W))
-    val LastWord = RegInit(false.B)
-    val ReadTxDataFromFifo_tck = RegInit(false.B); ReadTxDataFromFifo_tck_txclk := ReadTxDataFromFifo_tck
-
-    // Generating delayed signals
-    val TxAbort_q    = RegNext( io.TxAbort, false.B)
-    val TxRetry_q    = RegNext( io.TxRetry, false.B)
-    val TxUsedData_q = RegNext( io.TxUsedData, false.B)
-
-    val ReadTxDataFromFifo_syncb = ShiftRegisters(ReadTxDataFromFifo_sync(1), 3, false.B, true.B)
-
-    // Changes for tx occur every second clock. Flop is used for this manner.
-    when( io.TxDone | io.TxAbort | TxRetry_q){
-      Flop := false.B
-    } .elsewhen ( io.TxUsedData ){
-      Flop := ~Flop
-    }
-
-    when(TxStartFrm_sync){
-      TxStartFrm := true.B
-    } .elsewhen(TxUsedData_q | ~TxStartFrm_sync & (io.TxRetry & (~TxRetry_q) | io.TxAbort & (~TxAbort_q))){
-      TxStartFrm := false.B
-    }
-
-
-    // Indication of the last word
-    when( (TxEndFrm | io.TxAbort | io.TxRetry) & Flop ){
-      LastWord := false.B
-    } .elsewhen( io.TxUsedData & Flop & TxByteCnt === 3.U ){
-      LastWord := TxEndFrm_wb
-    }
-
-    // Tx end frame generation
-    when(Flop & TxEndFrm | io.TxAbort | TxRetry_q){
-      TxEndFrm := false.B
-    } .elsewhen(Flop & LastWord){
-      TxEndFrm := 
-        Mux1H(Seq(
-          (TxValidBytesLatched === 1.U) -> (TxByteCnt === 0.U),
-          (TxValidBytesLatched === 2.U) -> (TxByteCnt === 1.U),
-          (TxValidBytesLatched === 3.U) -> (TxByteCnt === 2.U),
-          (TxValidBytesLatched === 0.U) -> (TxByteCnt === 3.U),
-        ))  
-    }
-
-
-
-    // Tx data selection (latching)
-    when( TxStartFrm_sync & ~TxStartFrm ){
-      TxData := TxData_wb( 7, 0) // little Endian Byte Ordering
-    } .elsewhen(io.TxUsedData & Flop){
-      TxData := Mux1H(Seq(
-        (TxByteCnt === 0.U) -> TxDataLatched( 7, 0),// little Endian Byte Ordering
-        (TxByteCnt === 1.U) -> TxDataLatched(15, 8),
-        (TxByteCnt === 2.U) -> TxDataLatched(23,16),
-        (TxByteCnt === 3.U) -> TxDataLatched(31,24),
-      ))
-    }
-
-
-
-    // Latching tx data
-    when(
-      TxStartFrm_sync & ~TxStartFrm |
-      io.TxUsedData & Flop & TxByteCnt === 3.U |
-      TxStartFrm & io.TxUsedData & Flop & TxByteCnt === 0.U){
-      TxDataLatched := TxData_wb
-    }
-
-
-    val TxUnderRun_sync1 = RegInit(false.B)
-
-    // Tx under run
-    when(TxUnderRun_wb){
-      TxUnderRun_sync1 := true.B
-    } .elsewhen(BlockingTxStatusWrite_sync2){
-      TxUnderRun_sync1 := false.B
-    }
-
-
-    // Tx under run
-    when(BlockingTxStatusWrite_sync2){
-      TxUnderRun := false.B
-    } .elsewhen(TxUnderRun_sync1){
-      TxUnderRun := true.B
-    }
-
-
-
-    // Tx Byte counter
-    when(TxAbort_q | TxRetry_q){
-      TxByteCnt := 0.U
-    } .elsewhen(TxStartFrm & ~io.TxUsedData){
-      TxByteCnt := 1.U
-    } .elsewhen(io.TxUsedData & Flop){
-      TxByteCnt := TxByteCnt + 1.U
-    }
-
-    when(TxStartFrm_sync & ~TxStartFrm | io.TxUsedData & Flop & TxByteCnt === 3.U &
-      ~LastWord | TxStartFrm & io.TxUsedData & Flop & TxByteCnt === 0.U ){
-      ReadTxDataFromFifo_tck := true.B
-    } .elsewhen(ReadTxDataFromFifo_syncb(1) & ~ReadTxDataFromFifo_syncb(2)){
-      ReadTxDataFromFifo_tck := false.B
-    }
-
-
   }
 }
+
+
+
+
+
+// trait MacTileLinkTXClk{ this: MacTileLinkBase =>
+//   withClockAndReset( io.MTxClk.asClock, io.asyncReset ) {
+
+//     val Flop = RegInit(false.B)
+    
+//     val BlockingTxStatusWrite_sync = ShiftRegisters(BlockingTxStatusWrite, 3, false.B, true.B) // Synchronizing BlockingTxStatusWrite to MTxClk
+
+//     io.RstDeferLatched := BlockingTxStatusWrite_sync(1) & ~BlockingTxStatusWrite_sync(2)
+
+
+    
+//     val TxStartFrm_sync = ShiftRegister( TxStartFrm_wb, 2, false.B, true.B ); TxStartFrm_sync_txclk := TxStartFrm_sync// Synchronizing TxStartFrm_wb to MTxClk
+
+//     val TxStartFrm = RegInit(false.B);   io.TxStartFrm := TxStartFrm
+//     val TxEndFrm   = RegInit(false.B);   io.TxEndFrm   := TxEndFrm
+//     val TxData     = RegInit(0.U(8.W));  io.TxData := TxData
+//     val TxUnderRun = RegInit(false.B);   io.TxUnderRun := TxUnderRun
+//     val TxDataLatched = RegInit(0.U(32.W))
+//     val TxByteCnt = RegInit(0.U(2.W))
+//     val LastWord = RegInit(false.B)
+//     val ReadTxDataFromFifo_tck = RegInit(false.B); ReadTxDataFromFifo_tck_txclk := ReadTxDataFromFifo_tck
+
+//     // Generating delayed signals
+//     val TxAbort_q    = RegNext( io.TxAbort, false.B)
+//     val TxRetry_q    = RegNext( io.TxRetry, false.B)
+//     val TxUsedData_q = RegNext( io.TxUsedData, false.B)
+
+//     val ReadTxDataFromFifo_syncb = ShiftRegisters(ReadTxDataFromFifo_sync(1), 3, false.B, true.B)
+
+//     // Changes for tx occur every second clock. Flop is used for this manner.
+//     when( io.TxDone | io.TxAbort | TxRetry_q){
+//       Flop := false.B
+//     } .elsewhen ( io.TxUsedData ){
+//       Flop := ~Flop
+//     }
+
+//     when(TxStartFrm_sync){
+//       TxStartFrm := true.B
+//     } .elsewhen(TxUsedData_q | ~TxStartFrm_sync & (io.TxRetry & (~TxRetry_q) | io.TxAbort & (~TxAbort_q))){
+//       TxStartFrm := false.B
+//     }
+
+
+//     // Indication of the last word
+//     when( (TxEndFrm | io.TxAbort | io.TxRetry) & Flop ){
+//       LastWord := false.B
+//     } .elsewhen( io.TxUsedData & Flop & TxByteCnt === 3.U ){
+//       LastWord := TxEndFrm_wb
+//     }
+
+//     // Tx end frame generation
+//     when(Flop & TxEndFrm | io.TxAbort | TxRetry_q){
+//       TxEndFrm := false.B
+//     } .elsewhen(Flop & LastWord){
+//       TxEndFrm := 
+//         Mux1H(Seq(
+//           (TxValidBytesLatched === 1.U) -> (TxByteCnt === 0.U),
+//           (TxValidBytesLatched === 2.U) -> (TxByteCnt === 1.U),
+//           (TxValidBytesLatched === 3.U) -> (TxByteCnt === 2.U),
+//           (TxValidBytesLatched === 0.U) -> (TxByteCnt === 3.U),
+//         ))  
+//     }
+
+
+
+//     // Tx data selection (latching)
+//     when( TxStartFrm_sync & ~TxStartFrm ){
+//       TxData := TxData_wb( 7, 0) // little Endian Byte Ordering
+//     } .elsewhen(io.TxUsedData & Flop){
+//       TxData := Mux1H(Seq(
+//         (TxByteCnt === 0.U) -> TxDataLatched( 7, 0),// little Endian Byte Ordering
+//         (TxByteCnt === 1.U) -> TxDataLatched(15, 8),
+//         (TxByteCnt === 2.U) -> TxDataLatched(23,16),
+//         (TxByteCnt === 3.U) -> TxDataLatched(31,24),
+//       ))
+//     }
+
+
+
+//     // Latching tx data
+//     when(
+//       TxStartFrm_sync & ~TxStartFrm |
+//       io.TxUsedData & Flop & TxByteCnt === 3.U |
+//       TxStartFrm & io.TxUsedData & Flop & TxByteCnt === 0.U){
+//       TxDataLatched := TxData_wb
+//     }
+
+
+//     val TxUnderRun_sync1 = RegInit(false.B)
+
+//     // Tx under run
+//     when(TxUnderRun_wb){
+//       TxUnderRun_sync1 := true.B
+//     } .elsewhen(BlockingTxStatusWrite_sync(1)){
+//       TxUnderRun_sync1 := false.B
+//     }
+
+
+//     // Tx under run
+//     when(BlockingTxStatusWrite_sync(1)){
+//       TxUnderRun := false.B
+//     } .elsewhen(TxUnderRun_sync1){
+//       TxUnderRun := true.B
+//     }
+
+
+
+//     // Tx Byte counter
+//     when(TxAbort_q | TxRetry_q){
+//       TxByteCnt := 0.U
+//     } .elsewhen(TxStartFrm & ~io.TxUsedData){
+//       TxByteCnt := 1.U
+//     } .elsewhen(io.TxUsedData & Flop){
+//       TxByteCnt := TxByteCnt + 1.U
+//     }
+
+//     when(TxStartFrm_sync & ~TxStartFrm | io.TxUsedData & Flop & TxByteCnt === 3.U &
+//       ~LastWord | TxStartFrm & io.TxUsedData & Flop & TxByteCnt === 0.U ){
+//       ReadTxDataFromFifo_tck := true.B
+//     } .elsewhen(ReadTxDataFromFifo_syncb(1) & ~ReadTxDataFromFifo_syncb(2)){
+//       ReadTxDataFromFifo_tck := false.B
+//     }
+
+
+//   }
+// }
 
 
 
