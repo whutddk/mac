@@ -229,18 +229,18 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
   val RxPointerRead = RegInit(false.B)
 
   // RX shift ending signals
-  val ShiftEnded_rck_txclk = Wire(Bool())
-  val ShiftEndedSync1 = RegNext( ShiftEnded_rck_txclk, false.B)
-  val ShiftEndedSync2 = RegNext( ShiftEndedSync1, false.B)
+  val ShiftEnded_rck_rxclk = Wire(Bool())
+  // val ShiftEndedSync1 = RegNext( ShiftEnded_rck_rxclk, false.B)
+  // val ShiftEndedSync2 = RegNext( ShiftEndedSync1, false.B)
   val ShiftEndedSync3 = RegInit(false.B)
 
+  val ShiftEndedSync = ShiftRegisters( ShiftEnded_rck_rxclk, 2, false.B, true.B )
 
   
 
   val StartOccured      = RegInit(false.B)
-  val TxStartFrm_sync_txclk = Wire(Bool())
-  val TxStartFrm_syncb1 = RegNext(TxStartFrm_sync_txclk, false.B)
-  val TxStartFrm_syncb2 = RegNext(TxStartFrm_syncb1, false.B)
+
+  val TxStartFrm_syncb2 = Wire(Bool())
 
   val TxFifoClear = Wire(Bool())
   val TxBufferAlmostFull = Wire(Bool())
@@ -279,16 +279,13 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
   // Start: Generation of the ReadTxDataFromFifo_tck signal and synchronization to the WB_CLK_I
   val ReadTxDataFromFifo_tck_txclk = Wire(Bool())
-
   val ReadTxDataFromFifo_sync = ShiftRegisters( ReadTxDataFromFifo_tck_txclk, 3, false.B, true.B)
-
 
   val RxAbortLatched_rxclk = Wire(Bool())
   val RxAbortSync = ShiftRegisters( RxAbortLatched_rxclk, 4, false.B, true.B )
 
   val WriteRxDataToFifo_rxclk = Wire(Bool())
   val WriteRxDataToFifoSync = ShiftRegisters(WriteRxDataToFifo_rxclk, 3, false.B, true.B)
-
 
   val LatchedRxStartFrm_rxclk = Wire(Bool())
   val SyncRxStartFrm = ShiftRegisters(LatchedRxStartFrm_rxclk, 3, false.B, true.B)
@@ -844,18 +841,6 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-
-  val LastByteIn_rxclk = Wire(Bool())
-  val RxByteCnt_rxclk  = Wire(UInt(2.W))
-  val RxEnableWindow_rxclk = Wire(Bool())
-  val StartShiftWillEnd = LastByteIn_rxclk | io.RxValid & io.RxEndFrm & RxByteCnt_rxclk.andR & RxEnableWindow_rxclk
-
-  // Indicating start of the reception process
-  val ShiftWillEnd_rxclk = Wire(Bool())
-  val SetWriteRxDataToFifo =
-    (io.RxValid & RxReady & ~io.RxStartFrm & RxEnableWindow_rxclk & (RxByteCnt_rxclk.andR)) |
-    (ShiftWillEnd_rxclk & LastByteIn_rxclk & (RxByteCnt_rxclk.andR))
-
   val WriteRxDataToFifo_wb  = WriteRxDataToFifoSync(1) & ~WriteRxDataToFifoSync(2)
   val RxFifoReset = SyncRxStartFrm(1) & ~SyncRxStartFrm(2)
 
@@ -883,7 +868,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-  when(ShiftEndedSync1 & ~ShiftEndedSync2){
+  when(ShiftEndedSync(0) & ~ShiftEndedSync(1)){
     ShiftEndedSync3 := true.B
   } .elsewhen(ShiftEnded){
     ShiftEndedSync3 := false.B
@@ -1107,8 +1092,91 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 }
 
 
+trait MacTileLinkTXClk{ this: MacTileLinkBase =>
+
+  val macTileLinkTX = withClockAndReset( io.MTxClk.asClock, io.asyncReset ) (Module(new MacTileLinkTX))
+
+  withClockAndReset( io.MTxClk.asClock, io.asyncReset ){
+    macTileLinkTX.io.BlockingTxStatusWrite_sync := ShiftRegister(BlockingTxStatusWrite, 2, false.B, true.B)
+    macTileLinkTX.io.TxStartFrm_sync            := ShiftRegister( TxStartFrm_wb, 2, false.B, true.B ) // Synchronizing TxStartFrm_wb to MTxClk
+    macTileLinkTX.io.ReadTxDataFromFifo_syncb   := ShiftRegister(ReadTxDataFromFifo_sync(1), 2, false.B, true.B)    
+  }
+
+
+  TxStartFrm_syncb2 := ShiftRegister( macTileLinkTX.io.TxStartFrm_sync, 2, false.B, true.B )
+
+  io.RstDeferLatched := macTileLinkTX.io.RstDeferLatched
+  io.TxStartFrm      := macTileLinkTX.io.TxStartFrm
+  io.TxEndFrm        := macTileLinkTX.io.TxEndFrm
+  io.TxData          := macTileLinkTX.io.TxData
+  io.TxUnderRun      := macTileLinkTX.io.TxUnderRun
+
+  macTileLinkTX.io.TxUnderRun_wb := TxUnderRun_wb
+  macTileLinkTX.io.TxData_wb := TxData_wb
+  macTileLinkTX.io.TxValidBytesLatched := TxValidBytesLatched
+  macTileLinkTX.io.TxEndFrm_wb := TxEndFrm_wb
+  
+  ReadTxDataFromFifo_tck_txclk := macTileLinkTX.io.ReadTxDataFromFifo_tck
+
+  macTileLinkTX.io.TxUsedData := io.TxUsedData
+  macTileLinkTX.io.TxRetry    := io.TxRetry
+  macTileLinkTX.io.TxAbort    := io.TxAbort
+  macTileLinkTX.io.TxDone     := io.TxDone
+}
+
+
+
+
+trait MacTileLinkRXClk{ this: MacTileLinkBase =>
+  val macTileLinkRX = withClockAndReset( io.MRxClk.asClock, io.asyncReset ) ( Module(new MacTileLinkRX) )
+  RxDataLatched2_rxclk    := macTileLinkRX.io.RxDataLatched2
+  WriteRxDataToFifo_rxclk := macTileLinkRX.io.WriteRxDataToFifo
+  RxAbortLatched_rxclk    := macTileLinkRX.io.RxAbortLatched
+  LatchedRxLength_rxclk   := macTileLinkRX.io.LatchedRxLength
+  RxStatusInLatched_rxclk := macTileLinkRX.io.RxStatusInLatched
+  ShiftEnded_rck_rxclk    := macTileLinkRX.io.ShiftEnded_rck
+  LatchedRxStartFrm_rxclk := macTileLinkRX.io.LatchedRxStartFrm
+
+  macTileLinkRX.io.WriteRxDataToFifoSync := WriteRxDataToFifoSync(1)
+  macTileLinkRX.io.SyncRxStartFrm := SyncRxStartFrm(1)
+
+  Busy_IRQ_rck_rxclk := macTileLinkRX.io.Busy_IRQ_rck
+
+  withClockAndReset( io.MRxClk.asClock, io.asyncReset ) {
+    macTileLinkRX.io.ShiftEndedSync := ShiftRegisters(ShiftEndedSync(1), 2, false.B, true.B)
+    macTileLinkRX.io.RxAbortSyncb   := ShiftRegister( RxAbortSync(1), 2, false.B, true.B )
+    io.RxStatusWriteLatched_sync2   := ShiftRegister(RxStatusWriteLatched, 2, false.B, true.B)
+    macTileLinkRX.io.Busy_IRQ_syncb := ShiftRegister( Busy_IRQ_sync(1), 2, false.B, true.B )
+  }
+
+
+  macTileLinkRX.io.RxData   := io.RxData
+  macTileLinkRX.io.RxAbort  := io.RxAbort
+  macTileLinkRX.io.RxValid  := io.RxValid
+  macTileLinkRX.io.RxReady  := RxReady
+  macTileLinkRX.io.RxStartFrm := io.RxStartFrm
+  macTileLinkRX.io.RxEndFrm := io.RxEndFrm
+
+
+  macTileLinkRX.io.RxLength     := io.RxLength
+  macTileLinkRX.io.LoadRxStatus := io.LoadRxStatus
+  macTileLinkRX.io.RxStatusIn   := RxStatusIn
+
+
+
+
+}
+
+
+class MacTileLink(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends MacTileLinkBase(edgeIn, edgeOut) with MacTileLinkTXClk with MacTileLinkRXClk
+
+
+
+
+
 
 class MacTileLinkTXIO extends Bundle{
+  val RstDeferLatched  = Output(Bool())
   val BlockingTxStatusWrite_sync = Input(Bool())
   val TxStartFrm_sync            = Input(Bool())
 
@@ -1123,34 +1191,17 @@ class MacTileLinkTXIO extends Bundle{
   val TxDone         = Input(Bool())      // Transmission ended
 
   val ReadTxDataFromFifo_tck = Output(Bool())
-  val ReadTxDataFromFifo_syncb = Output(Bool())
+  val ReadTxDataFromFifo_syncb = Input(Bool())
 
   val TxEndFrm_wb = Input(Bool())
-  val TxValidBytesLatched = Input(UInt(2.U))
+  val TxValidBytesLatched = Input(UInt(2.W))
   val TxData_wb = Input(UInt(32.W))
   val TxUnderRun_wb = Input(Bool())
 }
 
 
 
-  val macTileLinkTX = Module(new MacTileLinkTX)
-  macTileLinkTX.clock := io.MTxClk.asClock
-  macTileLinkTX.reset := io.asyncReset
 
-  macTileLinkTX.io.BlockingTxStatusWrite_sync := ShiftRegister(BlockingTxStatusWrite, 2, false.B, true.B)
-  macTileLinkTX.io.TxStartFrm_sync            := ShiftRegister( TxStartFrm_wb, 2, false.B, true.B ); TxStartFrm_sync_txclk := TxStartFrm_sync// Synchronizing TxStartFrm_wb to MTxClk
-  macTileLinkTX.io.ReadTxDataFromFifo_syncb   := ShiftRegister(ReadTxDataFromFifo_sync(1), 2, false.B, true.B)
-
-
-  io.TxStartFrm := macTileLinkTX.io.TxStartFrm
-  io.TxEndFrm   := macTileLinkTX.io.TxEndFrm
-  io.TxData     := macTileLinkTX.io.TxData
-  io.TxUnderRun := macTileLinkTX.io.TxUnderRun
-
-  macTileLinkTX.io.TxUsedData := io.TxUsedData
-  macTileLinkTX.io.TxRetry    := io.TxRetry
-  macTileLinkTX.io.TxAbort    := io.TxAbort
-  macTileLinkTX.io.TxDone     := io.TxDone
 
 
 
@@ -1159,7 +1210,7 @@ class MacTileLinkTX extends Module with RequireAsyncReset{
 
 
 
-  io.RstDeferLatched := BlockingTxStatusWrite_sync & ~RegNext(io.BlockingTxStatusWrite_sync, false.B)
+  io.RstDeferLatched := io.BlockingTxStatusWrite_sync & ~RegNext(io.BlockingTxStatusWrite_sync, false.B)
 
   val TxStartFrm = RegInit(false.B);  io.TxStartFrm := TxStartFrm
   val TxEndFrm   = RegInit(false.B);  io.TxEndFrm   := TxEndFrm
@@ -1257,7 +1308,7 @@ class MacTileLinkTX extends Module with RequireAsyncReset{
   when(io.TxStartFrm_sync & ~TxStartFrm | io.TxUsedData & Flop & TxByteCnt === 3.U &
     ~LastWord | TxStartFrm & io.TxUsedData & Flop & TxByteCnt === 0.U ){
     ReadTxDataFromFifo_tck := true.B
-  } .elsewhen(ReadTxDataFromFifo_syncb & ~RegNext(ReadTxDataFromFifo_syncb, false.B)){
+  } .elsewhen(io.ReadTxDataFromFifo_syncb & ~RegNext(io.ReadTxDataFromFifo_syncb, false.B)){
     ReadTxDataFromFifo_tck := false.B
   }
 
@@ -1265,11 +1316,7 @@ class MacTileLinkTX extends Module with RequireAsyncReset{
 
 
 
-trait MacTileLinkTXClk{ this: MacTileLinkBase =>
-  withClockAndReset( io.MTxClk.asClock, io.asyncReset ) {
 
-  }
-}
 
 
 
@@ -1410,124 +1457,131 @@ trait MacTileLinkTXClk{ this: MacTileLinkBase =>
 
 
 
+class MacTileLinkRXIO extends Bundle{
+  val RxDataLatched2 = Output(UInt(32.W))
+  val WriteRxDataToFifo = Output(Bool())
+  val RxAbortLatched = Output(Bool())
+  val LatchedRxLength = Output(UInt(16.W))
+  val RxStatusInLatched = Output( UInt(9.W) )
+  val ShiftEnded_rck = Output(Bool())
+  val LatchedRxStartFrm = Output(Bool())
+
+  val RxLength = Input(UInt(16.W))
+  val LoadRxStatus = Input(Bool())
+  val RxStatusIn = Input(UInt(9.W))
+  val ShiftEndedSync = Input(Vec(2,Bool()) )
+  val RxAbortSyncb = Input(Bool())
+  val WriteRxDataToFifoSync = Input(Bool())
+  val SyncRxStartFrm = Input(Bool())
+
+  val Busy_IRQ_rck = Output(Bool())
+  val Busy_IRQ_syncb = Input(Bool())
+
+  val RxData     = Input(UInt(8.W))      // Received data byte (from PHY)
+  val RxAbort    = Input(Bool())
+  val RxValid    = Input(Bool())
+  val RxReady    = Input(Bool())
+  val RxStartFrm = Input(Bool())
+  val RxEndFrm   = Input(Bool())
+}
+
+
+class MacTileLinkRX extends Module with RequireAsyncReset{
+  val io = IO(new MacTileLinkRXIO)
+
+  val RxDataLatched2 = RegInit(0.U(32.W)); io.RxDataLatched2 := RxDataLatched2
+  val RxDataLatched1 = RegInit(0.U(24.W))     // Little Endian Byte Ordering[23:0] 
+  val RxValidBytes = RegInit(1.U(2.W))
+  val RxByteCnt    = RegInit(0.U(2.W))
+  val LastByteIn   = RegInit(false.B)
+  val ShiftWillEnd = RegInit(false.B)
+  val WriteRxDataToFifo = RegInit(false.B); io.WriteRxDataToFifo := WriteRxDataToFifo
+  val RxAbortLatched = RegInit(false.B); io.RxAbortLatched := RxAbortLatched
+
+  val LatchedRxLength = RegEnable(io.RxLength, 0.U(16.W), io.LoadRxStatus); io.LatchedRxLength   := LatchedRxLength
+  val RxStatusInLatched = RegEnable(io.RxStatusIn, 0.U(9.W), io.LoadRxStatus); io.RxStatusInLatched := RxStatusInLatched
+
+  val ShiftEnded_rck = RegInit(false.B); io.ShiftEnded_rck := ShiftEnded_rck
+  val RxEnableWindow = RegInit(false.B)
+  
+  val LatchedRxStartFrm = RegInit(false.B); io.LatchedRxStartFrm := LatchedRxStartFrm
+
+  val Busy_IRQ_rck = RegInit(false.B); io.Busy_IRQ_rck := Busy_IRQ_rck
 
 
 
 
+  // Indicating that last byte is being reveived
+  when(ShiftWillEnd & RxByteCnt.andR | io.RxAbort){
+    LastByteIn := false.B
+  } .elsewhen(io.RxValid & io.RxReady & io.RxEndFrm & ~(RxByteCnt.andR) & RxEnableWindow){
+    LastByteIn := true.B
+  }
 
+  // Indicating that data reception will end
+  val StartShiftWillEnd = LastByteIn | io.RxValid & io.RxEndFrm & RxByteCnt.andR & RxEnableWindow
+  when(ShiftEnded_rck | io.RxAbort){
+    ShiftWillEnd := false.B
+  } .elsewhen(StartShiftWillEnd){
+    ShiftWillEnd := true.B
+  }
 
+  // Receive byte counter
+  when(ShiftEnded_rck | io.RxAbort){
+    RxByteCnt := 0.U
+  } .elsewhen(io.RxValid & io.RxStartFrm & io.RxReady){
+    RxByteCnt := 1.U     
+  } .elsewhen(io.RxValid & RxEnableWindow & io.RxReady | LastByteIn){
+    RxByteCnt := RxByteCnt + 1.U
+  }
 
+  // Indicates how many bytes are valid within the last word
+  when(io.RxValid & io.RxStartFrm){
+    RxValidBytes := 1.U
+  } .elsewhen(io.RxValid & ~LastByteIn & ~io.RxStartFrm & RxEnableWindow){
+    RxValidBytes := RxValidBytes + 1.U        
+  }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-trait MacTileLinkRXClk{ this: MacTileLinkBase =>
-
-  withClockAndReset( io.MRxClk.asClock, io.asyncReset ){
-
-    val RxDataLatched2 = RegInit(0.U(32.W)); RxDataLatched2_rxclk := RxDataLatched2
-    val RxDataLatched1 = RegInit(0.U(24.W))     // Little Endian Byte Ordering[23:0] 
-    val RxValidBytes = RegInit(1.U(2.W))
-    val RxByteCnt    = RegInit(0.U(2.W)); RxByteCnt_rxclk := RxByteCnt
-    val LastByteIn   = RegInit(false.B); LastByteIn_rxclk := LastByteIn
-    val ShiftWillEnd = RegInit(false.B); ShiftWillEnd_rxclk := ShiftWillEnd
-    val WriteRxDataToFifo = RegInit(false.B); WriteRxDataToFifo_rxclk := WriteRxDataToFifo
-    val RxAbortLatched = RegInit(false.B); RxAbortLatched_rxclk := RxAbortLatched
-
-    val LatchedRxLength = RegEnable(io.RxLength, 0.U(16.W), io.LoadRxStatus); LatchedRxLength_rxclk := LatchedRxLength
-    val RxStatusInLatched = RegEnable(RxStatusIn, 0.U(9.W), io.LoadRxStatus); RxStatusInLatched_rxclk := RxStatusInLatched
-    val ShiftEnded_rck = RegInit(false.B); ShiftEnded_rck_txclk := ShiftEnded_rck
-
-    val ShiftEndedSync = ShiftRegisters(ShiftEndedSync2, 2, false.B, true.B)
-
-    val RxAbortSyncb = ShiftRegister( RxAbortSync(1), 2, false.B, true.B )
-
-    val RxEnableWindow = RegInit(false.B); RxEnableWindow_rxclk := RxEnableWindow
-    val LatchedRxStartFrm = RegInit(false.B); LatchedRxStartFrm_rxclk := LatchedRxStartFrm
-
-    val RxStatusWriteLatched_sync = ShiftRegister(RxStatusWriteLatched, 2, false.B, true.B); io.RxStatusWriteLatched_sync2 := RxStatusWriteLatched_sync
-    // Indicating that last byte is being reveived
-
-    when(ShiftWillEnd & RxByteCnt.andR | io.RxAbort){
-      LastByteIn := false.B
-    } .elsewhen(io.RxValid & RxReady & io.RxEndFrm & ~(RxByteCnt.andR) & RxEnableWindow){
-      LastByteIn := true.B
-    }
-
-    // Indicating that data reception will end
-    when(ShiftEnded_rck | io.RxAbort){
-      ShiftWillEnd := false.B
-    } .elsewhen(StartShiftWillEnd){
-      ShiftWillEnd := true.B
-    }
-
-    // Receive byte counter
-    when(ShiftEnded_rck | io.RxAbort){
-      RxByteCnt := 0.U
-    } .elsewhen(io.RxValid & io.RxStartFrm & RxReady){
-      RxByteCnt := 1.U     
-    } .elsewhen(io.RxValid & RxEnableWindow & RxReady | LastByteIn){
-      RxByteCnt := RxByteCnt + 1.U
-    }
-
-    // Indicates how many bytes are valid within the last word
-    when(io.RxValid & io.RxStartFrm){
-      RxValidBytes := 1.U
-    } .elsewhen(io.RxValid & ~LastByteIn & ~io.RxStartFrm & RxEnableWindow){
-      RxValidBytes := RxValidBytes + 1.U        
-    }
-
-    when(io.RxValid & RxReady & ~LastByteIn){
-      when(io.RxStartFrm){
-        RxDataLatched1 := Cat(RxDataLatched1(23, 8), io.RxData)// Little Endian Byte Ordering
-      } .elsewhen(RxEnableWindow){
-        RxDataLatched1 := Mux1H(Seq(
-          ( RxByteCnt === 0.U ) -> Cat(RxDataLatched1(23, 8), io.RxData),// Little Endian Byte Ordering
-          ( RxByteCnt === 1.U ) -> Cat(RxDataLatched1(23,16), io.RxData, RxDataLatched1( 7,0)),
-          ( RxByteCnt === 2.U ) -> Cat(                       io.RxData, RxDataLatched1(15,0)),
-          ( RxByteCnt === 3.U ) -> RxDataLatched1,
-        ))
-      }
-    }
-
-
-    // Assembling data that will be written to the rx_fifo
-    when(SetWriteRxDataToFifo & ~ShiftWillEnd){
-      RxDataLatched2 := Cat(io.RxData, RxDataLatched1)// Little Endian Byte Ordering
-    } .elsewhen(SetWriteRxDataToFifo & ShiftWillEnd){
-      RxDataLatched2 := Mux1H(Seq(                    // Little Endian Byte Ordering
-        ( RxValidBytes === 0.U ) -> Cat(io.RxData, RxDataLatched1),
-        ( RxValidBytes === 1.U ) -> Cat(0.U(24.W), RxDataLatched1(7,0) ),
-        ( RxValidBytes === 2.U ) -> Cat(0.U(16.W), RxDataLatched1(15, 0) ),
-        ( RxValidBytes === 3.U ) -> Cat(0.U(8.W),  RxDataLatched1        ),       
+  when(io.RxValid & io.RxReady & ~LastByteIn){
+    when(io.RxStartFrm){
+      RxDataLatched1 := Cat(RxDataLatched1(23, 8), io.RxData)// Little Endian Byte Ordering
+    } .elsewhen(RxEnableWindow){
+      RxDataLatched1 := Mux1H(Seq(
+        ( RxByteCnt === 0.U ) -> Cat(RxDataLatched1(23, 8), io.RxData),// Little Endian Byte Ordering
+        ( RxByteCnt === 1.U ) -> Cat(RxDataLatched1(23,16), io.RxData, RxDataLatched1( 7,0)),
+        ( RxByteCnt === 2.U ) -> Cat(                       io.RxData, RxDataLatched1(15,0)),
+        ( RxByteCnt === 3.U ) -> RxDataLatched1,
       ))
     }
+  }
+
+  // Indicating start of the reception process
+  val SetWriteRxDataToFifo =
+    (io.RxValid & io.RxReady & ~io.RxStartFrm & RxEnableWindow & (RxByteCnt.andR)) |
+    (ShiftWillEnd & LastByteIn & (RxByteCnt.andR))
+
+  // Assembling data that will be written to the rx_fifo
+  when(SetWriteRxDataToFifo & ~ShiftWillEnd){
+    RxDataLatched2 := Cat(io.RxData, RxDataLatched1)// Little Endian Byte Ordering
+  } .elsewhen(SetWriteRxDataToFifo & ShiftWillEnd){
+    RxDataLatched2 := Mux1H(Seq(                    // Little Endian Byte Ordering
+      ( RxValidBytes === 0.U ) -> Cat(io.RxData, RxDataLatched1),
+      ( RxValidBytes === 1.U ) -> Cat(0.U(24.W), RxDataLatched1(7,0) ),
+      ( RxValidBytes === 2.U ) -> Cat(0.U(16.W), RxDataLatched1(15, 0) ),
+      ( RxValidBytes === 3.U ) -> Cat(0.U(8.W),  RxDataLatched1        ),       
+    ))
+  }
 
     when(SetWriteRxDataToFifo & ~io.RxAbort){
       WriteRxDataToFifo := true.B
-    } .elsewhen(WriteRxDataToFifoSync(1) | io.RxAbort){
+    } .elsewhen(io.WriteRxDataToFifoSync | io.RxAbort){
       WriteRxDataToFifo := false.B
     }
 
 
-    when(io.RxStartFrm & ~SyncRxStartFrm(1)){
+    when(io.RxStartFrm & ~io.SyncRxStartFrm){
       LatchedRxStartFrm := true.B
-    } .elsewhen(SyncRxStartFrm(1)){
+    } .elsewhen(io.SyncRxStartFrm){
       LatchedRxStartFrm := false.B
     }
 
@@ -1535,7 +1589,7 @@ trait MacTileLinkRXClk{ this: MacTileLinkBase =>
     // Generation of the end-of-frame signal
     when(~io.RxAbort & SetWriteRxDataToFifo & StartShiftWillEnd){
       ShiftEnded_rck := true.B
-    } .elsewhen(io.RxAbort | ShiftEndedSync(0) & ShiftEndedSync(1)){
+    } .elsewhen(io.RxAbort | io.ShiftEndedSync(0) & io.ShiftEndedSync(1)){
       ShiftEnded_rck := false.B
     }
 
@@ -1547,33 +1601,180 @@ trait MacTileLinkRXClk{ this: MacTileLinkBase =>
     }
 
 
-    when(RxAbortSyncb){
+    when(io.RxAbortSyncb){
       RxAbortLatched := false.B
     } .elsewhen(io.RxAbort){
       RxAbortLatched := true.B
     }
 
-
-
-
-
-
-
-    val Busy_IRQ_rck = RegInit(false.B); Busy_IRQ_rck_rxclk := Busy_IRQ_rck
-    val Busy_IRQ_syncb = ShiftRegister( Busy_IRQ_sync(1), 2, false.B, true.B )
-
-    when(io.RxValid & io.RxStartFrm & ~RxReady){
+    when(io.RxValid & io.RxStartFrm & ~io.RxReady){
       Busy_IRQ_rck := true.B
-    } .elsewhen(Busy_IRQ_syncb){
+    } .elsewhen(io.Busy_IRQ_syncb){
       Busy_IRQ_rck := false.B
     }
 
 
-
-  }
 }
 
-class MacTileLink(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends MacTileLinkBase(edgeIn, edgeOut) with MacTileLinkTXClk with MacTileLinkRXClk
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// trait MacTileLinkRXClk{ this: MacTileLinkBase =>
+
+//   withClockAndReset( io.MRxClk.asClock, io.asyncReset ){
+
+//     val RxDataLatched2 = RegInit(0.U(32.W)); RxDataLatched2_rxclk := RxDataLatched2
+//     val RxDataLatched1 = RegInit(0.U(24.W))     // Little Endian Byte Ordering[23:0] 
+//     val RxValidBytes = RegInit(1.U(2.W))
+//     val RxByteCnt    = RegInit(0.U(2.W)); RxByteCnt_rxclk := RxByteCnt
+//     val LastByteIn   = RegInit(false.B); LastByteIn_rxclk := LastByteIn
+//     val ShiftWillEnd = RegInit(false.B); ShiftWillEnd_rxclk := ShiftWillEnd
+//     val WriteRxDataToFifo = RegInit(false.B); WriteRxDataToFifo_rxclk := WriteRxDataToFifo
+//     val RxAbortLatched = RegInit(false.B); RxAbortLatched_rxclk := RxAbortLatched
+
+//     val LatchedRxLength = RegEnable(io.RxLength, 0.U(16.W), io.LoadRxStatus); LatchedRxLength_rxclk := LatchedRxLength
+//     val RxStatusInLatched = RegEnable(RxStatusIn, 0.U(9.W), io.LoadRxStatus); RxStatusInLatched_rxclk := RxStatusInLatched
+//     val ShiftEnded_rck = RegInit(false.B); ShiftEnded_rck_txclk := ShiftEnded_rck
+
+//     val ShiftEndedSync = ShiftRegisters(ShiftEndedSync2, 2, false.B, true.B)
+
+//     val RxAbortSyncb = ShiftRegister( RxAbortSync(1), 2, false.B, true.B )
+
+//     val RxEnableWindow = RegInit(false.B); RxEnableWindow_rxclk := RxEnableWindow
+//     val LatchedRxStartFrm = RegInit(false.B); LatchedRxStartFrm_rxclk := LatchedRxStartFrm
+
+//     val RxStatusWriteLatched_sync = ShiftRegister(RxStatusWriteLatched, 2, false.B, true.B); io.RxStatusWriteLatched_sync2 := RxStatusWriteLatched_sync
+//     // Indicating that last byte is being reveived
+
+//     when(ShiftWillEnd & RxByteCnt.andR | io.RxAbort){
+//       LastByteIn := false.B
+//     } .elsewhen(io.RxValid & RxReady & io.RxEndFrm & ~(RxByteCnt.andR) & RxEnableWindow){
+//       LastByteIn := true.B
+//     }
+
+//     // Indicating that data reception will end
+//     when(ShiftEnded_rck | io.RxAbort){
+//       ShiftWillEnd := false.B
+//     } .elsewhen(StartShiftWillEnd){
+//       ShiftWillEnd := true.B
+//     }
+
+//     // Receive byte counter
+//     when(ShiftEnded_rck | io.RxAbort){
+//       RxByteCnt := 0.U
+//     } .elsewhen(io.RxValid & io.RxStartFrm & RxReady){
+//       RxByteCnt := 1.U     
+//     } .elsewhen(io.RxValid & RxEnableWindow & RxReady | LastByteIn){
+//       RxByteCnt := RxByteCnt + 1.U
+//     }
+
+//     // Indicates how many bytes are valid within the last word
+//     when(io.RxValid & io.RxStartFrm){
+//       RxValidBytes := 1.U
+//     } .elsewhen(io.RxValid & ~LastByteIn & ~io.RxStartFrm & RxEnableWindow){
+//       RxValidBytes := RxValidBytes + 1.U        
+//     }
+
+//     when(io.RxValid & RxReady & ~LastByteIn){
+//       when(io.RxStartFrm){
+//         RxDataLatched1 := Cat(RxDataLatched1(23, 8), io.RxData)// Little Endian Byte Ordering
+//       } .elsewhen(RxEnableWindow){
+//         RxDataLatched1 := Mux1H(Seq(
+//           ( RxByteCnt === 0.U ) -> Cat(RxDataLatched1(23, 8), io.RxData),// Little Endian Byte Ordering
+//           ( RxByteCnt === 1.U ) -> Cat(RxDataLatched1(23,16), io.RxData, RxDataLatched1( 7,0)),
+//           ( RxByteCnt === 2.U ) -> Cat(                       io.RxData, RxDataLatched1(15,0)),
+//           ( RxByteCnt === 3.U ) -> RxDataLatched1,
+//         ))
+//       }
+//     }
+
+
+//     // Assembling data that will be written to the rx_fifo
+//     when(SetWriteRxDataToFifo & ~ShiftWillEnd){
+//       RxDataLatched2 := Cat(io.RxData, RxDataLatched1)// Little Endian Byte Ordering
+//     } .elsewhen(SetWriteRxDataToFifo & ShiftWillEnd){
+//       RxDataLatched2 := Mux1H(Seq(                    // Little Endian Byte Ordering
+//         ( RxValidBytes === 0.U ) -> Cat(io.RxData, RxDataLatched1),
+//         ( RxValidBytes === 1.U ) -> Cat(0.U(24.W), RxDataLatched1(7,0) ),
+//         ( RxValidBytes === 2.U ) -> Cat(0.U(16.W), RxDataLatched1(15, 0) ),
+//         ( RxValidBytes === 3.U ) -> Cat(0.U(8.W),  RxDataLatched1        ),       
+//       ))
+//     }
+
+//     when(SetWriteRxDataToFifo & ~io.RxAbort){
+//       WriteRxDataToFifo := true.B
+//     } .elsewhen(WriteRxDataToFifoSync(1) | io.RxAbort){
+//       WriteRxDataToFifo := false.B
+//     }
+
+
+//     when(io.RxStartFrm & ~SyncRxStartFrm(1)){
+//       LatchedRxStartFrm := true.B
+//     } .elsewhen(SyncRxStartFrm(1)){
+//       LatchedRxStartFrm := false.B
+//     }
+
+
+//     // Generation of the end-of-frame signal
+//     when(~io.RxAbort & SetWriteRxDataToFifo & StartShiftWillEnd){
+//       ShiftEnded_rck := true.B
+//     } .elsewhen(io.RxAbort | ShiftEndedSync(0) & ShiftEndedSync(1)){
+//       ShiftEnded_rck := false.B
+//     }
+
+//     // Generation of the end-of-frame signal
+//     when(io.RxStartFrm){
+//       RxEnableWindow := true.B
+//     } .elsewhen(io.RxEndFrm | io.RxAbort){
+//       RxEnableWindow := false.B
+//     }
+
+
+//     when(RxAbortSyncb){
+//       RxAbortLatched := false.B
+//     } .elsewhen(io.RxAbort){
+//       RxAbortLatched := true.B
+//     }
+
+
+
+
+
+
+
+//     val Busy_IRQ_rck = RegInit(false.B); Busy_IRQ_rck_rxclk := Busy_IRQ_rck
+//     val Busy_IRQ_syncb = ShiftRegister( Busy_IRQ_sync(1), 2, false.B, true.B )
+
+//     when(io.RxValid & io.RxStartFrm & ~RxReady){
+//       Busy_IRQ_rck := true.B
+//     } .elsewhen(Busy_IRQ_syncb){
+//       Busy_IRQ_rck := false.B
+//     }
+
+
+
+//   }
+// }
 
 
 
