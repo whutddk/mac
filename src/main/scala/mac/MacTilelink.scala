@@ -60,7 +60,6 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
     // Rx
     val MRxClk     = Input(Bool())         // Receive clock (from PHY)
-    val RxStatusWriteLatched_sync2 = Output(Bool())
 
     //Register
     val r_TxEn    = Input(Bool())          // Transmit enable
@@ -106,6 +105,8 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
     val RxReady = Output(Bool())
     val RxStatusIn = Output(UInt(9.W))
+    val RxStatusWriteLatched = Output(Bool())
+    val RxStatusWriteLatchedSyncb = Input(Bool())
   }
 
 
@@ -293,10 +294,9 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-  val RxStatusWriteLatched = RegInit(false.B)
+  val RxStatusWriteLatched = RegInit(false.B); io.RxStatusWriteLatched := RxStatusWriteLatched
 
-  val RxStatusWriteLatched_syncb = ShiftRegister(io.RxStatusWriteLatched_sync2, 2, false.B, true.B)
-  io.RxStatusWriteLatched_sync2    := ShiftRegister(RxStatusWriteLatched, 2, false.B, true.B)
+
 
 
 
@@ -908,7 +908,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
   // Latching and synchronizing RxStatusWrite signal. This signal is used for clearing the ReceivedPauseFrm signal
-  when(RxStatusWriteLatched_syncb){
+  when(io.RxStatusWriteLatchedSyncb){
     RxStatusWriteLatched := false.B
   } .elsewhen(RxStatusWrite){
     RxStatusWriteLatched := true.B

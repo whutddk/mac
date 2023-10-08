@@ -239,7 +239,7 @@ val TxStartFrmOut              = Wire(Bool())
 val TxEndFrmOut                = Wire(Bool())
 val ReceivedPauseFrm           = Wire(Bool())
 val ControlFrmAddressOK        = Wire(Bool())
-val RxStatusWriteLatched_sync2 = Wire(Bool())
+val RxStatusWriteLatchedSync   = Wire(Bool())
 val LateCollision              = Wire(Bool())
 val DeferIndication            = Wire(Bool())
 val LateCollLatched            = Wire(Bool())
@@ -305,7 +305,7 @@ dontTouch(TxStartFrmOut              )
 dontTouch(TxEndFrmOut                )
 dontTouch(ReceivedPauseFrm           )
 dontTouch(ControlFrmAddressOK        )
-dontTouch(RxStatusWriteLatched_sync2 )
+dontTouch(RxStatusWriteLatchedSync )
 dontTouch(LateCollision              )
 dontTouch(DeferIndication            )
 dontTouch(LateCollLatched            )
@@ -463,7 +463,7 @@ maccontrol.io.RxFlow                     := r_RxFlow
 maccontrol.io.DlyCrcEn                   := r_DlyCrcEn
 maccontrol.io.TxPauseTV                  := r_TxPauseTV
 maccontrol.io.MAC                        := r_MAC
-maccontrol.io.RxStatusWriteLatched_sync2 := RxStatusWriteLatched_sync2
+maccontrol.io.RxStatusWriteLatched_sync2 := RxStatusWriteLatchedSync
 maccontrol.io.r_PassAll                  := r_PassAll
 
 TxDataOut := maccontrol.io.TxDataOut
@@ -728,7 +728,6 @@ val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Modul
   PerPacketPad   := wishbone.io.PerPacketPad
 
   wishbone.io.MRxClk         := io.mrx_clk_pad_i
-  RxStatusWriteLatched_sync2 := wishbone.io.RxStatusWriteLatched_sync2
 
   wishbone.io.r_TxEn     := r_TxEn
   wishbone.io.r_RxEn     := r_RxEn
@@ -894,6 +893,11 @@ val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Modul
   val SyncRxStartFrmSync = ShiftRegister(macTileLinkRX.io.LatchedRxStartFrm, 2, false.B, true.B)
   wishbone.io.SyncRxStartFrmSync := SyncRxStartFrmSync
 
+  
+  wishbone.io.RxStatusWriteLatchedSyncb = ShiftRegister(RxStatusWriteLatchedSync, 2, false.B, true.B)
+
+
+
       wishbone.io.LatchedRxLength_rxclk   := macTileLinkRX.io.LatchedRxLength
       wishbone.io.RxStatusInLatched_rxclk := macTileLinkRX.io.RxStatusInLatched
       
@@ -905,6 +909,7 @@ val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Modul
 
 
   withClockAndReset( io.mrx_clk_pad_i.asClock, io.asyncReset ) {
+    RxStatusWriteLatchedSync := ShiftRegister(wishbone.io.RxStatusWriteLatched, 2, false.B, true.B)
     macTileLinkRX.io.ShiftEndedSyncb := ShiftRegister( ShiftEndedSync, 2, false.B, true.B)
     macTileLinkRX.io.RxAbortSyncb    := ShiftRegister( RxAbortSync,    2, false.B, true.B )
     macTileLinkRX.io.Busy_IRQ_syncb  := ShiftRegister( Busy_IRQ_sync,  2, false.B, true.B )
