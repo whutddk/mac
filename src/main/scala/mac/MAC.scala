@@ -683,7 +683,6 @@ val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Modul
 
 
   val wishbone = Module(new MacTileLink(slv_edge, mst_edge))
-    wishbone.io.asyncReset := io.asyncReset
 
     wishbone.io.tlSlv.A.valid := slv_bus.a.valid 
     wishbone.io.tlSlv.A.bits  := slv_bus.a.bits 
@@ -723,11 +722,8 @@ val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Modul
   wishbone.io.DeferLatched     := DeferLatched
   wishbone.io.CarrierSenseLost := CarrierSenseLost
 
-  wishbone.io.MTxClk         := io.mtx_clk_pad_i
   PerPacketCrcEn := wishbone.io.PerPacketCrcEn
   PerPacketPad   := wishbone.io.PerPacketPad
-
-  wishbone.io.MRxClk         := io.mrx_clk_pad_i
 
   wishbone.io.r_TxEn     := r_TxEn
   wishbone.io.r_RxEn     := r_RxEn
@@ -815,40 +811,40 @@ val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Modul
 
 
 
-  val macTileLinkTX = withClockAndReset( io.mtx_clk_pad_i.asClock, io.asyncReset ) (Module(new MacTileLinkTX))
+  val macTileLinkTx = withClockAndReset( io.mtx_clk_pad_i.asClock, io.asyncReset ) (Module(new MacTileLinkTx))
 
   // Start: Generation of the ReadTxDataFromFifo_tck signal and synchronization to the WB_CLK_I
-  val ReadTxDataFromFifo_sync = ShiftRegister( macTileLinkTX.io.ReadTxDataFromFifo_tck, 2, false.B, true.B)
+  val ReadTxDataFromFifo_sync = ShiftRegister( macTileLinkTx.io.ReadTxDataFromFifo_tck, 2, false.B, true.B)
   wishbone.io.ReadTxDataFromFifo_sync := ReadTxDataFromFifo_sync
 
   withClockAndReset( io.mtx_clk_pad_i.asClock, io.asyncReset ){
-    macTileLinkTX.io.BlockingTxStatusWrite_sync := ShiftRegister( wishbone.io.BlockingTxStatusWrite, 2, false.B, true.B)
-    macTileLinkTX.io.TxStartFrm_sync            := ShiftRegister( wishbone.io.TxStartFrm_wb, 2, false.B, true.B ) // Synchronizing TxStartFrm_wb to MTxClk
-    macTileLinkTX.io.ReadTxDataFromFifo_syncb   := ShiftRegister( ReadTxDataFromFifo_sync, 2, false.B, true.B)    
+    macTileLinkTx.io.BlockingTxStatusWrite_sync := ShiftRegister( wishbone.io.BlockingTxStatusWrite, 2, false.B, true.B)
+    macTileLinkTx.io.TxStartFrm_sync            := ShiftRegister( wishbone.io.TxStartFrm_wb, 2, false.B, true.B ) // Synchronizing TxStartFrm_wb to MTxClk
+    macTileLinkTx.io.ReadTxDataFromFifo_syncb   := ShiftRegister( ReadTxDataFromFifo_sync, 2, false.B, true.B)    
   }
 
 
-  wishbone.io.TxStartFrm_syncb := ShiftRegister( macTileLinkTX.io.TxStartFrm_sync, 2, false.B, true.B )
+  wishbone.io.TxStartFrm_syncb := ShiftRegister( macTileLinkTx.io.TxStartFrm_sync, 2, false.B, true.B )
 
-  RstDeferLatched := macTileLinkTX.io.RstDeferLatched
-  TxStartFrm      := macTileLinkTX.io.TxStartFrm
-  TxEndFrm        := macTileLinkTX.io.TxEndFrm
-  TxData          := macTileLinkTX.io.TxData
+  RstDeferLatched := macTileLinkTx.io.RstDeferLatched
+  TxStartFrm      := macTileLinkTx.io.TxStartFrm
+  TxEndFrm        := macTileLinkTx.io.TxEndFrm
+  TxData          := macTileLinkTx.io.TxData
 
               wishbone.io.TxUnderRun := TxUnderRun
-              TxUnderRun      := macTileLinkTX.io.TxUnderRun
-              macTileLinkTX.io.TxUnderRun_wb := wishbone.io.TxUnderRun_wb
+              TxUnderRun      := macTileLinkTx.io.TxUnderRun
+              macTileLinkTx.io.TxUnderRun_wb := wishbone.io.TxUnderRun_wb
 
-              macTileLinkTX.io.TxData_wb := wishbone.io.TxData_wb
-              macTileLinkTX.io.TxValidBytesLatched := wishbone.io.TxValidBytesLatched
-              macTileLinkTX.io.TxEndFrm_wb := wishbone.io.TxEndFrm_wb
+              macTileLinkTx.io.TxData_wb := wishbone.io.TxData_wb
+              macTileLinkTx.io.TxValidBytesLatched := wishbone.io.TxValidBytesLatched
+              macTileLinkTx.io.TxEndFrm_wb := wishbone.io.TxEndFrm_wb
   
               wishbone.io.TxUsedData      := TxUsedData
-              macTileLinkTX.io.TxUsedData := TxUsedData
+              macTileLinkTx.io.TxUsedData := TxUsedData
 
-  macTileLinkTX.io.TxRetry    := TxRetry
-  macTileLinkTX.io.TxAbort    := TxAbort
-  macTileLinkTX.io.TxDone     := TxDone
+  macTileLinkTx.io.TxRetry    := TxRetry
+  macTileLinkTx.io.TxAbort    := TxAbort
+  macTileLinkTx.io.TxDone     := TxDone
 
   wishbone.io.TxRetrySync := ShiftRegister( TxRetry, 2, false.B, true.B )
   wishbone.io.TxAbortSync := ShiftRegister( TxAbort, 2, false.B, true.B )
@@ -875,61 +871,61 @@ val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Modul
 
 
 
-  val macTileLinkRX = withClockAndReset( io.mrx_clk_pad_i.asClock, io.asyncReset ) ( Module(new MacTileLinkRX) )
+  val macTileLinkRx = withClockAndReset( io.mrx_clk_pad_i.asClock, io.asyncReset ) ( Module(new MacTileLinkRx) )
 
 
 
-  wishbone.io.RxDataLatched2_rxclk    := macTileLinkRX.io.RxDataLatched2
+  wishbone.io.RxDataLatched2_rxclk    := macTileLinkRx.io.RxDataLatched2
 
-  val WriteRxDataToFifoSync = ShiftRegister(macTileLinkRX.io.WriteRxDataToFifo, 2, false.B, true.B)
+  val WriteRxDataToFifoSync = ShiftRegister(macTileLinkRx.io.WriteRxDataToFifo, 2, false.B, true.B)
   wishbone.io.WriteRxDataToFifoSync := WriteRxDataToFifoSync
 
-  val RxAbortSync           = ShiftRegister( macTileLinkRX.io.RxAbortLatched, 2, false.B, true.B )
+  val RxAbortSync           = ShiftRegister( macTileLinkRx.io.RxAbortLatched, 2, false.B, true.B )
   wishbone.io.RxAbortSync  := RxAbortSync
 
-  val ShiftEndedSync = ShiftRegister( macTileLinkRX.io.ShiftEnded_rck, 2, false.B, true.B )
+  val ShiftEndedSync = ShiftRegister( macTileLinkRx.io.ShiftEnded_rck, 2, false.B, true.B )
   wishbone.io.ShiftEndedSync := ShiftEndedSync
 
-  val SyncRxStartFrmSync = ShiftRegister(macTileLinkRX.io.LatchedRxStartFrm, 2, false.B, true.B)
+  val SyncRxStartFrmSync = ShiftRegister(macTileLinkRx.io.LatchedRxStartFrm, 2, false.B, true.B)
   wishbone.io.SyncRxStartFrmSync := SyncRxStartFrmSync
 
   
-  wishbone.io.RxStatusWriteLatchedSyncb = ShiftRegister(RxStatusWriteLatchedSync, 2, false.B, true.B)
+  wishbone.io.RxStatusWriteLatchedSyncb := ShiftRegister(RxStatusWriteLatchedSync, 2, false.B, true.B)
 
 
 
-      wishbone.io.LatchedRxLength_rxclk   := macTileLinkRX.io.LatchedRxLength
-      wishbone.io.RxStatusInLatched_rxclk := macTileLinkRX.io.RxStatusInLatched
+      wishbone.io.LatchedRxLength_rxclk   := macTileLinkRx.io.LatchedRxLength
+      wishbone.io.RxStatusInLatched_rxclk := macTileLinkRx.io.RxStatusInLatched
       
 
   
   // Busy Interrupt
-  val Busy_IRQ_sync = ShiftRegister(macTileLinkRX.io.Busy_IRQ_rck, 2)
+  val Busy_IRQ_sync = ShiftRegister(macTileLinkRx.io.Busy_IRQ_rck, 2)
   wishbone.io.Busy_IRQ_sync := Busy_IRQ_sync
 
 
   withClockAndReset( io.mrx_clk_pad_i.asClock, io.asyncReset ) {
     RxStatusWriteLatchedSync := ShiftRegister(wishbone.io.RxStatusWriteLatched, 2, false.B, true.B)
-    macTileLinkRX.io.ShiftEndedSyncb := ShiftRegister( ShiftEndedSync, 2, false.B, true.B)
-    macTileLinkRX.io.RxAbortSyncb    := ShiftRegister( RxAbortSync,    2, false.B, true.B )
-    macTileLinkRX.io.Busy_IRQ_syncb  := ShiftRegister( Busy_IRQ_sync,  2, false.B, true.B )
+    macTileLinkRx.io.ShiftEndedSyncb := ShiftRegister( ShiftEndedSync, 2, false.B, true.B)
+    macTileLinkRx.io.RxAbortSyncb    := ShiftRegister( RxAbortSync,    2, false.B, true.B )
+    macTileLinkRx.io.Busy_IRQ_syncb  := ShiftRegister( Busy_IRQ_sync,  2, false.B, true.B )
 
-    macTileLinkRX.io.WriteRxDataToFifoSyncb := ShiftRegister( WriteRxDataToFifoSync, 2, false.B, true.B )
-    macTileLinkRX.io.SyncRxStartFrmSyncb    := ShiftRegister( SyncRxStartFrmSync,    2, false.B, true.B )
-      macTileLinkRX.io.RxReady  := ShiftRegister( wishbone.io.RxReady, 2, false.B, true.B )
+    macTileLinkRx.io.WriteRxDataToFifoSyncb := ShiftRegister( WriteRxDataToFifoSync, 2, false.B, true.B )
+    macTileLinkRx.io.SyncRxStartFrmSyncb    := ShiftRegister( SyncRxStartFrmSync,    2, false.B, true.B )
+      macTileLinkRx.io.RxReady  := ShiftRegister( wishbone.io.RxReady, 2, false.B, true.B )
   }
 
-  macTileLinkRX.io.RxData   := RxData
-  macTileLinkRX.io.RxAbort  := RxAbort_latch_wire
-  macTileLinkRX.io.RxValid  := RxValid
+  macTileLinkRx.io.RxData   := RxData
+  macTileLinkRx.io.RxAbort  := RxAbort_latch_wire
+  macTileLinkRx.io.RxValid  := RxValid
 
-  macTileLinkRX.io.RxStartFrm := RxStartFrm
-  macTileLinkRX.io.RxEndFrm := RxEndFrm
+  macTileLinkRx.io.RxStartFrm := RxStartFrm
+  macTileLinkRx.io.RxEndFrm := RxEndFrm
 
 
-  macTileLinkRX.io.RxLength     := RxByteCnt
-  macTileLinkRX.io.LoadRxStatus := LoadRxStatus
-    macTileLinkRX.io.RxStatusIn   := wishbone.io.RxStatusIn
+  macTileLinkRx.io.RxLength     := RxByteCnt
+  macTileLinkRx.io.LoadRxStatus := LoadRxStatus
+    macTileLinkRx.io.RxStatusIn   := wishbone.io.RxStatusIn
 
 
 
