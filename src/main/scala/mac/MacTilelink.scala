@@ -38,8 +38,6 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
     val ShortFrame      = Input(Bool())             // Frame shorter then the minimum size (r_MinFL) was received while small packets are enabled (r_RecSmall)
     val DribbleNibble        = Input(Bool())        // Extra nibble received
     val ReceivedPacketTooBig = Input(Bool())        // Received packet is bigger than r_MaxFL
-    val RxLength             = Input(UInt(16.W))    // Length of the incoming frame
-    val LoadRxStatus         = Input(Bool())        // Rx status was loaded
     val ReceivedPacketGood   = Input(Bool())        // Received packet's length and CRC are good
     val AddressMiss          = Input(Bool())        // When a packet is received AddressMiss status is written to the Rx BD
     val r_RxFlow             = Input(Bool())
@@ -62,11 +60,6 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
     // Rx
     val MRxClk     = Input(Bool())         // Receive clock (from PHY)
-    val RxData     = Input(UInt(8.W))      // Received data byte (from PHY)
-    val RxValid    = Input(Bool())
-    val RxStartFrm = Input(Bool())
-    val RxEndFrm   = Input(Bool())
-    val RxAbort    = Input(Bool())        // This signal is set when address doesn't match.
     val RxStatusWriteLatched_sync2 = Output(Bool())
 
     //Register
@@ -98,6 +91,21 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
     val TxRetrySync  = Input(Bool())
     val TxAbortSync = Input(Bool())      // Transmit packet abort
     val TxDoneSync  = Input(Bool())      // Transmission ended
+
+
+
+
+    val RxDataLatched2_rxclk  = Input(UInt(32.W))
+    val WriteRxDataToFifoSync = Input(Bool())
+    val RxAbortSync           = Input(Bool())
+    val LatchedRxLength_rxclk = Input(UInt(16.W))
+    val RxStatusInLatched_rxclk = Input(UInt(9.W))
+    val ShiftEndedSync = Input(Bool())
+    val SyncRxStartFrmSync = Input(Bool())
+    val Busy_IRQ_sync = Input(Bool())
+
+    val RxReady = Output(Bool())
+    val RxStatusIn = Output(UInt(9.W))
   }
 
 
@@ -148,7 +156,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
   val TxAbortPacket = RegInit(false.B)
   val TxAbortPacket_NotCleared = RegInit(false.B)
   val RxBDReady = RegInit(false.B)
-  val RxReady = RegInit(false.B)
+  val RxReady = RegInit(false.B); io.RxReady := RxReady
   val TxBDReady = RegInit(false.B)
 
   val RxBDRead = RegInit(false.B)
@@ -234,12 +242,9 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
   val RxPointerRead = RegInit(false.B)
 
   // RX shift ending signals
-  val ShiftEnded_rck_rxclk = Wire(Bool())
-  // val ShiftEndedSync1 = RegNext( ShiftEnded_rck_rxclk, false.B)
-  // val ShiftEndedSync2 = RegNext( ShiftEndedSync1, false.B)
   val ShiftEndedSync3 = RegInit(false.B)
 
-  val ShiftEndedSync = ShiftRegisters( ShiftEnded_rck_rxclk, 2, false.B, true.B )
+
 
   
 
@@ -280,20 +285,18 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-  val RxAbortLatched_rxclk = Wire(Bool())
-  val RxAbortSync = ShiftRegisters( RxAbortLatched_rxclk, 4, false.B, true.B )
 
-  val WriteRxDataToFifo_rxclk = Wire(Bool())
-  val WriteRxDataToFifoSync = ShiftRegisters(WriteRxDataToFifo_rxclk, 3, false.B, true.B)
+  val RxAbortPluse = io.RxAbortSync & RegNext(io.RxAbortSync, false.B)
 
-  val LatchedRxStartFrm_rxclk = Wire(Bool())
-  val SyncRxStartFrmSync = ShiftRegisters(LatchedRxStartFrm_rxclk, 3, false.B, true.B)
+
+
+
 
 
   val RxStatusWriteLatched = RegInit(false.B)
 
   val RxStatusWriteLatched_syncb = ShiftRegister(io.RxStatusWriteLatched_sync2, 2, false.B, true.B)
-
+  io.RxStatusWriteLatched_sync2    := ShiftRegister(RxStatusWriteLatched, 2, false.B, true.B)
 
 
 
@@ -660,9 +663,9 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
   val TxStatusInLatched = Cat(io.TxUnderRun, io.RetryCntLatched, io.RetryLimit, io.LateCollLatched, io.DeferLatched, io.CarrierSenseLost)
-  val LatchedRxLength_rxclk = Wire(UInt(16.W))
-  val RxStatusInLatched_rxclk = Wire(UInt(9.W))
-  RxBDDataIn := Cat(LatchedRxLength_rxclk, 0.U(1.W), RxStatus, 0.U(4.W), RxStatusInLatched_rxclk)
+
+
+  RxBDDataIn := Cat(io.LatchedRxLength_rxclk, 0.U(1.W), RxStatus, 0.U(4.W), io.RxStatusInLatched_rxclk)
   TxBDDataIn := Cat(LatchedTxLength, 0.U(1.W), TxStatus, 0.U(2.W), TxStatusInLatched)
 
 
@@ -771,7 +774,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
   ReadTxDataFromFifo_wb := io.ReadTxDataFromFifo_sync & ~RegNext(io.ReadTxDataFromFifo_sync, false.B)
 
-  val StartRxBDRead = RxStatusWrite | (RxAbortSync(2) & ~RxAbortSync(3)) | (io.r_RxEn & ~r_RxEn_q)
+  val StartRxBDRead = RxStatusWrite | RegNext(RxAbortPluse, false.B) | (io.r_RxEn & ~r_RxEn_q)
 
   // Reading the Rx buffer descriptor
   when(StartRxBDRead & ~RxReady){
@@ -800,7 +803,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
   // RxReady generation
-  when(ShiftEnded | RxAbortSync(1) & ~RxAbortSync(2) | ~io.r_RxEn & r_RxEn_q){
+  when(ShiftEnded | RxAbortPluse | ~io.r_RxEn & r_RxEn_q){
     RxReady := false.B
   } .elsewhen(stateNxt === StateRX & stateCur === StateRX & RxPointerRead){
     RxReady := true.B
@@ -840,12 +843,12 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-  val WriteRxDataToFifo_wb  = WriteRxDataToFifoSync(1) & ~WriteRxDataToFifoSync(2)
-  val RxFifoReset = SyncRxStartFrmSync(1) & ~SyncRxStartFrmSync(2)
+  val WriteRxDataToFifo_wb  = io.WriteRxDataToFifoSync & ~RegNext(io.WriteRxDataToFifoSync, false.B)
+  val RxFifoReset = io.SyncRxStartFrmSync & ~RegNext(io.SyncRxStartFrmSync, false.B)
 
   val rx_fifo = Module(new MacFifo(dw = 32, dp = 16))
-  val RxDataLatched2_rxclk = Wire(UInt(32.W))
-  rx_fifo.io.data_in := RxDataLatched2_rxclk
+
+  rx_fifo.io.data_in := io.RxDataLatched2_rxclk
   rx_fifo.io.write   := WriteRxDataToFifo_wb & ~RxBufferFull
   rx_fifo.io.read    := MasterWbRX & io.tlMst.A.fire
   rx_fifo.io.clear   := RxFifoReset
@@ -867,7 +870,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-  when(ShiftEndedSync(0) & ~ShiftEndedSync(1)){
+  when( io.ShiftEndedSync & ~RegNext(io.ShiftEndedSync, false.B)){
     ShiftEndedSync3 := true.B
   } .elsewhen(ShiftEnded){
     ShiftEndedSync3 := false.B
@@ -884,7 +887,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-  val RxStatusIn = Cat(io.ReceivedPauseFrm, io.AddressMiss, RxOverrun, io.InvalidSymbol, io.DribbleNibble, io.ReceivedPacketTooBig, io.ShortFrame, io.LatchedCrcError, io.RxLateCollision)
+  io.RxStatusIn := Cat(io.ReceivedPauseFrm, io.AddressMiss, RxOverrun, io.InvalidSymbol, io.DribbleNibble, io.ReceivedPacketTooBig, io.ShortFrame, io.LatchedCrcError, io.RxLateCollision)
 
 
   // Rx overrun
@@ -901,7 +904,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
   // ShortFrame (RxStatusInLatched[2]) can not set an error because short frames are aborted when signal r_RecSmall is set to 0 in MODER register. 
   // AddressMiss is identifying that a frame was received because of the promiscous mode and is not an error
-  val RxError = (RxStatusInLatched_rxclk(6,3).orR) | (RxStatusInLatched_rxclk(1,0).orR)
+  val RxError = (io.RxStatusInLatched_rxclk(6,3).orR) | (io.RxStatusInLatched_rxclk(1,0).orR)
 
 
   // Latching and synchronizing RxStatusWrite signal. This signal is used for clearing the ReceivedPauseFrm signal
@@ -946,7 +949,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-
+  io.Busy_IRQ := io.Busy_IRQ_sync & ~RegNext(io.Busy_IRQ_sync)
 
 
 
@@ -1119,50 +1122,43 @@ trait MacTileLinkTXClk{ this: MacTileLinkBase =>
 
 
 trait MacTileLinkRXClk{ this: MacTileLinkBase =>
-  val macTileLinkRX = withClockAndReset( io.MRxClk.asClock, io.asyncReset ) ( Module(new MacTileLinkRX) )
-  RxDataLatched2_rxclk    := macTileLinkRX.io.RxDataLatched2
-  WriteRxDataToFifo_rxclk := macTileLinkRX.io.WriteRxDataToFifo
-  RxAbortLatched_rxclk    := macTileLinkRX.io.RxAbortLatched
-  LatchedRxLength_rxclk   := macTileLinkRX.io.LatchedRxLength
-  RxStatusInLatched_rxclk := macTileLinkRX.io.RxStatusInLatched
-  ShiftEnded_rck_rxclk    := macTileLinkRX.io.ShiftEnded_rck
-  LatchedRxStartFrm_rxclk := macTileLinkRX.io.LatchedRxStartFrm
+  // val macTileLinkRX = withClockAndReset( io.MRxClk.asClock, io.asyncReset ) ( Module(new MacTileLinkRX) )
+  // RxDataLatched2_rxclk    := macTileLinkRX.io.RxDataLatched2
+  // WriteRxDataToFifo_rxclk := macTileLinkRX.io.WriteRxDataToFifo
+  // RxAbortLatched_rxclk    := macTileLinkRX.io.RxAbortLatched
+  // LatchedRxLength_rxclk   := macTileLinkRX.io.LatchedRxLength
+  // RxStatusInLatched_rxclk := macTileLinkRX.io.RxStatusInLatched
+  // ShiftEnded_rck_rxclk    := macTileLinkRX.io.ShiftEnded_rck
+  // LatchedRxStartFrm_rxclk := macTileLinkRX.io.LatchedRxStartFrm
 
 
   
-  // Busy Interrupt
-  val Busy_IRQ_sync = ShiftRegisters(macTileLinkRX.io.Busy_IRQ_rck, 3)
-  io.Busy_IRQ := Busy_IRQ_sync(1) & ~Busy_IRQ_sync(2)
+  // // Busy Interrupt
+  // val Busy_IRQ_sync = ShiftRegisters(macTileLinkRX.io.Busy_IRQ_rck, 3)
+  // io.Busy_IRQ := Busy_IRQ_sync(1) & ~Busy_IRQ_sync(2)
 
-  withClockAndReset( io.MRxClk.asClock, io.asyncReset ) {
-    macTileLinkRX.io.ShiftEndedSync := ShiftRegisters(ShiftEndedSync(1), 2, false.B, true.B)
-    macTileLinkRX.io.RxAbortSyncb   := ShiftRegister( RxAbortSync(1), 2, false.B, true.B )
-    io.RxStatusWriteLatched_sync2   := ShiftRegister(RxStatusWriteLatched, 2, false.B, true.B)
-    macTileLinkRX.io.Busy_IRQ_syncb := ShiftRegister( Busy_IRQ_sync(1), 2, false.B, true.B )
+  // withClockAndReset( io.MRxClk.asClock, io.asyncReset ) {
+  //   macTileLinkRX.io.ShiftEndedSync := ShiftRegisters(ShiftEndedSync(1), 2, false.B, true.B)
+  //   macTileLinkRX.io.RxAbortSyncb   := ShiftRegister( RxAbortSync(1), 2, false.B, true.B )
+  //   io.RxStatusWriteLatched_sync2   := ShiftRegister(RxStatusWriteLatched, 2, false.B, true.B)
+  //   macTileLinkRX.io.Busy_IRQ_syncb := ShiftRegister( Busy_IRQ_sync(1), 2, false.B, true.B )
 
-    macTileLinkRX.io.WriteRxDataToFifoSyncb := ShiftRegister( WriteRxDataToFifoSync(1), 2, false.B, true.B )
-    macTileLinkRX.io.SyncRxStartFrmSyncb    := ShiftRegister( SyncRxStartFrmSync(1), 2, false.B, true.B )
-      macTileLinkRX.io.RxReady  := ShiftRegister( RxReady, 2, false.B, true.B )
-  }
+  //   macTileLinkRX.io.WriteRxDataToFifoSyncb := ShiftRegister( WriteRxDataToFifoSync(1), 2, false.B, true.B )
+  //   macTileLinkRX.io.SyncRxStartFrmSyncb    := ShiftRegister( SyncRxStartFrmSync(1), 2, false.B, true.B )
+  //     macTileLinkRX.io.RxReady  := ShiftRegister( RxReady, 2, false.B, true.B )
+  // }
 
+  // macTileLinkRX.io.RxData   := io.RxData
+  // macTileLinkRX.io.RxAbort  := io.RxAbort
+  // macTileLinkRX.io.RxValid  := io.RxValid
 
-
-
-
-  macTileLinkRX.io.RxData   := io.RxData
-  macTileLinkRX.io.RxAbort  := io.RxAbort
-  macTileLinkRX.io.RxValid  := io.RxValid
-
-  macTileLinkRX.io.RxStartFrm := io.RxStartFrm
-  macTileLinkRX.io.RxEndFrm := io.RxEndFrm
+  // macTileLinkRX.io.RxStartFrm := io.RxStartFrm
+  // macTileLinkRX.io.RxEndFrm := io.RxEndFrm
 
 
-  macTileLinkRX.io.RxLength     := io.RxLength
-  macTileLinkRX.io.LoadRxStatus := io.LoadRxStatus
-  macTileLinkRX.io.RxStatusIn   := RxStatusIn
-
-
-
+  // macTileLinkRX.io.RxLength     := io.RxLength
+  // macTileLinkRX.io.LoadRxStatus := io.LoadRxStatus
+  // macTileLinkRX.io.RxStatusIn   := RxStatusIn
 
 }
 
@@ -1460,7 +1456,7 @@ class MacTileLinkRXIO extends Bundle{
   val RxLength = Input(UInt(16.W))
   val LoadRxStatus = Input(Bool())
       val RxStatusIn = Input(UInt(9.W))
-  val ShiftEndedSync = Input(Vec(2,Bool()) )
+  val ShiftEndedSyncb = Input(Bool())
   val RxAbortSyncb = Input(Bool())
   val WriteRxDataToFifoSyncb = Input(Bool())
   val SyncRxStartFrmSyncb = Input(Bool())
@@ -1580,7 +1576,7 @@ class MacTileLinkRX extends Module with RequireAsyncReset{
     // Generation of the end-of-frame signal
     when(~io.RxAbort & SetWriteRxDataToFifo & StartShiftWillEnd){
       ShiftEnded_rck := true.B
-    } .elsewhen(io.RxAbort | io.ShiftEndedSync(0) & io.ShiftEndedSync(1)){
+    } .elsewhen(io.RxAbort | io.ShiftEndedSyncb & RegNext(io.ShiftEndedSyncb, false.B) ){
       ShiftEnded_rck := false.B
     }
 
@@ -1647,7 +1643,7 @@ class MacTileLinkRX extends Module with RequireAsyncReset{
 //     val RxStatusInLatched = RegEnable(RxStatusIn, 0.U(9.W), io.LoadRxStatus); RxStatusInLatched_rxclk := RxStatusInLatched
 //     val ShiftEnded_rck = RegInit(false.B); ShiftEnded_rck_txclk := ShiftEnded_rck
 
-//     val ShiftEndedSync = ShiftRegisters(ShiftEndedSync2, 2, false.B, true.B)
+//     val ShiftEndedSyncb = ShiftRegisters(ShiftEndedSync2, 2, false.B, true.B)
 
 //     val RxAbortSyncb = ShiftRegister( RxAbortSync(1), 2, false.B, true.B )
 
@@ -1729,7 +1725,7 @@ class MacTileLinkRX extends Module with RequireAsyncReset{
 //     // Generation of the end-of-frame signal
 //     when(~io.RxAbort & SetWriteRxDataToFifo & StartShiftWillEnd){
 //       ShiftEnded_rck := true.B
-//     } .elsewhen(io.RxAbort | ShiftEndedSync(0) & ShiftEndedSync(1)){
+//     } .elsewhen(io.RxAbort | ShiftEndedSyncb(0) & ShiftEndedSyncb(1)){
 //       ShiftEnded_rck := false.B
 //     }
 

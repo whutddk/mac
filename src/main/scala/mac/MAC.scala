@@ -711,8 +711,6 @@ val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Modul
   wishbone.io.ShortFrame           := ShortFrame
   wishbone.io.DribbleNibble        := DribbleNibble
   wishbone.io.ReceivedPacketTooBig := ReceivedPacketTooBig
-  wishbone.io.RxLength             := RxByteCnt
-  wishbone.io.LoadRxStatus         := LoadRxStatus
   wishbone.io.ReceivedPacketGood   := ReceivedPacketGood
   wishbone.io.AddressMiss          := AddressMiss
   wishbone.io.r_RxFlow             := r_RxFlow
@@ -730,11 +728,6 @@ val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Modul
   PerPacketPad   := wishbone.io.PerPacketPad
 
   wishbone.io.MRxClk         := io.mrx_clk_pad_i
-  wishbone.io.RxData         := RxData
-  wishbone.io.RxValid        := RxValid
-  wishbone.io.RxStartFrm     := RxStartFrm
-  wishbone.io.RxEndFrm       := RxEndFrm
-  wishbone.io.RxAbort        := RxAbort_wb
   RxStatusWriteLatched_sync2 := wishbone.io.RxStatusWriteLatched_sync2
 
   wishbone.io.r_TxEn     := r_TxEn
@@ -861,6 +854,84 @@ val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Modul
   wishbone.io.TxRetrySync := ShiftRegister( TxRetry, 2, false.B, true.B )
   wishbone.io.TxAbortSync := ShiftRegister( TxAbort, 2, false.B, true.B )
   wishbone.io.TxDoneSync  := ShiftRegister( TxDone,  2, false.B, true.B )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  val macTileLinkRX = withClockAndReset( io.mrx_clk_pad_i.asClock, io.asyncReset ) ( Module(new MacTileLinkRX) )
+
+
+
+  wishbone.io.RxDataLatched2_rxclk    := macTileLinkRX.io.RxDataLatched2
+
+  val WriteRxDataToFifoSync = ShiftRegister(macTileLinkRX.io.WriteRxDataToFifo, 2, false.B, true.B)
+  wishbone.io.WriteRxDataToFifoSync := WriteRxDataToFifoSync
+
+  val RxAbortSync           = ShiftRegister( macTileLinkRX.io.RxAbortLatched, 2, false.B, true.B )
+  wishbone.io.RxAbortSync  := RxAbortSync
+
+  val ShiftEndedSync = ShiftRegister( macTileLinkRX.io.ShiftEnded_rck, 2, false.B, true.B )
+  wishbone.io.ShiftEndedSync := ShiftEndedSync
+
+  val SyncRxStartFrmSync = ShiftRegister(macTileLinkRX.io.LatchedRxStartFrm, 2, false.B, true.B)
+  wishbone.io.SyncRxStartFrmSync := SyncRxStartFrmSync
+
+      wishbone.io.LatchedRxLength_rxclk   := macTileLinkRX.io.LatchedRxLength
+      wishbone.io.RxStatusInLatched_rxclk := macTileLinkRX.io.RxStatusInLatched
+      
+
+  
+  // Busy Interrupt
+  val Busy_IRQ_sync = ShiftRegister(macTileLinkRX.io.Busy_IRQ_rck, 2)
+  wishbone.io.Busy_IRQ_sync := Busy_IRQ_sync
+
+
+  withClockAndReset( io.mrx_clk_pad_i.asClock, io.asyncReset ) {
+    macTileLinkRX.io.ShiftEndedSyncb := ShiftRegister( ShiftEndedSync, 2, false.B, true.B)
+    macTileLinkRX.io.RxAbortSyncb    := ShiftRegister( RxAbortSync,    2, false.B, true.B )
+    macTileLinkRX.io.Busy_IRQ_syncb  := ShiftRegister( Busy_IRQ_sync,  2, false.B, true.B )
+
+    macTileLinkRX.io.WriteRxDataToFifoSyncb := ShiftRegister( WriteRxDataToFifoSync, 2, false.B, true.B )
+    macTileLinkRX.io.SyncRxStartFrmSyncb    := ShiftRegister( SyncRxStartFrmSync,    2, false.B, true.B )
+      macTileLinkRX.io.RxReady  := ShiftRegister( wishbone.io.RxReady, 2, false.B, true.B )
+  }
+
+  macTileLinkRX.io.RxData   := RxData
+  macTileLinkRX.io.RxAbort  := RxAbort_latch_wire
+  macTileLinkRX.io.RxValid  := RxValid
+
+  macTileLinkRX.io.RxStartFrm := RxStartFrm
+  macTileLinkRX.io.RxEndFrm := RxEndFrm
+
+
+  macTileLinkRX.io.RxLength     := RxByteCnt
+  macTileLinkRX.io.LoadRxStatus := LoadRxStatus
+    macTileLinkRX.io.RxStatusIn   := wishbone.io.RxStatusIn
+
+
+
+
+
+
+
 
 
 }
