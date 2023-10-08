@@ -20,7 +20,7 @@ class MacTileLinkRxIO extends Bundle{
   val ShiftEndedSyncb = Input(Bool())
   val RxAbortSyncb = Input(Bool())
   val WriteRxDataToFifoSyncb = Input(Bool())
-  val SyncRxStartFrmSyncb = Input(Bool())
+  val LatchedRxStartFrmSyncb = Input(Bool())
 
   val Busy_IRQ_rck = Output(Bool())
   val Busy_IRQ_syncb = Input(Bool())
@@ -127,9 +127,9 @@ class MacTileLinkRx extends Module with RequireAsyncReset{
     }
 
 
-    when(io.RxStartFrm & ~io.SyncRxStartFrmSyncb){
+    when(io.RxStartFrm & ~io.LatchedRxStartFrmSyncb){
       LatchedRxStartFrm := true.B
-    } .elsewhen(io.SyncRxStartFrmSyncb){
+    } .elsewhen(io.LatchedRxStartFrmSyncb){
       LatchedRxStartFrm := false.B
     }
 

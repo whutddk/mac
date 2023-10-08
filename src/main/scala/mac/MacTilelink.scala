@@ -94,7 +94,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
     val LatchedRxLength_rxclk = Input(UInt(16.W))
     val RxStatusInLatched_rxclk = Input(UInt(9.W))
     val ShiftEndedSync = Input(Bool())
-    val SyncRxStartFrmSync = Input(Bool())
+    val LatchedRxStartFrmSync = Input(Bool())
     val Busy_IRQ_sync = Input(Bool())
 
     val RxReady = Output(Bool())
@@ -106,12 +106,10 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
   
   val io = IO(new MacTileLinkIO)
-    
-
+  val tx_fifo = Module( new MacFifo(dw = 32, dp = 16) )
+  val rx_fifo = Module(new MacFifo(dw = 32, dp = 16))
+  
   val (_, _, isLastD, transDCnt) = edgeOut.count(io.tlMst.D)
-
-
-  val BDCs = Wire(UInt(4.W))
 
   val TxB_IRQ = RegInit(false.B); io.TxB_IRQ := TxB_IRQ
   val TxE_IRQ = RegInit(false.B); io.TxE_IRQ := TxE_IRQ
@@ -140,9 +138,15 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
   // Signals used for various purposes
-  val TxRetryPulse = io.TxRetrySync & ~RegNext(io.TxRetrySync, false.B)
-  val TxDonePulse  = io.TxDoneSync &  ~RegNext(io.TxDoneSync,  false.B)
-  val TxAbortPulse = io.TxAbortSync & ~RegNext(io.TxAbortSync, false.B)
+  val TxRetryPulse                = io.TxRetrySync             & ~RegNext(io.TxRetrySync, false.B)
+  val TxDonePulse                 = io.TxDoneSync              & ~RegNext(io.TxDoneSync,  false.B)
+  val TxAbortPulse                = io.TxAbortSync             & ~RegNext(io.TxAbortSync, false.B)
+  val ShiftEndedSyncPluse         = io.ShiftEndedSync          & ~RegNext(io.ShiftEndedSync, false.B)
+  val ReadTxDataFromFifoSyncPluse = io.ReadTxDataFromFifo_sync & ~RegNext(io.ReadTxDataFromFifo_sync, false.B)
+  val RxAbortPluse                = io.RxAbortSync             & ~RegNext(io.RxAbortSync, false.B)
+  val WriteRxDataToFifoSyncPluse  = io.WriteRxDataToFifoSync   & ~RegNext(io.WriteRxDataToFifoSync, false.B)
+  val LatchedRxStartFrmSyncPluse  = io.LatchedRxStartFrmSync   & ~RegNext(io.LatchedRxStartFrmSync, false.B)
+  val Busy_IRQ_syncPluse          = io.Busy_IRQ_sync           & ~RegNext(io.Busy_IRQ_sync)
 
   val TxRetryPacket = RegInit(false.B)
   val TxRetryPacket_NotCleared = RegInit(false.B)
@@ -175,8 +179,6 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
   val BDWrite = RegInit(0.U(4.W))     // BD Write Enable for access from WISHBONE side
   val BDRead  = RegInit(false.B)      // BD Read access from WISHBONE side
-  val RxBDDataIn = Wire(UInt(32.W))   // Rx BD data in
-  val TxBDDataIn = Wire(UInt(32.W))   // Tx BD data in
 
   val TxEndFrm_wb = RegInit(false.B); io.TxEndFrm_wb := TxEndFrm_wb
 
@@ -185,17 +187,9 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-
-
-
-
-
   val RxStatusWrite = Wire(Bool())
-  val RxBufferFull = Wire(Bool())
-  val RxBufferAlmostEmpty = Wire(Bool())
-  val RxBufferEmpty = Wire(Bool())
 
-  val BDAck = Reg(Bool());
+
 
 
 
@@ -212,16 +206,10 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
   val stateCur = RegNext( stateNxt, StateIdle )
 
   
-
-
-  val ram_ce = true.B
-  val ram_we = Wire(UInt(4.W))
-  val ram_oe = Wire(Bool())
   val ram_addr = RegInit(0.U(8.W))
   val ram_di = RegInit(0.U(32.W))
-  val ram_do = Wire(UInt(32.W))
-  val txBuffDesc = ram_do.asTypeOf(new TxBuffDesc)
-  val rxBuffDesc = ram_do.asTypeOf(new RxBuffDesc)
+
+
 
 
   val TxPointerRead = RegInit(false.B)
@@ -239,22 +227,10 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
   val StartOccured      = RegInit(false.B)
 
-  val TxFifoClear = Wire(Bool())
-  val TxBufferAlmostFull = Wire(Bool())
-  val TxBufferFull  = Wire(Bool())
-  val TxBufferEmpty = Wire(Bool())
-  val TxBufferAlmostEmpty = Wire(Bool())
   val BlockReadTxDataFromMemory = RegInit(false.B)
 
 
-  val ReadTxDataFromFifo_wb = Wire(Bool())
-  val RxAbortPluse = io.RxAbortSync & ~RegNext(io.RxAbortSync, false.B)
-
-  val txfifo_cnt = Wire(UInt(5.W))
-  val rxfifo_cnt = Wire(UInt(5.W))
-
   val ReadTxDataFromMemory = RegInit(false.B)
-  val WriteRxDataToMemory = Wire(Bool())
 
   val MasterWbTX = RegInit(false.B)
   val MasterWbRX = RegInit(false.B)
@@ -265,57 +241,35 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-
-
-
-  val cyc_cleared = RegInit(false.B)
-
-
-
-
-
-
-
-
-
-
-
-
-
   val RxStatusWriteLatched = RegInit(false.B); io.RxStatusWriteLatched := RxStatusWriteLatched
 
 
 
 
-
-
-  when(true.B){
-    BDAck := stateNxt === StateWB & Mux( stateCur === StateWB , BDWrite.orR, BDRead )
-  }
-
   // Generic synchronous single-port RAM interface
   val bd_ram = Module(new MacSRAM)
+  val txBuffDesc = bd_ram.io.dato.asTypeOf(new TxBuffDesc)
+  val rxBuffDesc = bd_ram.io.dato.asTypeOf(new RxBuffDesc)
 
 
-  val BD_WB_DAT_O = ram_do
+  bd_ram.io.we :=
+    Mux1H(Seq(
+      (stateNxt === StateWB & stateCur === StateWB) -> BDWrite,
+      (TxStatusWrite | RxStatusWrite)               -> "b1111".U
+    )).asBools
+
+  bd_ram.io.oe :=
+    Mux1H(Seq(
+      (( stateNxt === StateWB ) & ( stateCur === StateWB )) -> BDRead,
+      (( stateNxt === StateTX ) & ( stateCur === StateTX )) -> (TxBDRead | TxPointerRead),
+      (( stateNxt === StateRX ) & ( stateCur === StateRX )) -> (RxBDRead | RxPointerRead),
+    ))
 
 
-
-  bd_ram.io.ce := ram_ce
-  bd_ram.io.we := ram_we.asBools
-  bd_ram.io.oe := ram_oe
   bd_ram.io.addr := ram_addr
   bd_ram.io.di := ram_di
-  ram_do := bd_ram.io.dato
 
-  ram_we :=
-    (Fill(4, (stateNxt === StateWB & stateCur === StateWB)) & BDWrite  ) |
-    (Fill(4, (TxStatusWrite | RxStatusWrite)              )            )
 
-  ram_oe :=
-    (   BDRead                  & ( stateNxt === StateWB ) & ( stateCur === StateWB ) ) |
-    ((TxBDRead | TxPointerRead) & ( stateNxt === StateTX ) & ( stateCur === StateTX ) ) |
-    ((RxBDRead | RxPointerRead) & ( stateNxt === StateRX ) & ( stateCur === StateRX ) )
 
 
   when(~TxBDReady & io.r_TxEn & stateNxt === StateWB & stateCur =/= StateWB){
@@ -325,6 +279,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
   }
 
 
+Fill(4, io.tlSlv.A.valid & io.tlSlv.A.bits.mask.orR & io.tlSlv.A.bits.address(10)) & io.tlSlv.A.bits.mask
 
   // Enabling access to the RAM for three devices.
   // Switching between three stages depends on enable signals
@@ -335,8 +290,8 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
         
         ram_addr := io.tlSlv.A.bits.address(9,2) // [11:2 ] -> [9:2]
         ram_di   := io.tlSlv.A.bits.data
-        BDWrite  := BDCs & Fill(4,(io.tlSlv.A.bits.opcode === 0.U) || (io.tlSlv.A.bits.opcode === 1.U))
-        BDRead   := BDCs.orR & (io.tlSlv.A.bits.opcode === 4.U)
+        BDWrite  := io.tlSlv.A.bits.mask & Fill(4, io.tlSlv.A.valid & io.tlSlv.A.bits.address(10) & ((io.tlSlv.A.bits.opcode === 0.U) || (io.tlSlv.A.bits.opcode === 1.U)) )
+        BDRead   := io.tlSlv.A.bits.mask.orR     & io.tlSlv.A.valid & io.tlSlv.A.bits.address(10) &  (io.tlSlv.A.bits.opcode === 4.U) // 0x400 - 0x7FF
       }
 
     }
@@ -345,12 +300,12 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
         stateNxt := StateRX // wb access stage and r_RxEn is enabled
 
         ram_addr := Cat(RxBDAddress, RxPointerRead)
-        ram_di := RxBDDataIn
+        ram_di   := Cat(io.LatchedRxLength_rxclk, 0.U(1.W), RxStatus, 0.U(4.W), io.RxStatusInLatched_rxclk)
       } .elsewhen( TxEn_needed ){
         stateNxt := StateTX // wb access stage, r_RxEn is disabled but r_TxEn is enabled
 
         ram_addr := Cat(TxBDAddress, TxPointerRead) //[7,1] + [0]
-        ram_di := TxBDDataIn
+        ram_di   := Cat(LatchedTxLength, 0.U(1.W), TxStatus, 0.U(2.W), io.TxUnderRun, io.RetryCntLatched, io.RetryLimit, io.LateCollLatched, io.DeferLatched, io.CarrierSenseLost)
       } .otherwise{
         stateNxt := StateIdle // WbEn access stage and there is no need for other stages. WbEn needs to be switched off for a bit
       }
@@ -360,14 +315,14 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
         stateNxt := StateTX  // RxEn access stage and r_TxEn is enabled
 
         ram_addr := Cat(TxBDAddress, TxPointerRead)
-        ram_di := TxBDDataIn
+        ram_di   := Cat(LatchedTxLength, 0.U(1.W), TxStatus, 0.U(2.W), io.TxUnderRun, io.RetryCntLatched, io.RetryLimit, io.LateCollLatched, io.DeferLatched, io.CarrierSenseLost)
       } .otherwise{
         stateNxt := StateWB  // RxEn access stage and r_TxEn is disabled
 
         ram_addr := io.tlSlv.A.bits.address(9,2) // [11:2 ] -> [9:2];
         ram_di   := io.tlSlv.A.bits.data
-        BDWrite  := BDCs & Fill(4,(io.tlSlv.A.bits.opcode === 0.U) || (io.tlSlv.A.bits.opcode === 1.U))
-        BDRead   := BDCs.orR & (io.tlSlv.A.bits.opcode === 4.U)
+        BDWrite  := io.tlSlv.A.bits.mask & Fill(4, io.tlSlv.A.valid & io.tlSlv.A.bits.address(10) & ((io.tlSlv.A.bits.opcode === 0.U) || (io.tlSlv.A.bits.opcode === 1.U)) )
+        BDRead   := io.tlSlv.A.bits.mask.orR     & io.tlSlv.A.valid & io.tlSlv.A.bits.address(10) &  (io.tlSlv.A.bits.opcode === 4.U)
       }
     }
     is(StateTX){
@@ -376,8 +331,8 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
         ram_addr := io.tlSlv.A.bits.address(9,2) //[11:2 ] ->[9:2]
         ram_di   := io.tlSlv.A.bits.data
-        BDWrite  := BDCs & Fill(4,(io.tlSlv.A.bits.opcode === 0.U) || (io.tlSlv.A.bits.opcode === 1.U)) 
-        BDRead   := BDCs.orR & (io.tlSlv.A.bits.opcode === 4.U)
+        BDWrite  := io.tlSlv.A.bits.mask & Fill(4, io.tlSlv.A.valid & io.tlSlv.A.bits.address(10) & ((io.tlSlv.A.bits.opcode === 0.U) || (io.tlSlv.A.bits.opcode === 1.U)) )
+        BDRead   := io.tlSlv.A.bits.mask.orR     & io.tlSlv.A.valid & io.tlSlv.A.bits.address(10) &  (io.tlSlv.A.bits.opcode === 4.U)
       }
     }
   }
@@ -405,10 +360,8 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
     TxBDRead := false.B
   }
 
-  val StartTxPointerRead = TxBDRead & TxBDReady  // Reading Tx BD pointer
-
   // Reading Tx BD Pointer
-  when(StartTxPointerRead){
+  when(TxBDRead & TxBDReady){
     TxPointerRead := true.B
   } .elsewhen(stateCur === StateTX){
     TxPointerRead := false.B
@@ -441,19 +394,18 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-  // Latching status from the tx buffer descriptor Data is avaliable one cycle after the access is started (at that time signal TxEn is not active)
+  
+
+
+
+
+
+  
   when(stateNxt === StateTX & stateCur === StateTX & TxBDRead){
-    TxStatus := Cat(txBuffDesc.irq, txBuffDesc.wr, txBuffDesc.pad, txBuffDesc.crc)
-  }
-
-
-
-
-  //Latching length from the buffer descriptor;
-  when(stateNxt === StateTX & stateCur === StateTX & TxBDRead){
-    TxLength := txBuffDesc.len   
-  } 
-  .elsewhen( MasterWbTX & io.tlMst.D.fire ){ //tx tileRead
+    TxStatus := Cat(txBuffDesc.irq, txBuffDesc.wr, txBuffDesc.pad, txBuffDesc.crc) // Latching status from the tx buffer descriptor Data is avaliable one cycle after the access is started (at that time signal TxEn is not active)
+    TxLength        := txBuffDesc.len                                              //Latching length from the buffer descriptor;
+    LatchedTxLength := txBuffDesc.len 
+  } .elsewhen( MasterWbTX & io.tlMst.D.fire ){ //tx tileRead
     when( TxLength < 4.U ){
       TxLength := 0.U
     } .otherwise{
@@ -463,17 +415,13 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-  //Latching length from the buffer descriptor;
-  when(stateNxt === StateTX & stateCur === StateTX & TxBDRead){
-    LatchedTxLength := txBuffDesc.len   
-  }
 
 
 
 
   when(stateNxt === StateTX & stateCur === StateTX & TxPointerRead){
-    TxPointerMSB := ram_do(31,2)  // Latching Tx buffer pointer from buffer descriptor. Only 30 MSB bits are latched because TxPointerMSB is only used for word-aligned accesses.
-    when( ram_do(1,0) =/= 0.U ){
+    TxPointerMSB := bd_ram.io.dato(31,2)  // Latching Tx buffer pointer from buffer descriptor. Only 30 MSB bits are latched because TxPointerMSB is only used for word-aligned accesses.
+    when( bd_ram.io.dato(1,0) =/= 0.U ){
       printf("Warning, force to align at tx ram")
     }
   } .elsewhen( io.tlMst.D.fire & io.tlMst.D.bits.opcode === 1.U ){
@@ -494,9 +442,9 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
   val ReadTxDataFromMemory_2 = ReadTxDataFromMemory & ~BlockReadTxDataFromMemory;
 
   when(
-    (TxBufferAlmostFull | TxLength <= 4.U) & MasterWbTX & isTlMstBusy & (~(TxAbortPacket_NotCleared | TxRetryPacket_NotCleared))){
+    (tx_fifo.io.almost_full | TxLength <= 4.U) & MasterWbTX & isTlMstBusy & (~(TxAbortPacket_NotCleared | TxRetryPacket_NotCleared))){
     BlockReadTxDataFromMemory := true.B
-  } .elsewhen(ReadTxDataFromFifo_wb | TxDonePacket | TxAbortPacket | TxRetryPacket){
+  } .elsewhen(ReadTxDataFromFifoSyncPluse | TxDonePacket | TxAbortPacket | TxRetryPacket){
     BlockReadTxDataFromMemory := false.B
   }
 
@@ -563,26 +511,20 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-  TxFifoClear := (TxAbortPacket | TxRetryPacket)
-
-  val tx_fifo = Module( new MacFifo(dw = 32, dp = 16) )
-    tx_fifo.io.data_in := io.tlMst.D.bits.data
-    tx_fifo.io.write   := io.tlMst.D.fire & io.tlMst.D.bits.opcode === 1.U
+  tx_fifo.io.data_in := io.tlMst.D.bits.data
+  tx_fifo.io.write   := io.tlMst.D.fire & io.tlMst.D.bits.opcode === 1.U
 
 
-  tx_fifo.io.read    := ReadTxDataFromFifo_wb & ~TxBufferEmpty
-  tx_fifo.io.clear   := TxFifoClear
+  tx_fifo.io.read    := ReadTxDataFromFifoSyncPluse & ~tx_fifo.io.empty
+  tx_fifo.io.clear   := TxAbortPacket | TxRetryPacket
   io.TxData_wb       := tx_fifo.io.data_out
-  TxBufferFull        := tx_fifo.io.full
-  TxBufferAlmostFull  := tx_fifo.io.almost_full
-  TxBufferAlmostEmpty := tx_fifo.io.almost_empty
-  TxBufferEmpty       := tx_fifo.io.empty
-  txfifo_cnt          := tx_fifo.io.cnt
+
+
 
 
 
   // Start: Generation of the TxStartFrm_wb which is then synchronized to the MTxClk
-  when(TxBDReady & ~StartOccured & (TxBufferFull | TxLength === 0.U)){
+  when(TxBDReady & ~StartOccured & (tx_fifo.io.full | TxLength === 0.U)){
     TxStartFrm_wb := true.B
   } .elsewhen(io.TxStartFrm_syncb){
     TxStartFrm_wb := false.B
@@ -598,7 +540,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
   // TxEndFrm_wb: indicator of the end of frame
-  when((TxLength === 0.U) & TxBufferAlmostEmpty & io.TxUsedData){
+  when((TxLength === 0.U) & tx_fifo.io.almost_empty & io.TxUsedData){
     TxEndFrm_wb := true.B
   } .elsewhen(TxRetryPulse | TxDonePulse | TxAbortPulse){
     TxEndFrm_wb := false.B
@@ -606,21 +548,20 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
   // Marks which bytes are valid within the word.
-  val TxValidBytes = Mux(TxLength < 4.U, TxLength(1,0), 0.U)
   val TxValidBytesLatched = RegInit(0.U(2.W)); io.TxValidBytesLatched := TxValidBytesLatched
 
 
-  val LatchValidBytes   = ShiftRegisters((TxLength < 4.U) & TxBDReady, 2, false.B, true.B)
+  val LatchValidBytes = ShiftRegisters((TxLength < 4.U) & TxBDReady, 2, false.B, true.B)
+  val LatchValidBytesPluse = LatchValidBytes(0) & ~LatchValidBytes(1)
 
   // Latching valid bytes
-  when(LatchValidBytes(0) & ~LatchValidBytes(1)){
-    TxValidBytesLatched := TxValidBytes
+  when(LatchValidBytesPluse){
+    TxValidBytesLatched := Mux(TxLength < 4.U, TxLength(1,0), 0.U)
   } .elsewhen(TxRetryPulse | TxDonePulse | TxAbortPulse){
     TxValidBytesLatched := 0.U
   }
 
 
-  // dontTouch(TxStatus)
   val TxIRQEn         = TxStatus.extract(3) //[14:11]
   val WrapTxStatusBit = TxStatus.extract(2)
   io.PerPacketPad    := TxStatus.extract(1)
@@ -630,36 +571,32 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
   val WrapRxStatusBit = RxStatus.extract(0)
 
 
-  // Temporary Tx and Rx buffer descriptor address//[7:1]
-  val TempTxBDAddress = Mux( TxStatusWrite & ~WrapTxStatusBit, (TxBDAddress + 1.U), 0.U ) // Tx BD increment or wrap (last BD)
-  val TempRxBDAddress = Mux( WrapRxStatusBit,                    io.r_TxBDNum(6,0), (RxBDAddress + 1.U) ) // Using first Rx BD / Using next Rx BD
-
 
   // Latching Tx buffer descriptor address
   when(io.r_TxEn & (~r_TxEn_q)){
     TxBDAddress := 0.U
   } .elsewhen(TxStatusWrite){
-    TxBDAddress := TempTxBDAddress  
+    when( TxStatusWrite & ~WrapTxStatusBit ){ //increase
+      TxBDAddress := TxBDAddress + 1.U
+    } .otherwise{ //wrap
+      TxBDAddress := 0.U
+    } 
   }
 
   // Latching Rx buffer descriptor address
   when(io.r_RxEn & (~r_RxEn_q)){
     RxBDAddress := io.r_TxBDNum(6,0)
   } .elsewhen(RxStatusWrite){
-    RxBDAddress := TempRxBDAddress;    
+    when( WrapRxStatusBit ) {
+      RxBDAddress := io.r_TxBDNum(6,0) // Using first Rx BD
+    } .otherwise{
+      RxBDAddress := (RxBDAddress + 1.U) //Using next Rx BD
+    }  
   }
 
 
-  val TxStatusInLatched = Cat(io.TxUnderRun, io.RetryCntLatched, io.RetryLimit, io.LateCollLatched, io.DeferLatched, io.CarrierSenseLost)
 
 
-  RxBDDataIn := Cat(io.LatchedRxLength_rxclk, 0.U(1.W), RxStatus, 0.U(4.W), io.RxStatusInLatched_rxclk)
-  TxBDDataIn := Cat(LatchedTxLength, 0.U(1.W), TxStatus, 0.U(2.W), TxStatusInLatched)
-
-
-
-
-  val TxError = io.TxUnderRun | io.RetryLimit | io.LateCollLatched | io.CarrierSenseLost
 
 
 
@@ -755,17 +692,16 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
   // Tx under run
   when(TxAbortPulse){
     TxUnderRun_wb := false.B    
-  } .elsewhen(TxBufferEmpty & ReadTxDataFromFifo_wb){
+  } .elsewhen(tx_fifo.io.empty & ReadTxDataFromFifoSyncPluse){
     TxUnderRun_wb := true.B
   }
 
 
-  ReadTxDataFromFifo_wb := io.ReadTxDataFromFifo_sync & ~RegNext(io.ReadTxDataFromFifo_sync, false.B)
 
-  val StartRxBDRead = RxStatusWrite | RegNext(RxAbortPluse, false.B) | (io.r_RxEn & ~r_RxEn_q)
+
 
   // Reading the Rx buffer descriptor
-  when(StartRxBDRead & ~RxReady){
+  when( (RxStatusWrite | RegNext(RxAbortPluse, false.B) | (io.r_RxEn & ~r_RxEn_q)) & ~RxReady){
     RxBDRead := true.B
   } .elsewhen(RxBDReady){
     RxBDRead := false.B
@@ -773,19 +709,12 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-  // Reading of the next receive buffer descriptor starts after reception status is written to the previous one.
-
   // Latching READY status of the Rx buffer descriptor
   when(RxPointerRead){
     RxBDReady := false.B
   } .elsewhen(stateNxt === StateRX & stateCur === StateRX & RxBDRead){
-    RxBDReady := rxBuffDesc.e  // RxBDReady is sampled only once at the beginning    
-  }
-
-
-  // Latching Rx buffer descriptor status Data is avaliable one cycle after the access is started (at that time signal RxEn is not active)
-  when(stateNxt === StateRX & stateCur === StateRX & RxBDRead){
-    RxStatus := Cat(rxBuffDesc.irq, rxBuffDesc.wrap)
+    RxBDReady := rxBuffDesc.e                           // RxBDReady is sampled only once at the beginning 
+    RxStatus := Cat(rxBuffDesc.irq, rxBuffDesc.wrap)    // Latching Rx buffer descriptor status Data is avaliable one cycle after the access is started (at that time signal RxEn is not active)
   }
 
 
@@ -797,11 +726,8 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
     RxReady := true.B
   }
 
-  // Reading Rx BD pointer
-  val StartRxPointerRead = RxBDRead & RxBDReady
-
   // Reading Tx BD Pointer
-  when(StartRxPointerRead){
+  when(RxBDRead & RxBDReady){
     RxPointerRead := true.B
   } .elsewhen(stateNxt === StateRX & stateCur === StateRX){
     RxPointerRead := false.B
@@ -811,7 +737,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
   //Latching Rx buffer pointer from buffer descriptor;
   when(stateNxt === StateRX & stateCur === StateRX & RxPointerRead){
-    RxPointerMSB := ram_do(31,2)    
+    RxPointerMSB := bd_ram.io.dato(31,2)    
   } .elsewhen(MasterWbRX & io.tlMst.A.fire ){
     RxPointerMSB := RxPointerMSB + 1.U // Word access (always word access. m_wb_sel_o are used for selecting bytes)
   }
@@ -831,34 +757,24 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-  val WriteRxDataToFifo_wb  = io.WriteRxDataToFifoSync & ~RegNext(io.WriteRxDataToFifoSync, false.B)
-  val RxFifoReset = io.SyncRxStartFrmSync & ~RegNext(io.SyncRxStartFrmSync, false.B)
 
-  val rx_fifo = Module(new MacFifo(dw = 32, dp = 16))
+
+
 
   rx_fifo.io.data_in := io.RxDataLatched2_rxclk
-  rx_fifo.io.write   := WriteRxDataToFifo_wb & ~RxBufferFull
+  rx_fifo.io.write   := WriteRxDataToFifoSyncPluse & ~rx_fifo.io.full
   rx_fifo.io.read    := MasterWbRX & io.tlMst.A.fire
-  rx_fifo.io.clear   := RxFifoReset
-
-
-
-  RxBufferFull := rx_fifo.io.full
-  RxBufferAlmostEmpty := rx_fifo.io.almost_empty
-  RxBufferEmpty := rx_fifo.io.empty
-  rxfifo_cnt := rx_fifo.io.cnt
+  rx_fifo.io.clear   := LatchedRxStartFrmSyncPluse
 
 
 
 
 
-  WriteRxDataToMemory := ~RxBufferEmpty
- 
 
 
 
 
-  when( io.ShiftEndedSync & ~RegNext(io.ShiftEndedSync, false.B)){
+  when( ShiftEndedSyncPluse ){
     ShiftEndedSync3 := true.B
   } .elsewhen(ShiftEnded){
     ShiftEndedSync3 := false.B
@@ -866,7 +782,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
   // Generation of the end-of-frame signal
-  when(ShiftEndedSync3 & MasterWbRX & io.tlMst.A.fire & RxBufferAlmostEmpty & ~ShiftEnded){
+  when(ShiftEndedSync3 & MasterWbRX & io.tlMst.A.fire & rx_fifo.io.almost_empty & ~ShiftEnded){
     ShiftEnded := true.B
   } .elsewhen(RxStatusWrite){
     ShiftEnded := false.B
@@ -881,7 +797,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
   // Rx overrun
   when(RxStatusWrite){
     RxOverrun := false.B
-  } .elsewhen(RxBufferFull & WriteRxDataToFifo_wb){
+  } .elsewhen(rx_fifo.io.full & WriteRxDataToFifoSyncPluse){
     RxOverrun := true.B
   }
 
@@ -890,9 +806,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-  // ShortFrame (RxStatusInLatched[2]) can not set an error because short frames are aborted when signal r_RecSmall is set to 0 in MODER register. 
-  // AddressMiss is identifying that a frame was received because of the promiscous mode and is not an error
-  val RxError = (io.RxStatusInLatched_rxclk(6,3).orR) | (io.RxStatusInLatched_rxclk(1,0).orR)
+
 
 
   // Latching and synchronizing RxStatusWrite signal. This signal is used for clearing the ReceivedPauseFrm signal
@@ -903,9 +817,11 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
   }
 
 
+  // ShortFrame (RxStatusInLatched[2]) can not set an error because short frames are aborted when signal r_RecSmall is set to 0 in MODER register. 
+  // AddressMiss is identifying that a frame was received because of the promiscous mode and is not an error
+  val RxError = (io.RxStatusInLatched_rxclk(6,3).orR) | (io.RxStatusInLatched_rxclk(1,0).orR)
 
-
-
+  val TxError = io.TxUnderRun | io.RetryLimit | io.LateCollLatched | io.CarrierSenseLost
 
   // Tx Done Interrupt
   when(TxStatusWrite & TxIRQEn){
@@ -937,38 +853,33 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-  io.Busy_IRQ := io.Busy_IRQ_sync & ~RegNext(io.Busy_IRQ_sync)
+  io.Busy_IRQ := Busy_IRQ_syncPluse
 
 
 
+  
+  val slvAInfo = RegEnable( io.tlSlv.A.bits, io.tlSlv.A.fire )
+  val slvDValid = RegInit(false.B); io.tlSlv.D.valid := slvDValid
+  val slvDDat = Reg(UInt(32.W))
 
 
 
+  when( io.tlSlv.D.fire ){
+    slvDValid := false.B
+  } .elsewhen(io.tlSlv.A.fire){
+    slvDValid := true.B
+    slvDDat := bd_ram.io.dato
+  }
 
-   
-  BDCs  := Fill(4, io.tlSlv.A.valid & io.tlSlv.A.bits.mask.orR & io.tlSlv.A.bits.address(10)) & io.tlSlv.A.bits.mask // 0x400 - 0x7FF
-    
-    val slvAInfo = RegEnable( io.tlSlv.A.bits, io.tlSlv.A.fire )
-    val slvDValid = RegInit(false.B); io.tlSlv.D.valid := slvDValid
-    val slvDDat = Reg(UInt(32.W))
+  when(slvAInfo.opcode === 4.U) {
+    io.tlSlv.D.bits := edgeIn.AccessAck(slvAInfo, slvDDat)
+  } .otherwise {
+    io.tlSlv.D.bits := edgeIn.AccessAck(slvAInfo)
+  }
 
-
-
-    when( io.tlSlv.D.fire ){
-      slvDValid := false.B
-    } .elsewhen(io.tlSlv.A.fire){
-      slvDValid := true.B
-      slvDDat := BD_WB_DAT_O
-    }
-
-    when(slvAInfo.opcode === 4.U) {
-      io.tlSlv.D.bits := edgeIn.AccessAck(slvAInfo, slvDDat)
-    } .otherwise {
-      io.tlSlv.D.bits := edgeIn.AccessAck(slvAInfo)
-    }
-
-    io.tlSlv.A.ready := BDAck
-    assert( ~(io.tlSlv.A.ready & ~io.tlSlv.A.valid) )
+  io.tlSlv.A.ready := RegNext(stateNxt === StateWB & Mux( stateCur === StateWB , BDWrite.orR, BDRead ))
+  
+  assert( ~(io.tlSlv.A.ready & ~io.tlSlv.A.valid) )
 
 
 
@@ -1010,13 +921,13 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
   }
 
   when( ~MasterWbTX & ~MasterWbRX ){
-    when( WriteRxDataToMemory ){
+    when( ~rx_fifo.io.empty ){
       MasterWbRX := true.B
     } .elsewhen(ReadTxDataFromMemory_2) {
       MasterWbTX := true.B
     }
   } .elsewhen( ~MasterWbTX & MasterWbRX){ //1.4A + 1D fifo to memory
-    when( io.tlMst.D.fire & isLastD & ~WriteRxDataToMemory ){
+    when( io.tlMst.D.fire & isLastD & rx_fifo.io.empty ){
       MasterWbRX := false.B
     }
   } .elsewhen( MasterWbTX & ~MasterWbRX){ //1 A + 1.4D memory to fifo
@@ -1030,16 +941,16 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
   when(io.tlMst.D.fire & io.tlMst.D.bits.opcode === 0.U) { assert( MasterWbRX ) }
 
 
-    val tlMstAValid_dbg = RegInit(true.B)
-    io.tlMst.A.valid := mstAValid & tlMstAValid_dbg
-    io.tlMst.A.bits  := mstABits
+  val tlMstAValid_dbg = RegInit(true.B)
+  io.tlMst.A.valid := mstAValid & tlMstAValid_dbg
+  io.tlMst.A.bits  := mstABits
 
 
-    val tlMstDReady = RegInit(true.B)
+  val tlMstDReady = RegInit(true.B)
 
-    dontTouch(tlMstDReady)
-    dontTouch(tlMstAValid_dbg)
-    io.tlMst.D.ready := tlMstDReady
+  dontTouch(tlMstDReady)
+  dontTouch(tlMstAValid_dbg)
+  io.tlMst.D.ready := tlMstDReady
 
 
 

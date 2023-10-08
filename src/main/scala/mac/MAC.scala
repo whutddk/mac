@@ -886,8 +886,8 @@ val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Modul
   val ShiftEndedSync = ShiftRegister( macTileLinkRx.io.ShiftEnded_rck, 2, false.B, true.B )
   wishbone.io.ShiftEndedSync := ShiftEndedSync
 
-  val SyncRxStartFrmSync = ShiftRegister(macTileLinkRx.io.LatchedRxStartFrm, 2, false.B, true.B)
-  wishbone.io.SyncRxStartFrmSync := SyncRxStartFrmSync
+  val LatchedRxStartFrmSync = ShiftRegister(macTileLinkRx.io.LatchedRxStartFrm, 2, false.B, true.B)
+  wishbone.io.LatchedRxStartFrmSync := LatchedRxStartFrmSync
 
   
   wishbone.io.RxStatusWriteLatchedSyncb := ShiftRegister(RxStatusWriteLatchedSync, 2, false.B, true.B)
@@ -911,7 +911,7 @@ val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Modul
     macTileLinkRx.io.Busy_IRQ_syncb  := ShiftRegister( Busy_IRQ_sync,  2, false.B, true.B )
 
     macTileLinkRx.io.WriteRxDataToFifoSyncb := ShiftRegister( WriteRxDataToFifoSync, 2, false.B, true.B )
-    macTileLinkRx.io.SyncRxStartFrmSyncb    := ShiftRegister( SyncRxStartFrmSync,    2, false.B, true.B )
+    macTileLinkRx.io.LatchedRxStartFrmSyncb    := ShiftRegister( LatchedRxStartFrmSync,    2, false.B, true.B )
       macTileLinkRx.io.RxReady  := ShiftRegister( wishbone.io.RxReady, 2, false.B, true.B )
   }
 

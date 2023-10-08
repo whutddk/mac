@@ -5,7 +5,6 @@ import chisel3.util._
 
 
 class MacSRAMIO extends Bundle{
-  val ce   = Input(Bool())           // Chip enable input, active high
   val we   = Input(Vec(4, Bool()))   // Write enable input, active high
   val oe   = Input(Bool())           // Output enable input, active high
   val addr = Input(UInt(8.W))        // address bus inputs
@@ -28,29 +27,29 @@ class MacSRAM extends Module{
 
 
   // Data output drivers
-  io.dato := Mux((io.oe & io.ce), q, DontCare)
+  io.dato := Mux((io.oe), q, DontCare)
 
   // read operation
-  when( io.ce ){
+  when( true.B ){
     raddr := io.addr  // read address needs to be registered to read clock
   }
 
   q := Mux(reset.asBool, 0.U, Cat(mem3.read(raddr), mem2.read(raddr), mem1.read(raddr), mem0.read(raddr)))
 
   // write operation
-  when(io.ce & io.we(3)){
+  when(io.we(3)){
     mem3.write(io.addr, io.di(31,24))
   }
 
-  when (io.ce & io.we(2)){
+  when(io.we(2)){
     mem2.write(io.addr, io.di(23,16))
   }
 
-  when(io.ce & io.we(1)){
+  when(io.we(1)){
     mem1.write(io.addr, io.di(15, 8))
   }
 
-  when(io.ce & io.we(0)){
+  when(io.we(0)){
     mem0.write(io.addr, io.di( 7, 0))
   }
 
