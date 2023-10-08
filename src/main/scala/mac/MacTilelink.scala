@@ -248,6 +248,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
   val ReadTxDataFromFifo_wb = Wire(Bool())
+  val RxAbortPluse = io.RxAbortSync & ~RegNext(io.RxAbortSync, false.B)
 
   val txfifo_cnt = Wire(UInt(5.W))
   val rxfifo_cnt = Wire(UInt(5.W))
@@ -275,7 +276,6 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-  val RxAbortPluse = io.RxAbortSync & RegNext(io.RxAbortSync, false.B)
 
 
 
