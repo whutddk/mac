@@ -72,13 +72,17 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
     val BlockingTxStatusWrite = Output(Bool())
-    val TxStartFrm_wb = Output(Bool())
-    val ReadTxDataFromFifo_sync = Input(Bool())
 
-    val TxStartFrm_syncb = Input(Bool())
-    val TxUnderRun_wb = Output(Bool())
+    val ReadTxDataFromFifo_sync = Input(Bool())
     val TxData_wb = Output(UInt(32.W))
     val TxValidBytesLatched = Output(UInt(2.W))
+    
+    val TxStartFrm_wb = Output(Bool())
+    val TxStartFrm_syncb = Input(Bool())
+
+    val TxUnderRun_wb = Output(Bool())
+
+
     val TxEndFrm_wb = Output(Bool())
 
     val TxRetrySync  = Input(Bool())
