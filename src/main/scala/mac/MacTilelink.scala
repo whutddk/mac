@@ -33,13 +33,6 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
     // Rx Status signals
     val InvalidSymbol   = Input(Bool())             // Invalid symbol was received during reception in 100 Mbps mode
-    val LatchedCrcError = Input(Bool())             // CRC error
-    val RxLateCollision = Input(Bool())             // Late collision occured while receiving frame
-    val ShortFrame      = Input(Bool())             // Frame shorter then the minimum size (r_MinFL) was received while small packets are enabled (r_RecSmall)
-    val DribbleNibble        = Input(Bool())        // Extra nibble received
-    val ReceivedPacketTooBig = Input(Bool())        // Received packet is bigger than r_MaxFL
-    val ReceivedPacketGood   = Input(Bool())        // Received packet's length and CRC are good
-    val AddressMiss          = Input(Bool())        // When a packet is received AddressMiss status is written to the Rx BD
     val r_RxFlow             = Input(Bool())
     val r_PassAll            = Input(Bool())
     val ReceivedPauseFrm     = Input(Bool())
@@ -102,49 +95,32 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
     val Busy_IRQ_sync = Input(Bool())
 
     val RxReady = Output(Bool())
-    val RxStatusIn = Output(UInt(9.W))
-    val RxStatusWriteLatched = Output(Bool())
+
+    val RxStatusWriteLatched = Output(Bool())       //only for recording control frame in mac-control
     val RxStatusWriteLatchedSyncb = Input(Bool())
   }
 
 
   
   val io = IO(new MacTileLinkIO)
-  val tx_fifo = Module( new MacFifo(dw = 32, dp = 16) )
+
   val rx_fifo = Module(new MacFifo(dw = 32, dp = 16))
   
-  val (_, _, isLastD, transDCnt) = edgeOut.count(io.tlMst.D)
 
-  val TxB_IRQ = RegInit(false.B); io.TxB_IRQ := TxB_IRQ
-  val TxE_IRQ = RegInit(false.B); io.TxE_IRQ := TxE_IRQ
+
+
   val RxB_IRQ = RegInit(false.B); io.RxB_IRQ := RxB_IRQ
   val RxE_IRQ = RegInit(false.B); io.RxE_IRQ := RxE_IRQ
 
 
 
 
-  val TxUnderRun_wb = RegInit(false.B); io.TxUnderRun_wb := TxUnderRun_wb
-
-  val TxBDRead = RegInit(true.B)
-  val TxStatusWrite = Wire(Bool())
-
-
-
-  val TxLength = RegInit(0.U(16.W))
-  val LatchedTxLength = RegInit(0.U(16.W))
-  val TxStatus = RegInit(0.U(4.W)) //[14:11]
-  val RxStatus = RegInit(0.U(2.W)) //[14:13]
 
 
 
 
-  val TxStartFrm_wb = RegInit(false.B); io.TxStartFrm_wb := TxStartFrm_wb
 
 
-  // Signals used for various purposes
-  val TxRetryPulse                = io.TxRetrySync             & ~RegNext(io.TxRetrySync, false.B)
-  val TxDonePulse                 = io.TxDoneSync              & ~RegNext(io.TxDoneSync,  false.B)
-  val TxAbortPulse                = io.TxAbortSync             & ~RegNext(io.TxAbortSync, false.B)
   val ShiftEndedSyncPluse         = io.ShiftEndedSync          & ~RegNext(io.ShiftEndedSync, false.B)
   val ReadTxDataFromFifoSyncPluse = io.ReadTxDataFromFifo_sync & ~RegNext(io.ReadTxDataFromFifo_sync, false.B)
   val RxAbortPluse                = io.RxAbortSync             & ~RegNext(io.RxAbortSync, false.B)
@@ -158,48 +134,171 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
   val TxDonePacket_NotCleared = RegInit(false.B)
   val TxAbortPacket = RegInit(false.B)
   val TxAbortPacket_NotCleared = RegInit(false.B)
-  val RxBDReady = RegInit(false.B)
-  val RxReady = RegInit(false.B); io.RxReady := RxReady
   val TxBDReady = RegInit(false.B)
+  val TxBDAddress = RegInit(0.U(7.W))   //[7:1]
 
-  val RxBDRead = RegInit(false.B)
 
+  val RxReady = RegInit(false.B); io.RxReady := RxReady
+
+  val RxBDHardWire = RegInit(0.U(32.W))
+  val isRxPingReady = false.B
+  val isRxPongReady = false.B
+
+
+  val ShiftEnded = RegInit(false.B)
+
+  // RX shift ending signals
+  val ShiftEndedSync3 = RegInit(false.B)
+  val RxStatusWriteLatched = RegInit(false.B); io.RxStatusWriteLatched := RxStatusWriteLatched
+
+
+  when(ShiftEnded){
+    RxBDHardWire := Cat(io.LatchedRxLength_rxclk, 0.U(1.W), rxBuffDesc.irq, 0.U(1.W), 0.U(4.W), io.RxStatusInLatched_rxclk)    
+  }
+
+  // RxReady generation
+  when(ShiftEnded | RxAbortPluse | ~io.r_RxEn ){
+    RxReady := false.B
+  } .elsewhen( io.r_RxEn & (isRxPingReady | isRxPongReady) ){
+    RxReady := true.B
+  }
+
+
+
+
+  rx_fifo.io.data_in := io.RxDataLatched2_rxclk
+  rx_fifo.io.write   := WriteRxDataToFifoSyncPluse & ~rx_fifo.io.full
+  rx_fifo.io.read    := io.tlMst.A.fire
+  rx_fifo.io.clear   := LatchedRxStartFrmSyncPluse
+
+
+
+
+
+
+
+
+
+  when( ShiftEndedSyncPluse ){
+    ShiftEndedSync3 := true.B
+  } .elsewhen(ShiftEnded){
+    ShiftEndedSync3 := false.B
+  }
+
+
+  // Generation of the end-of-frame signal
+  when(ShiftEndedSync3 & io.tlMst.A.fire & rx_fifo.io.almost_empty & ~ShiftEnded){
+    ShiftEnded := true.B
+  } .elsewhen(ShiftEnded){
+    ShiftEnded := false.B
+  }
+
+  assert( ~(rx_fifo.io.full & WriteRxDataToFifoSyncPluse), "Assert Failed, rx overrun!" )
+
+
+
+
+
+
+
+
+
+
+  // Latching and synchronizing RxStatusWrite signal. This signal is used for clearing the ReceivedPauseFrm signal
+  when(io.RxStatusWriteLatchedSyncb){
+    RxStatusWriteLatched := false.B
+  } .elsewhen(ShiftEnded){
+    RxStatusWriteLatched := true.B
+  }
+
+  val RxIRQEn         = RxBDHardWire.extract(14) //[14:13]
+
+
+  val RxError = (io.RxStatusInLatched_rxclk(6,3).orR) | (io.RxStatusInLatched_rxclk(1,0).orR)
+
+  // Rx Done Interrupt
+  when(ShiftEnded & RxIRQEn & io.ReceivedPacketGood & (~io.ReceivedPauseFrm | io.ReceivedPauseFrm & io.r_PassAll & (~io.r_RxFlow))){
+    RxB_IRQ := (~RxError)
+  } .otherwise{
+    RxB_IRQ := false.B
+  }
+
+  // Rx Error Interrupt
+  when(ShiftEnded & RxIRQEn & (~io.ReceivedPauseFrm | io.ReceivedPauseFrm & io.r_PassAll & (~io.r_RxFlow))){
+    RxE_IRQ := RxError
+  } .otherwise{
+    RxE_IRQ := false.B
+  }
+
+
+
+  io.Busy_IRQ := Busy_IRQ_syncPluse
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  val (_, _, isLastD, transDCnt) = edgeOut.count(io.tlMst.D)
+  val tx_fifo = Module( new MacFifo(dw = 32, dp = 16) )
+  val TxB_IRQ = RegInit(false.B); io.TxB_IRQ := TxB_IRQ
+  val TxE_IRQ = RegInit(false.B); io.TxE_IRQ := TxE_IRQ
+  val TxUnderRun_wb = RegInit(false.B); io.TxUnderRun_wb := TxUnderRun_wb
+  val TxBDRead = RegInit(true.B)
+  val TxStatusWrite = Wire(Bool())
+  val TxLength = RegInit(0.U(16.W))
+  val TxStatus = RegInit(0.U(4.W)) //[14:11]
+  val TxStartFrm_wb = RegInit(false.B); io.TxStartFrm_wb := TxStartFrm_wb
+  val TxRetryPulse                = io.TxRetrySync             & ~RegNext(io.TxRetrySync, false.B)
+  val TxDonePulse                 = io.TxDoneSync              & ~RegNext(io.TxDoneSync,  false.B)
+  val TxAbortPulse                = io.TxAbortSync             & ~RegNext(io.TxAbortSync, false.B)
+  val LatchedTxLength = RegInit(0.U(16.W))
 
 
   val BlockingTxStatusWrite = RegInit(false.B); io.BlockingTxStatusWrite := BlockingTxStatusWrite
   val BlockingTxBDRead = RegInit(false.B)
 
 
-  val RxBDAddress = RegInit(0.U(7.W))   //[7:1]
-  val TxBDAddress = RegInit(0.U(7.W))   //[7:1]
 
-
-
-
-
-
-  val ShiftEnded = RegInit(false.B)
-  val RxOverrun  = RegInit(false.B)
 
   val BDWrite = RegInit(0.U(4.W))     // BD Write Enable for access from WISHBONE side
   val BDRead  = RegInit(false.B)      // BD Read access from WISHBONE side
 
+
   val TxEndFrm_wb = RegInit(false.B); io.TxEndFrm_wb := TxEndFrm_wb
-
-
-
-
-
-
-  val RxStatusWrite = Wire(Bool())
-
-
-
-
 
   // Delayed stage signals
   val r_TxEn_q = RegNext(io.r_TxEn, false.B) 
-  val r_RxEn_q = RegNext(io.r_RxEn, false.B)
 
   def StateIdle = 0.U(3.W)
   def StateWB   = 1.U(3.W)
@@ -218,12 +317,10 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
   val TxPointerRead = RegInit(false.B)
   val TxEn_needed = RegInit(false.B)
-  val RxEn_needed = RegInit(false.B)
 
-  val RxPointerRead = RegInit(false.B)
 
-  // RX shift ending signals
-  val ShiftEndedSync3 = RegInit(false.B)
+
+
 
 
 
@@ -237,15 +334,9 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
   val ReadTxDataFromMemory = RegInit(false.B)
 
   val MasterWbTX = RegInit(false.B)
-  val MasterWbRX = RegInit(false.B)
-
 
   val TxPointerMSB = RegInit(0.U(30.W)) //[31:2]
-  val RxPointerMSB = RegInit(0.U(30.W)) //[31:2]
 
-
-
-  val RxStatusWriteLatched = RegInit(false.B); io.RxStatusWriteLatched := RxStatusWriteLatched
 
 
 
@@ -253,20 +344,17 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
   // Generic synchronous single-port RAM interface
   val bd_ram = Module(new MacSRAM)
   val txBuffDesc = bd_ram.io.dato.asTypeOf(new TxBuffDesc)
-  val rxBuffDesc = bd_ram.io.dato.asTypeOf(new RxBuffDesc)
-
 
   bd_ram.io.we :=
     Mux1H(Seq(
       (stateNxt === StateWB & stateCur === StateWB) -> BDWrite,
-      (TxStatusWrite | RxStatusWrite)               -> "b1111".U
+      (TxStatusWrite )               -> "b1111".U
     )).asBools
 
   bd_ram.io.oe :=
     Mux1H(Seq(
       (( stateNxt === StateWB ) & ( stateCur === StateWB )) -> BDRead,
       (( stateNxt === StateTX ) & ( stateCur === StateTX )) -> (TxBDRead | TxPointerRead),
-      (( stateNxt === StateRX ) & ( stateCur === StateRX )) -> (RxBDRead | RxPointerRead),
     ))
 
 
@@ -282,14 +370,11 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
     TxEn_needed := false.B
   }
 
-
-Fill(4, io.tlSlv.A.valid & io.tlSlv.A.bits.mask.orR & io.tlSlv.A.bits.address(10)) & io.tlSlv.A.bits.mask
-
   // Enabling access to the RAM for three devices.
   // Switching between three stages depends on enable signals
   switch( stateCur ){
     is(StateIdle){
-      when( RxEn_needed === false.B & TxEn_needed === false.B ){
+      when( TxEn_needed === false.B ){
         stateNxt := StateWB // Idle state. We go to WbEn access stage.
         
         ram_addr := io.tlSlv.A.bits.address(9,2) // [11:2 ] -> [9:2]
@@ -300,33 +385,13 @@ Fill(4, io.tlSlv.A.valid & io.tlSlv.A.bits.mask.orR & io.tlSlv.A.bits.address(10
 
     }
     is(StateWB){
-      when( RxEn_needed ){  // synopsys parallel_case
-        stateNxt := StateRX // wb access stage and r_RxEn is enabled
-
-        ram_addr := Cat(RxBDAddress, RxPointerRead)
-        ram_di   := Cat(io.LatchedRxLength_rxclk, 0.U(1.W), RxStatus, 0.U(4.W), io.RxStatusInLatched_rxclk)
-      } .elsewhen( TxEn_needed ){
+      when( TxEn_needed ){
         stateNxt := StateTX // wb access stage, r_RxEn is disabled but r_TxEn is enabled
 
         ram_addr := Cat(TxBDAddress, TxPointerRead) //[7,1] + [0]
         ram_di   := Cat(LatchedTxLength, 0.U(1.W), TxStatus, 0.U(2.W), io.TxUnderRun, io.RetryCntLatched, io.RetryLimit, io.LateCollLatched, io.DeferLatched, io.CarrierSenseLost)
       } .otherwise{
         stateNxt := StateIdle // WbEn access stage and there is no need for other stages. WbEn needs to be switched off for a bit
-      }
-    }
-    is(StateRX){
-      when( TxEn_needed ){
-        stateNxt := StateTX  // RxEn access stage and r_TxEn is enabled
-
-        ram_addr := Cat(TxBDAddress, TxPointerRead)
-        ram_di   := Cat(LatchedTxLength, 0.U(1.W), TxStatus, 0.U(2.W), io.TxUnderRun, io.RetryCntLatched, io.RetryLimit, io.LateCollLatched, io.DeferLatched, io.CarrierSenseLost)
-      } .otherwise{
-        stateNxt := StateWB  // RxEn access stage and r_TxEn is disabled
-
-        ram_addr := io.tlSlv.A.bits.address(9,2) // [11:2 ] -> [9:2];
-        ram_di   := io.tlSlv.A.bits.data
-        BDWrite  := io.tlSlv.A.bits.mask & Fill(4, io.tlSlv.A.valid & io.tlSlv.A.bits.address(10) & ((io.tlSlv.A.bits.opcode === 0.U) || (io.tlSlv.A.bits.opcode === 1.U)) )
-        BDRead   := io.tlSlv.A.bits.mask.orR     & io.tlSlv.A.valid & io.tlSlv.A.bits.address(10) &  (io.tlSlv.A.bits.opcode === 4.U)
       }
     }
     is(StateTX){
@@ -454,6 +519,21 @@ Fill(4, io.tlSlv.A.valid & io.tlSlv.A.bits.mask.orR & io.tlSlv.A.bits.address(10
 
 
 
+  val TxError = io.TxUnderRun | io.RetryLimit | io.LateCollLatched | io.CarrierSenseLost
+
+  // Tx Done Interrupt
+  when(TxStatusWrite & TxIRQEn){
+    TxB_IRQ := ~TxError
+  } .otherwise{
+    TxB_IRQ := false.B
+  }
+
+  // Tx Error Interrupt
+  when(TxStatusWrite & TxIRQEn){
+    TxE_IRQ := TxError
+  } .otherwise{
+    TxE_IRQ := false.B
+  }
 
 
 
@@ -571,8 +651,7 @@ Fill(4, io.tlSlv.A.valid & io.tlSlv.A.bits.mask.orR & io.tlSlv.A.bits.address(10
   io.PerPacketPad    := TxStatus.extract(1)
   io.PerPacketCrcEn  := TxStatus.extract(0)
 
-  val RxIRQEn         = RxStatus.extract(1) //[14:13]
-  val WrapRxStatusBit = RxStatus.extract(0)
+
 
 
 
@@ -586,20 +665,6 @@ Fill(4, io.tlSlv.A.valid & io.tlSlv.A.bits.mask.orR & io.tlSlv.A.bits.address(10
       TxBDAddress := 0.U
     } 
   }
-
-  // Latching Rx buffer descriptor address
-  when(io.r_RxEn & (~r_RxEn_q)){
-    RxBDAddress := io.r_TxBDNum(6,0)
-  } .elsewhen(RxStatusWrite){
-    when( WrapRxStatusBit ) {
-      RxBDAddress := io.r_TxBDNum(6,0) // Using first Rx BD
-    } .otherwise{
-      RxBDAddress := (RxBDAddress + 1.U) //Using next Rx BD
-    }  
-  }
-
-
-
 
 
 
@@ -704,160 +769,8 @@ Fill(4, io.tlSlv.A.valid & io.tlSlv.A.bits.mask.orR & io.tlSlv.A.bits.address(10
 
 
 
-  // Reading the Rx buffer descriptor
-  when( (RxStatusWrite | RegNext(RxAbortPluse, false.B) | (io.r_RxEn & ~r_RxEn_q)) & ~RxReady){
-    RxBDRead := true.B
-  } .elsewhen(RxBDReady){
-    RxBDRead := false.B
-  }
 
 
-
-  // Latching READY status of the Rx buffer descriptor
-  when(RxPointerRead){
-    RxBDReady := false.B
-  } .elsewhen(stateNxt === StateRX & stateCur === StateRX & RxBDRead){
-    RxBDReady := rxBuffDesc.e                           // RxBDReady is sampled only once at the beginning 
-    RxStatus := Cat(rxBuffDesc.irq, rxBuffDesc.wrap)    // Latching Rx buffer descriptor status Data is avaliable one cycle after the access is started (at that time signal RxEn is not active)
-  }
-
-
-
-  // RxReady generation
-  when(ShiftEnded | RxAbortPluse | ~io.r_RxEn & r_RxEn_q){
-    RxReady := false.B
-  } .elsewhen(stateNxt === StateRX & stateCur === StateRX & RxPointerRead){
-    RxReady := true.B
-  }
-
-  // Reading Tx BD Pointer
-  when(RxBDRead & RxBDReady){
-    RxPointerRead := true.B
-  } .elsewhen(stateNxt === StateRX & stateCur === StateRX){
-    RxPointerRead := false.B
-  }
-
-
-
-  //Latching Rx buffer pointer from buffer descriptor;
-  when(stateNxt === StateRX & stateCur === StateRX & RxPointerRead){
-    RxPointerMSB := bd_ram.io.dato(31,2)    
-  } .elsewhen(MasterWbRX & io.tlMst.A.fire ){
-    RxPointerMSB := RxPointerMSB + 1.U // Word access (always word access. m_wb_sel_o are used for selecting bytes)
-  }
-
-
-
-  when(~RxReady & io.r_RxEn & stateNxt === StateWB & stateCur =/= StateWB){
-    RxEn_needed := true.B
-  } .elsewhen(RxPointerRead & stateNxt === StateRX & stateCur === StateRX){
-    RxEn_needed := false.B
-  }
-
-
-
-  // Reception status is written back to the buffer descriptor after the end of frame is detected.
-  RxStatusWrite := ShiftEnded & stateNxt === StateRX & stateCur === StateRX
-
-
-
-
-
-
-
-  rx_fifo.io.data_in := io.RxDataLatched2_rxclk
-  rx_fifo.io.write   := WriteRxDataToFifoSyncPluse & ~rx_fifo.io.full
-  rx_fifo.io.read    := MasterWbRX & io.tlMst.A.fire
-  rx_fifo.io.clear   := LatchedRxStartFrmSyncPluse
-
-
-
-
-
-
-
-
-
-  when( ShiftEndedSyncPluse ){
-    ShiftEndedSync3 := true.B
-  } .elsewhen(ShiftEnded){
-    ShiftEndedSync3 := false.B
-  }
-
-
-  // Generation of the end-of-frame signal
-  when(ShiftEndedSync3 & MasterWbRX & io.tlMst.A.fire & rx_fifo.io.almost_empty & ~ShiftEnded){
-    ShiftEnded := true.B
-  } .elsewhen(RxStatusWrite){
-    ShiftEnded := false.B
-  }
-
-
-
-
-  io.RxStatusIn := Cat(io.ReceivedPauseFrm, io.AddressMiss, RxOverrun, io.InvalidSymbol, io.DribbleNibble, io.ReceivedPacketTooBig, io.ShortFrame, io.LatchedCrcError, io.RxLateCollision)
-
-
-  // Rx overrun
-  when(RxStatusWrite){
-    RxOverrun := false.B
-  } .elsewhen(rx_fifo.io.full & WriteRxDataToFifoSyncPluse){
-    RxOverrun := true.B
-  }
-
-
-
-
-
-
-
-
-
-  // Latching and synchronizing RxStatusWrite signal. This signal is used for clearing the ReceivedPauseFrm signal
-  when(io.RxStatusWriteLatchedSyncb){
-    RxStatusWriteLatched := false.B
-  } .elsewhen(RxStatusWrite){
-    RxStatusWriteLatched := true.B
-  }
-
-
-  // ShortFrame (RxStatusInLatched[2]) can not set an error because short frames are aborted when signal r_RecSmall is set to 0 in MODER register. 
-  // AddressMiss is identifying that a frame was received because of the promiscous mode and is not an error
-  val RxError = (io.RxStatusInLatched_rxclk(6,3).orR) | (io.RxStatusInLatched_rxclk(1,0).orR)
-
-  val TxError = io.TxUnderRun | io.RetryLimit | io.LateCollLatched | io.CarrierSenseLost
-
-  // Tx Done Interrupt
-  when(TxStatusWrite & TxIRQEn){
-    TxB_IRQ := ~TxError
-  } .otherwise{
-    TxB_IRQ := false.B
-  }
-
-  // Tx Error Interrupt
-  when(TxStatusWrite & TxIRQEn){
-    TxE_IRQ := TxError
-  } .otherwise{
-    TxE_IRQ := false.B
-  }
-
-  // Rx Done Interrupt
-  when(RxStatusWrite & RxIRQEn & io.ReceivedPacketGood & (~io.ReceivedPauseFrm | io.ReceivedPauseFrm & io.r_PassAll & (~io.r_RxFlow))){
-    RxB_IRQ := (~RxError)
-  } .otherwise{
-    RxB_IRQ := false.B
-  }
-
-  // Rx Error Interrupt
-  when(RxStatusWrite & RxIRQEn & (~io.ReceivedPauseFrm | io.ReceivedPauseFrm & io.r_PassAll & (~io.r_RxFlow))){
-    RxE_IRQ := RxError
-  } .otherwise{
-    RxE_IRQ := false.B
-  }
-
-
-
-  io.Busy_IRQ := Busy_IRQ_syncPluse
 
 
 
@@ -897,17 +810,6 @@ Fill(4, io.tlSlv.A.valid & io.tlSlv.A.bits.mask.orR & io.tlSlv.A.bits.address(10
   when( io.tlMst.A.fire ){
     mstAValid := false.B
   } 
-  .elsewhen( MasterWbRX & ~isTlMstBusy ) {
-    mstAValid := true.B
-    mstABits :=
-      edgeOut.Put(
-        fromSource = 0.U,
-        toAddress = RxPointerMSB << 2,
-        lgSize = log2Ceil(32/8).U,
-        data = rx_fifo.io.data_out,
-        mask = "b1111".U,
-      )._2
-  }
   .elsewhen( MasterWbTX & ~isTlMstBusy ){
     mstAValid := true.B
     mstABits :=
@@ -924,17 +826,11 @@ Fill(4, io.tlSlv.A.valid & io.tlSlv.A.bits.mask.orR & io.tlSlv.A.bits.address(10
     isTlMstBusy := false.B
   }
 
-  when( ~MasterWbTX & ~MasterWbRX ){
-    when( ~rx_fifo.io.empty ){
-      MasterWbRX := true.B
-    } .elsewhen(ReadTxDataFromMemory_2) {
+  when( ~MasterWbTX ){
+    when(ReadTxDataFromMemory_2) {
       MasterWbTX := true.B
     }
-  } .elsewhen( ~MasterWbTX & MasterWbRX){ //1.4A + 1D fifo to memory
-    when( io.tlMst.D.fire & isLastD & rx_fifo.io.empty ){
-      MasterWbRX := false.B
-    }
-  } .elsewhen( MasterWbTX & ~MasterWbRX){ //1 A + 1.4D memory to fifo
+  } .elsewhen( MasterWbTX ){ //1 A + 1.4D memory to fifo
     when( io.tlMst.D.fire & isLastD & ~ReadTxDataFromMemory_2 ){
       MasterWbTX := false.B
     }
@@ -942,8 +838,6 @@ Fill(4, io.tlSlv.A.valid & io.tlSlv.A.bits.mask.orR & io.tlSlv.A.bits.address(10
 
 
   when(io.tlMst.D.fire & io.tlMst.D.bits.opcode === 1.U) { assert( MasterWbTX ) }
-  when(io.tlMst.D.fire & io.tlMst.D.bits.opcode === 0.U) { assert( MasterWbRX ) }
-
 
   val tlMstAValid_dbg = RegInit(true.B)
   io.tlMst.A.valid := mstAValid & tlMstAValid_dbg

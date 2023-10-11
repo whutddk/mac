@@ -705,13 +705,7 @@ val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Modul
 
 
   wishbone.io.InvalidSymbol        := InvalidSymbol
-  wishbone.io.LatchedCrcError      := LatchedCrcError
-  wishbone.io.RxLateCollision      := RxLateCollision
-  wishbone.io.ShortFrame           := ShortFrame
-  wishbone.io.DribbleNibble        := DribbleNibble
-  wishbone.io.ReceivedPacketTooBig := ReceivedPacketTooBig
   wishbone.io.ReceivedPacketGood   := ReceivedPacketGood
-  wishbone.io.AddressMiss          := AddressMiss
   wishbone.io.r_RxFlow             := r_RxFlow
   wishbone.io.r_PassAll            := r_PassAll
   wishbone.io.ReceivedPauseFrm     := ReceivedPauseFrm
@@ -925,8 +919,7 @@ val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Modul
 
   macTileLinkRx.io.RxLength     := RxByteCnt
   macTileLinkRx.io.LoadRxStatus := LoadRxStatus
-    macTileLinkRx.io.RxStatusIn   := wishbone.io.RxStatusIn
-
+  macTileLinkRx.io.RxStatusIn   := Cat(ReceivedPauseFrm, AddressMiss, false.B, InvalidSymbol, DribbleNibble, ReceivedPacketTooBig, ShortFrame, LatchedCrcError, RxLateCollision)
 
 
 
