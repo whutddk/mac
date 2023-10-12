@@ -12,7 +12,6 @@ class MacTileLinkRxIO extends Bundle{
   val LatchedRxLength = Output(UInt(16.W))
   val RxStatusInLatched = Output( UInt(9.W) )
   val ShiftEnded_rck = Output(Bool())
-  val LatchedRxStartFrm = Output(Bool())
 
   val RxLength = Input(UInt(16.W))
   val LoadRxStatus = Input(Bool())
@@ -20,7 +19,6 @@ class MacTileLinkRxIO extends Bundle{
   val ShiftEndedSyncb = Input(Bool())
   val RxAbortSyncb = Input(Bool())
   val WriteRxDataToFifoSyncb = Input(Bool())
-  val LatchedRxStartFrmSyncb = Input(Bool())
 
   val Busy_IRQ_rck = Output(Bool())
   val Busy_IRQ_syncb = Input(Bool())
@@ -52,8 +50,6 @@ class MacTileLinkRx extends Module with RequireAsyncReset{
   val ShiftEnded_rck = RegInit(false.B); io.ShiftEnded_rck := ShiftEnded_rck
   val RxEnableWindow = RegInit(false.B)
   
-  val LatchedRxStartFrm = RegInit(false.B); io.LatchedRxStartFrm := LatchedRxStartFrm
-
   val Busy_IRQ_rck = RegInit(false.B); io.Busy_IRQ_rck := Busy_IRQ_rck
 
 
@@ -125,14 +121,6 @@ class MacTileLinkRx extends Module with RequireAsyncReset{
     } .elsewhen(io.WriteRxDataToFifoSyncb | io.RxAbort){
       WriteRxDataToFifo := false.B
     }
-
-
-    when(io.RxStartFrm & ~io.LatchedRxStartFrmSyncb){
-      LatchedRxStartFrm := true.B
-    } .elsewhen(io.LatchedRxStartFrmSyncb){
-      LatchedRxStartFrm := false.B
-    }
-
 
     // Generation of the end-of-frame signal
     when(~io.RxAbort & SetWriteRxDataToFifo & StartShiftWillEnd){
