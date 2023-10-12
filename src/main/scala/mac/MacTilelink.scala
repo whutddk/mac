@@ -46,30 +46,23 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
     //Register
     val r_TxEn    = Input(Bool())          // Transmit enable
-    val r_RxEn    = Input(Bool())         // Receive enable
-    val r_TxBDNum = Input(UInt(8.W))      // Receive buffer descriptor number
 
     // Interrupts
     val TxB_IRQ  = Output(Bool())
     val TxE_IRQ  = Output(Bool())
 
-    // val Busy_IRQ = Output(Bool())
-
-
-
     val BlockingTxStatusWrite = Output(Bool())
 
     val ReadTxDataFromFifo_sync = Input(Bool())
     val TxData_wb = Output(UInt(32.W))
+
     val TxValidBytesLatched = Output(UInt(2.W))
     
     val TxStartFrm_wb = Output(Bool())
     val TxStartFrm_syncb = Input(Bool())
+    val TxEndFrm_wb = Output(Bool())
 
     val TxUnderRun_wb = Output(Bool())
-
-
-    val TxEndFrm_wb = Output(Bool())
 
     val TxRetrySync  = Input(Bool())
     val TxAbortSync = Input(Bool())      // Transmit packet abort
@@ -79,20 +72,20 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-
+    val r_RxEn    = Input(Bool())         // Receive enable
     val RxDataLatched2_rxclk  = Input(UInt(32.W))
     val WriteRxDataToFifoSync = Input(Bool())
-
     val RxAbortSync           = Input(Bool())
-
     val LatchedRxLength_rxclk = Input(UInt(16.W))
     val RxStatusInLatched_rxclk = Input(UInt(9.W))
-
     val ShiftEndedSync = Input(Bool())
-
     val RxReady = Output(Bool())
-
     val rxDeq = new RevBuff_Enq_Bundle
+
+
+
+
+    val txEnq = Flipped(new TxBuff_Deq_Bundle)
 
 
   }
@@ -100,12 +93,6 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
   
   val io = IO(new MacTileLinkIO)
-
-
-
-
-
-
 
 
   val ShiftEndedSyncPluse         = io.ShiftEndedSync          & ~RegNext(io.ShiftEndedSync, false.B)
@@ -162,12 +149,15 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
+  val TxStartFrm_wb = RegInit(false.B); io.TxStartFrm_wb := TxStartFrm_wb
 
 
 
-
-
-
+  when( io.txEnq.ctrl.fire ){
+    TxStartFrm_wb := true.B
+  } .elsewhen(io.TxStartFrm_syncb){
+    TxStartFrm_wb := false.B
+  }
 
 
 
@@ -180,10 +170,13 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
   val TxRetryPacket = RegInit(false.B)
   val TxRetryPacket_NotCleared = RegInit(false.B)
+
   val TxDonePacket = RegInit(false.B)
   val TxDonePacket_NotCleared = RegInit(false.B)
+
   val TxAbortPacket = RegInit(false.B)
   val TxAbortPacket_NotCleared = RegInit(false.B)
+
   val TxBDReady = RegInit(false.B)
   val TxBDAddress = RegInit(0.U(7.W))   //[7:1]
 
@@ -199,7 +192,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
   val TxStatusWrite = Wire(Bool())
   val TxLength = RegInit(0.U(16.W))
   val TxStatus = RegInit(0.U(4.W)) //[14:11]
-  val TxStartFrm_wb = RegInit(false.B); io.TxStartFrm_wb := TxStartFrm_wb
+
   val TxRetryPulse                = io.TxRetrySync             & ~RegNext(io.TxRetrySync, false.B)
   val TxDonePulse                 = io.TxDoneSync              & ~RegNext(io.TxDoneSync,  false.B)
   val TxAbortPulse                = io.TxAbortSync             & ~RegNext(io.TxAbortSync, false.B)
@@ -242,11 +235,6 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-
-
-  
-
-  val StartOccured      = RegInit(false.B)
 
   val BlockReadTxDataFromMemory = RegInit(false.B)
 
@@ -527,20 +515,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-  // Start: Generation of the TxStartFrm_wb which is then synchronized to the MTxClk
-  when(TxBDReady & ~StartOccured & (tx_fifo.io.full | TxLength === 0.U)){
-    TxStartFrm_wb := true.B
-  } .elsewhen(io.TxStartFrm_syncb){
-    TxStartFrm_wb := false.B
-  }
 
-
-  // StartOccured: TxStartFrm_wb occurs only ones at the beginning. Then it's blocked.
-  when(TxStartFrm_wb){
-    StartOccured := true.B
-  } .elsewhen(ResetTxBDReady){
-    StartOccured := false.B
-  }
 
 
   // TxEndFrm_wb: indicator of the end of frame
@@ -766,8 +741,6 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
   val tlMstDReady = RegInit(true.B)
 
-  dontTouch(tlMstDReady)
-  dontTouch(tlMstAValid_dbg)
   io.tlMst.D.ready := tlMstDReady
 
 
