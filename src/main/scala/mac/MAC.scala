@@ -125,7 +125,6 @@ val TxUsedData = Wire(Bool())
 val TxData     = Wire(UInt(8.W))
 val TxRetry    = Wire(Bool())
 val TxAbort    = Wire(Bool())
-val TxUnderRun = Wire(Bool())
 val TxDone     = Wire(Bool())
 val TPauseRq = Wire(Bool())
 
@@ -135,7 +134,6 @@ dontTouch(TxUsedData)
 dontTouch(TxData    )
 dontTouch(TxRetry   )
 dontTouch(TxAbort   )
-dontTouch(TxUnderRun)
 dontTouch(TxDone    )
 dontTouch(TPauseRq  )
 
@@ -512,7 +510,6 @@ val txethmac = withClockAndReset(io.mtx_clk_pad_i.asClock, io.asyncReset)( Modul
 
 txethmac.io.TxStartFrm      := TxStartFrmOut
 txethmac.io.TxEndFrm        := TxEndFrmOut
-txethmac.io.TxUnderRun      := TxUnderRun
 txethmac.io.TxData          := TxDataOut
 txethmac.io.CarrierSense    := TxCarrierSense
 txethmac.io.Collision       := Collision
@@ -817,9 +814,6 @@ val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Modul
   TxEndFrm        := macTileLinkTx.io.TxEndFrm
   TxData          := macTileLinkTx.io.TxData
 
-              wishbone.io.TxUnderRun := TxUnderRun
-              TxUnderRun      := macTileLinkTx.io.TxUnderRun
-              macTileLinkTx.io.TxUnderRun_wb := wishbone.io.TxUnderRun_wb
 
               macTileLinkTx.io.TxData_wb := wishbone.io.TxData_wb
               macTileLinkTx.io.TxValidBytesLatched := wishbone.io.TxValidBytesLatched

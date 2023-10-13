@@ -39,8 +39,6 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
     val CarrierSenseLost = Input(Bool())     // Carrier Sense was lost during the frame transmission
 
     // Tx
-    val TxUsedData     = Input(Bool())      // Transmit packet used data
-    val TxUnderRun     = Input(Bool())     // Transmit packet under-run
     val PerPacketCrcEn = Output(Bool())     // Per packet crc enable
     val PerPacketPad   = Output(Bool())     // Per packet pading
 
@@ -53,16 +51,12 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
     val BlockingTxStatusWrite = Output(Bool())
 
-    val ReadTxDataFromFifo_sync = Input(Bool())
-    val TxData_wb = Output(UInt(32.W))
+    val TxUsedData     = Input(Bool())      // Transmit packet used data    
+   
 
     val TxValidBytesLatched = Output(UInt(2.W))
     
-    val TxStartFrm_wb = Output(Bool())
-    val TxStartFrm_syncb = Input(Bool())
-    val TxEndFrm_wb = Output(Bool())
 
-    val TxUnderRun_wb = Output(Bool())
 
     val TxRetrySync  = Input(Bool())
     val TxAbortSync = Input(Bool())      // Transmit packet abort
@@ -84,6 +78,12 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
+    val TxStartFrm_wb = Output(Bool())
+    val TxStartFrm_syncb = Input(Bool())
+    val TxEndFrm_wb = Output(Bool())
+
+    val TxData_wb = Output(UInt(32.W))
+    val ReadTxDataFromFifo_sync = Input(Bool())
 
     val txEnq = Flipped(new TxBuff_Deq_Bundle)
 
@@ -160,6 +160,35 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
   }
 
 
+  when((TxLength === 0.U) & io.TxUsedData){
+    TxEndFrm_wb := true.B
+  } .elsewhen(TxRetryPulse | TxDonePulse | TxAbortPulse){
+    TxEndFrm_wb := false.B
+  }
+
+  when( io.txEnq.ctrl.fire ){
+    TxStatus := Cat(txBuffDesc.irq, txBuffDesc.wr, txBuffDesc.pad, txBuffDesc.crc) // Latching status from the tx buffer descriptor Data is avaliable one cycle after the access is started (at that time signal TxEn is not active)
+    TxLength        := io.txEnq.ctrl.bits.txLength                                             //Latching length from the buffer descriptor;
+    LatchedTxLength := io.txEnq.ctrl.bits.txLength
+  } .elsewhen( io.txEnq.data.fire ){
+    when( TxLength < 4.U ){
+      TxLength := 0.U
+    } .otherwise{
+      TxLength := TxLength - 4.U    // Length is subtracted at the data request
+    }
+  }
+
+  tx_fifo.io.data_in := io.tlMst.D.bits.data
+  tx_fifo.io.write   := io.tlMst.D.fire & io.tlMst.D.bits.opcode === 1.U
+
+
+  io.txEnq.data.ready    := ReadTxDataFromFifoSyncPluse & ~tx_fifo.io.empty
+  assert( ~(io.txEnq.data.ready & ~io.txEnq.data.valid), "Assert Failed, Tx should never under run!" )
+
+  io.TxData_wb       := io.txEnq.data.bits
+
+  tx_fifo.io.clear   := TxAbortPacket | TxRetryPacket
+
 
 
 
@@ -187,7 +216,6 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
   val tx_fifo = Module( new MacFifo(dw = 32, dp = 16) )
   val TxB_IRQ = RegInit(false.B); io.TxB_IRQ := TxB_IRQ
   val TxE_IRQ = RegInit(false.B); io.TxE_IRQ := TxE_IRQ
-  val TxUnderRun_wb = RegInit(false.B); io.TxUnderRun_wb := TxUnderRun_wb
   val TxBDRead = RegInit(true.B)
   val TxStatusWrite = Wire(Bool())
   val TxLength = RegInit(0.U(16.W))
@@ -297,7 +325,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
         stateNxt := StateTX // wb access stage, r_RxEn is disabled but r_TxEn is enabled
 
         ram_addr := Cat(TxBDAddress, TxPointerRead) //[7,1] + [0]
-        ram_di   := Cat(LatchedTxLength, 0.U(1.W), TxStatus, 0.U(2.W), io.TxUnderRun, io.RetryCntLatched, io.RetryLimit, io.LateCollLatched, io.DeferLatched, io.CarrierSenseLost)
+        ram_di   := Cat(LatchedTxLength, 0.U(1.W), TxStatus, 0.U(2.W), false.B, io.RetryCntLatched, io.RetryLimit, io.LateCollLatched, io.DeferLatched, io.CarrierSenseLost)
       } .otherwise{
         stateNxt := StateIdle // WbEn access stage and there is no need for other stages. WbEn needs to be switched off for a bit
       }
@@ -378,17 +406,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
   
-  when(stateNxt === StateTX & stateCur === StateTX & TxBDRead){
-    TxStatus := Cat(txBuffDesc.irq, txBuffDesc.wr, txBuffDesc.pad, txBuffDesc.crc) // Latching status from the tx buffer descriptor Data is avaliable one cycle after the access is started (at that time signal TxEn is not active)
-    TxLength        := txBuffDesc.len                                              //Latching length from the buffer descriptor;
-    LatchedTxLength := txBuffDesc.len 
-  } .elsewhen( MasterWbTX & io.tlMst.D.fire ){ //tx tileRead
-    when( TxLength < 4.U ){
-      TxLength := 0.U
-    } .otherwise{
-      TxLength := TxLength - 4.U    // Length is subtracted at the data request
-    }
-  }
+
 
 
 
@@ -427,7 +445,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-  val TxError = io.TxUnderRun | io.RetryLimit | io.LateCollLatched | io.CarrierSenseLost
+  val TxError = io.RetryLimit | io.LateCollLatched | io.CarrierSenseLost
 
   // Tx Done Interrupt
   when(TxStatusWrite & TxIRQEn){
@@ -503,13 +521,6 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-  tx_fifo.io.data_in := io.tlMst.D.bits.data
-  tx_fifo.io.write   := io.tlMst.D.fire & io.tlMst.D.bits.opcode === 1.U
-
-
-  tx_fifo.io.read    := ReadTxDataFromFifoSyncPluse & ~tx_fifo.io.empty
-  tx_fifo.io.clear   := TxAbortPacket | TxRetryPacket
-  io.TxData_wb       := tx_fifo.io.data_out
 
 
 
@@ -518,12 +529,8 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-  // TxEndFrm_wb: indicator of the end of frame
-  when((TxLength === 0.U) & tx_fifo.io.almost_empty & io.TxUsedData){
-    TxEndFrm_wb := true.B
-  } .elsewhen(TxRetryPulse | TxDonePulse | TxAbortPulse){
-    TxEndFrm_wb := false.B
-  }
+
+
 
 
   // Marks which bytes are valid within the word.
@@ -653,12 +660,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
   
 
 
-  // Tx under run
-  when(TxAbortPulse){
-    TxUnderRun_wb := false.B    
-  } .elsewhen(tx_fifo.io.empty & ReadTxDataFromFifoSyncPluse){
-    TxUnderRun_wb := true.B
-  }
+
 
 
 

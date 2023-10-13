@@ -8,7 +8,6 @@ class MacTxIO extends Bundle{
 
   val TxStartFrm      = Input(Bool())         // Transmit packet start frame
   val TxEndFrm        = Input(Bool())         // Transmit packet end frame
-  val TxUnderRun      = Input(Bool())         // Transmit packet under-run
   val TxData          = Input(UInt(8.W))         // Transmit packet data byte
   val CarrierSense    = Input(Bool())         // Carrier sense (synchronized)
   val Collision       = Input(Bool())         // Collision (synchronized)
@@ -65,7 +64,6 @@ abstract class MacTxBase extends Module with RequireAsyncReset{
 
   val StateSFD              = Wire(Bool())
 
-  val UnderRun              = Wire(Bool())
   val TooBig                = Wire(Bool())
 
   val CrcError              = Wire(Bool())
@@ -114,7 +112,7 @@ trait MacTxFSM { this: MacTxBase =>
   StartPreamble := StateIdle & io.TxStartFrm & ~io.CarrierSense
 
   StartData(0) := ~io.Collision & (StatePreamble & NibCntEq15 | StateData(1) & ~io.TxEndFrm)
-  StartData(1) := ~io.Collision & StateData(0) & ~io.TxUnderRun & ~MaxFrame
+  StartData(1) := ~io.Collision & StateData(0) & ~MaxFrame
 
   val StartPAD = ~io.Collision & StateData(1) & io.TxEndFrm & io.Pad & ~NibbleMinFl
 
@@ -122,7 +120,7 @@ trait MacTxFSM { this: MacTxBase =>
     (~io.Collision & StateData(1) & io.TxEndFrm & (~io.Pad | io.Pad & NibbleMinFl) & io.CrcEn) |
     (~io.Collision & StatePAD & NibbleMinFl & io.CrcEn)
 
-  StartJam := (io.Collision | UnderRun) & ((StatePreamble & NibCntEq15) | (StateData(1) | StateData(0)) | StatePAD | StateFCS)
+  StartJam := (io.Collision ) & ((StatePreamble & NibCntEq15) | (StateData(1) | StateData(0)) | StatePAD | StateFCS)
 
   StartBackoff := StateJam & ~RandomEq0 & ColWindow & ~RetryMax & NibCntEq7 & ~io.NoBckof
 
@@ -130,7 +128,7 @@ trait MacTxFSM { this: MacTxBase =>
     (StateIPG & ~Rule1 & io.CarrierSense & NibCnt(6,0) <= io.IPGR1 & NibCnt(6,0) =/= io.IPGR2) |
     (StateIdle & io.CarrierSense) |
     (StateJam & NibCntEq7 & (io.NoBckof | RandomEq0 | ~ColWindow | RetryMax)) |
-    (StateBackOff & (io.TxUnderRun | RandomEqByteCnt)) |
+    (StateBackOff & (RandomEqByteCnt)) |
     io.StartTxDone |
     TooBig
 
@@ -352,7 +350,7 @@ class MacTx extends MacTxBase with MacTxFSM with MacTxCounter with MacTxCRC with
   val TxAbort = RegInit(false.B); io.TxAbort := TxAbort
 
   val MTxEn = RegNext(StatePreamble | (StateData(0) | StateData(1)) | StatePAD | StateFCS | StateJam, false.B); io.MTxEn := MTxEn
-  val MTxErr = RegNext( TooBig | UnderRun, false.B); io.MTxErr := MTxErr// Transmit error
+  val MTxErr = RegNext( TooBig, false.B); io.MTxErr := MTxErr// Transmit error
 
   val WillTransmit = RegNext(StartPreamble | StatePreamble | (StateData(0) | StateData(1)) | StatePAD | StateFCS | StateJam, false.B); io.WillTransmit := WillTransmit// WillTransmit
 
@@ -361,13 +359,12 @@ class MacTx extends MacTxBase with MacTxFSM with MacTxCounter with MacTxCRC with
   io.ResetCollision := ~(StatePreamble | (StateData(0) | StateData(1)) | StatePAD | StateFCS)
   val ExcessiveDeferOccured = io.TxStartFrm & StateDefer & ExcessiveDefer & ~StopExcessiveDeferOccured
   io.StartTxDone := ~io.Collision & (StateFCS & NibCntEq7 | StateData(1) & io.TxEndFrm & (~io.Pad | io.Pad & NibbleMinFl) & ~io.CrcEn)
-  UnderRun := StateData(0) & io.TxUnderRun & ~io.Collision
-  TooBig := ~io.Collision & MaxFrame & (StateData(0) & ~io.TxUnderRun | StateFCS);
-  val StartTxRetry = StartJam & (ColWindow & ~RetryMax) & ~UnderRun;
-  io.LateCollision := StartJam & ~ColWindow & ~UnderRun;
+  TooBig := ~io.Collision & MaxFrame & (StateData(0) | StateFCS);
+  val StartTxRetry = StartJam & (ColWindow & ~RetryMax)
+  io.LateCollision := StartJam & ~ColWindow
   io.MaxCollisionOccured := StartJam & ColWindow & RetryMax;
   StateSFD := StatePreamble & NibCntEq15;
-  io.StartTxAbort := TooBig | UnderRun | ExcessiveDeferOccured | io.LateCollision | io.MaxCollisionOccured
+  io.StartTxAbort := TooBig | ExcessiveDeferOccured | io.LateCollision | io.MaxCollisionOccured
 
   when(~io.TxStartFrm){
     StopExcessiveDeferOccured := false.B
@@ -417,7 +414,7 @@ class MacTx extends MacTxBase with MacTxFSM with MacTxCounter with MacTxCRC with
   }
 
   // Retry counter
-  when(ExcessiveDeferOccured | UnderRun | TooBig | io.StartTxDone | io.TxUnderRun 
+  when(ExcessiveDeferOccured | TooBig | io.StartTxDone
       | StateJam & NibCntEq7 & (~ColWindow | RetryMax)){
     RetryCnt := 0.U
   }.elsewhen(StateJam & NibCntEq7 & ColWindow & (RandomEq0 | io.NoBckof) | StateBackOff & RandomEqByteCnt){
@@ -443,7 +440,7 @@ class MacTx extends MacTxBase with MacTxFSM with MacTxCounter with MacTxCRC with
       )
   }
 
-  val PacketFinished_d = io.StartTxDone | TooBig | UnderRun | io.LateCollision | io.MaxCollisionOccured | ExcessiveDeferOccured;
+  val PacketFinished_d = io.StartTxDone | TooBig | io.LateCollision | io.MaxCollisionOccured | ExcessiveDeferOccured;
   val PacketFinished = RegNext(PacketFinished_d, false.B)
   when(true.B){
     PacketFinished_q := PacketFinished

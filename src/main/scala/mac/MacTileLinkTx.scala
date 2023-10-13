@@ -12,7 +12,6 @@ class MacTileLinkTxIO extends Bundle{
   val TxStartFrm     = Output(Bool())     // Transmit packet start frame
   val TxEndFrm       = Output(Bool())     // Transmit packet end frame
   val TxData         = Output(UInt(8.W))  // Transmit packet data byte
-  val TxUnderRun     = Output(Bool())     // Transmit packet under-run
 
   val TxUsedData     = Input(Bool())      // Transmit packet used data
   val TxRetry        = Input(Bool())      // Transmit packet retry
@@ -25,7 +24,6 @@ class MacTileLinkTxIO extends Bundle{
   val TxEndFrm_wb = Input(Bool())
   val TxValidBytesLatched = Input(UInt(2.W))
   val TxData_wb = Input(UInt(32.W))
-  val TxUnderRun_wb = Input(Bool())
 }
 
 
@@ -40,7 +38,6 @@ class MacTileLinkTx extends Module with RequireAsyncReset{
   val TxStartFrm = RegInit(false.B);  io.TxStartFrm := TxStartFrm
   val TxEndFrm   = RegInit(false.B);  io.TxEndFrm   := TxEndFrm
   val TxData     = RegInit(0.U(8.W)); io.TxData     := TxData
-  val TxUnderRun = RegInit(false.B);  io.TxUnderRun := TxUnderRun
   val TxDataLatched = RegInit(0.U(32.W))
   val TxByteCnt = RegInit(0.U(2.W))
   val LastWord = RegInit(false.B)
@@ -105,21 +102,6 @@ class MacTileLinkTx extends Module with RequireAsyncReset{
     TxDataLatched := io.TxData_wb
   }
 
-  val TxUnderRun_sync1 = RegInit(false.B)
-
-  // Tx under run
-  when(io.TxUnderRun_wb){
-    TxUnderRun_sync1 := true.B
-  } .elsewhen(io.BlockingTxStatusWrite_sync){
-    TxUnderRun_sync1 := false.B
-  }
-
-  // Tx under run
-  when(io.BlockingTxStatusWrite_sync){
-    TxUnderRun := false.B
-  } .elsewhen(TxUnderRun_sync1){
-    TxUnderRun := true.B
-  }
 
   // Tx Byte counter
   when(TxAbort_q | TxRetry_q){
