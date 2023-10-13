@@ -711,8 +711,8 @@ val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Modul
 
   wishbone.io.r_TxEn     := r_TxEn
   wishbone.io.r_RxEn     := r_RxEn
-  TxB_IRQ  := wishbone.io.TxB_IRQ
-  TxE_IRQ  := wishbone.io.TxE_IRQ
+  TxB_IRQ  := false.B
+  TxE_IRQ  := false.B
   RxB_IRQ  := false.B
   RxE_IRQ  := false.B
 

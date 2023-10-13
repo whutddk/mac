@@ -8,19 +8,25 @@ class Transmit_Enq_Ctrl_Bundle extends Bundle{
 
 }
 
-class Transmit_Deq_Ctrl_Bundle extends Bundle{
+
+class Transmit_Deq_Req_Bundle extends Bundle{
+
+}
+
+class Transmit_Deq_Resp_Bundle extends Bundle{
 
 }
 
 class Transmit_Enq_Bundle extends Bundle{
   val data = Decoupled(UInt(32.W))
-  val ctrl = Decoupled(new RevBuff_Enq_Ctrl_Bundle)
+  val ctrl = Decoupled(new Transmit_Enq_Ctrl_Bundle)
 }
 
 
 class Transmit_Deq_Bundle extends Bundle{
   val data = Decoupled(UInt(32.W))
-  val ctrl = Decoupled(new RevBuff_Deq_Ctrl_Bundle)
+  val req  = Decoupled(new Transmit_Deq_Req_Bundle)
+  val resp = Flipped(Decoupled(new Transmit_Deq_Resp_Bundle))
 }
 
 

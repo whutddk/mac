@@ -45,10 +45,6 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
     //Register
     val r_TxEn    = Input(Bool())          // Transmit enable
 
-    // Interrupts
-    val TxB_IRQ  = Output(Bool())
-    val TxE_IRQ  = Output(Bool())
-
     val BlockingTxStatusWrite = Output(Bool())
 
     val TxUsedData     = Input(Bool())      // Transmit packet used data    
@@ -150,10 +146,10 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
   val TxStartFrm_wb = RegInit(false.B); io.TxStartFrm_wb := TxStartFrm_wb
+  val TxStatus = RegInit(0.U(4.W)) //[14:11]
 
 
-
-  when( io.txEnq.ctrl.fire ){
+  when( io.txEnq.req.fire ){
     TxStartFrm_wb := true.B
   } .elsewhen(io.TxStartFrm_syncb){
     TxStartFrm_wb := false.B
@@ -166,10 +162,13 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
     TxEndFrm_wb := false.B
   }
 
-  when( io.txEnq.ctrl.fire ){
-    TxStatus := Cat(txBuffDesc.irq, txBuffDesc.wr, txBuffDesc.pad, txBuffDesc.crc) // Latching status from the tx buffer descriptor Data is avaliable one cycle after the access is started (at that time signal TxEn is not active)
-    TxLength        := io.txEnq.ctrl.bits.txLength                                             //Latching length from the buffer descriptor;
-    LatchedTxLength := io.txEnq.ctrl.bits.txLength
+  when( io.txEnq.req.fire ){
+    TxStatus := 
+      Cat(
+        io.txEnq.req.bits.irq, io.txEnq.req.bits.wr, io.txEnq.req.bits.pad, io.txEnq.req.bits.crc
+      )
+    TxLength        := io.txEnq.req.bits.txLength
+    LatchedTxLength := io.txEnq.req.bits.txLength
   } .elsewhen( io.txEnq.data.fire ){
     when( TxLength < 4.U ){
       TxLength := 0.U
@@ -178,8 +177,66 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
     }
   }
 
-  tx_fifo.io.data_in := io.tlMst.D.bits.data
-  tx_fifo.io.write   := io.tlMst.D.fire & io.tlMst.D.bits.opcode === 1.U
+
+  val txRespValid := RegInit(false.B)
+
+  io.txEnq.resp.valid := txRespValid
+  io.txEnq.resp.bits  := 
+    RegEnable(
+      Cat(LatchedTxLength, 0.U(1.W), TxStatus, 0.U(2.W), false.B, io.RetryCntLatched, io.RetryLimit, io.LateCollLatched, io.DeferLatched, io.CarrierSenseLost), 
+      TxRetryPulse | TxDonePulse | TxAbortPulse
+    )
+
+  when( io.txEnq.resp.fire ){
+    txRespValid := false.B
+  } .elsewhen( TxRetryPulse | TxDonePulse | TxAbortPulse ){
+    txRespValid := true.B
+  }
+
+
+
+
+  // // Latching READY status of the Tx buffer descriptor
+  // when(TxBDRead){ // TxBDReady is sampled only once at the beginning.
+  //   TxBDReady := txBuffDesc.rd & (txBuffDesc.len > 4.U)
+  // } .elsewhen(ResetTxBDReady){ // Only packets larger then 4 bytes are transmitted.
+  //   TxBDReady := false.B
+  // }
+
+  val txEnqReqReady = RegInit(true.B); io.txEnq.req.ready := txEnqReqReady
+
+  val StartTxBDRead = (TxRetryPacket_NotCleared | TxDonePacket | TxAbortPacket) & ~TxBDReady // Reading the Tx buffer descriptor
+
+  when(io.txEnq.req.fire){
+    txEnqReqReady := false.B
+  } .elsewhen(StartTxBDRead){
+    txEnqReqReady := true.B
+  }
+
+
+  // Writing status back to the Tx buffer descriptor
+  TxStatusWrite := (TxDonePacket | TxAbortPacket)
+
+
+  // Status writing must occur only once. Meanwhile it is blocked.
+  when(~io.TxDoneSync & ~io.TxAbortSync){
+    BlockingTxStatusWrite := false.B
+  } .elsewhen(TxStatusWrite){
+    BlockingTxStatusWrite := true.B
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
   io.txEnq.data.ready    := ReadTxDataFromFifoSyncPluse & ~tx_fifo.io.empty
@@ -198,28 +255,18 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
   val TxRetryPacket = RegInit(false.B)
-  val TxRetryPacket_NotCleared = RegInit(false.B)
 
   val TxDonePacket = RegInit(false.B)
-  val TxDonePacket_NotCleared = RegInit(false.B)
 
   val TxAbortPacket = RegInit(false.B)
-  val TxAbortPacket_NotCleared = RegInit(false.B)
 
   val TxBDReady = RegInit(false.B)
-  val TxBDAddress = RegInit(0.U(7.W))   //[7:1]
-
 
   val ReadTxDataFromFifoSyncPluse = io.ReadTxDataFromFifo_sync & ~RegNext(io.ReadTxDataFromFifo_sync, false.B)
 
-  val (_, _, isLastD, transDCnt) = edgeOut.count(io.tlMst.D)
-  val tx_fifo = Module( new MacFifo(dw = 32, dp = 16) )
-  val TxB_IRQ = RegInit(false.B); io.TxB_IRQ := TxB_IRQ
-  val TxE_IRQ = RegInit(false.B); io.TxE_IRQ := TxE_IRQ
-  val TxBDRead = RegInit(true.B)
-  val TxStatusWrite = Wire(Bool())
+
   val TxLength = RegInit(0.U(16.W))
-  val TxStatus = RegInit(0.U(4.W)) //[14:11]
+
 
   val TxRetryPulse                = io.TxRetrySync             & ~RegNext(io.TxRetrySync, false.B)
   val TxDonePulse                 = io.TxDoneSync              & ~RegNext(io.TxDoneSync,  false.B)
@@ -228,13 +275,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
   val BlockingTxStatusWrite = RegInit(false.B); io.BlockingTxStatusWrite := BlockingTxStatusWrite
-  val BlockingTxBDRead = RegInit(false.B)
 
-
-
-
-  val BDWrite = RegInit(0.U(4.W))     // BD Write Enable for access from WISHBONE side
-  val BDRead  = RegInit(false.B)      // BD Read access from WISHBONE side
 
 
   val TxEndFrm_wb = RegInit(false.B); io.TxEndFrm_wb := TxEndFrm_wb
@@ -242,147 +283,44 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
   // Delayed stage signals
   val r_TxEn_q = RegNext(io.r_TxEn, false.B) 
 
-  def StateIdle = 0.U(3.W)
-  def StateWB   = 1.U(3.W)
-  def StateTX   = 2.U(3.W)
 
-  val stateNxt = RegInit( StateWB )
-  val stateCur = RegNext( stateNxt, StateIdle )
+  val TxAbortPacketBlocked = RegInit(false.B)
 
-  
-  val ram_addr = RegInit(0.U(8.W))
-  val ram_di = RegInit(0.U(32.W))
-
-
-
-
-  val TxPointerRead = RegInit(false.B)
-  val TxEn_needed = RegInit(false.B)
-
-
-
-
-
-
-  val BlockReadTxDataFromMemory = RegInit(false.B)
-
-
-  val ReadTxDataFromMemory = RegInit(false.B)
-
-  val MasterWbTX = RegInit(false.B)
-
-  val TxPointerMSB = RegInit(0.U(30.W)) //[31:2]
-
-
-
-
-
-  // Generic synchronous single-port RAM interface
-  val bd_ram = Module(new MacSRAM)
-  val txBuffDesc = bd_ram.io.dato.asTypeOf(new TxBuffDesc)
-
-  bd_ram.io.we :=
-    Mux1H(Seq(
-      (stateNxt === StateWB & stateCur === StateWB) -> BDWrite,
-      (TxStatusWrite )               -> "b1111".U
-    )).asBools
-
-  bd_ram.io.oe :=
-    Mux1H(Seq(
-      (( stateNxt === StateWB ) & ( stateCur === StateWB )) -> BDRead,
-      (( stateNxt === StateTX ) & ( stateCur === StateTX )) -> (TxBDRead | TxPointerRead),
-    ))
-
-
-  bd_ram.io.addr := ram_addr
-  bd_ram.io.di := ram_di
-
-
-
-
-  when(~TxBDReady & io.r_TxEn & stateNxt === StateWB & stateCur =/= StateWB){
-    TxEn_needed := true.B
-  } .elsewhen(TxPointerRead & stateNxt === StateTX & stateCur === StateTX){
-    TxEn_needed := false.B
-  }
-
-  // Enabling access to the RAM for three devices.
-  // Switching between three stages depends on enable signals
-  switch( stateCur ){
-    is(StateIdle){
-      when( TxEn_needed === false.B ){
-        stateNxt := StateWB // Idle state. We go to WbEn access stage.
-        
-        ram_addr := io.tlSlv.A.bits.address(9,2) // [11:2 ] -> [9:2]
-        ram_di   := io.tlSlv.A.bits.data
-        BDWrite  := io.tlSlv.A.bits.mask & Fill(4, io.tlSlv.A.valid & io.tlSlv.A.bits.address(10) & ((io.tlSlv.A.bits.opcode === 0.U) || (io.tlSlv.A.bits.opcode === 1.U)) )
-        BDRead   := io.tlSlv.A.bits.mask.orR     & io.tlSlv.A.valid & io.tlSlv.A.bits.address(10) &  (io.tlSlv.A.bits.opcode === 4.U) // 0x400 - 0x7FF
-      }
-
-    }
-    is(StateWB){
-      when( TxEn_needed ){
-        stateNxt := StateTX // wb access stage, r_RxEn is disabled but r_TxEn is enabled
-
-        ram_addr := Cat(TxBDAddress, TxPointerRead) //[7,1] + [0]
-        ram_di   := Cat(LatchedTxLength, 0.U(1.W), TxStatus, 0.U(2.W), false.B, io.RetryCntLatched, io.RetryLimit, io.LateCollLatched, io.DeferLatched, io.CarrierSenseLost)
-      } .otherwise{
-        stateNxt := StateIdle // WbEn access stage and there is no need for other stages. WbEn needs to be switched off for a bit
-      }
-    }
-    is(StateTX){
-      when( true.B ){
-        stateNxt := StateWB  // TxEn access stage (we always go to wb access stage)
-
-        ram_addr := io.tlSlv.A.bits.address(9,2) //[11:2 ] ->[9:2]
-        ram_di   := io.tlSlv.A.bits.data
-        BDWrite  := io.tlSlv.A.bits.mask & Fill(4, io.tlSlv.A.valid & io.tlSlv.A.bits.address(10) & ((io.tlSlv.A.bits.opcode === 0.U) || (io.tlSlv.A.bits.opcode === 1.U)) )
-        BDRead   := io.tlSlv.A.bits.mask.orR     & io.tlSlv.A.valid & io.tlSlv.A.bits.address(10) &  (io.tlSlv.A.bits.opcode === 4.U)
-      }
-    }
+  when( io.TxAbortSync & (~TxAbortPacketBlocked) ){
+    TxAbortPacket := true.B
+  } .otherwise{
+    TxAbortPacket := false.B
   }
 
 
 
-
-
-  val ResetTxBDReady = TxDonePulse | TxAbortPulse | TxRetryPulse
-
-
-  // Latching READY status of the Tx buffer descriptor
-  when(stateNxt === StateTX & stateCur === StateTX & TxBDRead){ // TxBDReady is sampled only once at the beginning.
-    TxBDReady := txBuffDesc.rd & (txBuffDesc.len > 4.U)
-  } .elsewhen(ResetTxBDReady){ // Only packets larger then 4 bytes are transmitted.
-    TxBDReady := false.B
+  when(~io.TxAbortSync & RegNext(io.TxAbortSync, false.B)){
+    TxAbortPacketBlocked := false.B
+  } .elsewhen(TxAbortPacket){
+    TxAbortPacketBlocked := true.B
   }
 
 
-  val StartTxBDRead = (TxRetryPacket_NotCleared | TxStatusWrite) & ~BlockingTxBDRead & ~TxBDReady // Reading the Tx buffer descriptor
+
+  val TxRetryPacketBlocked = RegInit(false.B)
+
+  when( io.TxRetrySync & ~TxRetryPacketBlocked ){
+    TxRetryPacket := true.B
+  } .otherwise{
+    TxRetryPacket := false.B
+  }
 
   when(StartTxBDRead){
-    TxBDRead := true.B
-  } .elsewhen(TxBDReady){
-    TxBDRead := false.B
-  }
-
-  // Reading Tx BD Pointer
-  when(TxBDRead & TxBDReady){
-    TxPointerRead := true.B
-  } .elsewhen(stateCur === StateTX){
-    TxPointerRead := false.B
+    TxRetryPacket_NotCleared := false.B
+  } .elsewhen( io.TxRetrySync & ~TxRetryPacketBlocked ){
+    TxRetryPacket_NotCleared := true.B
   }
 
 
-
-  // Writing status back to the Tx buffer descriptor
-  TxStatusWrite := (TxDonePacket_NotCleared | TxAbortPacket_NotCleared) & stateNxt === StateTX & stateCur === StateTX & ~BlockingTxStatusWrite
-
-
-  // Status writing must occur only once. Meanwhile it is blocked.
-  when(~io.TxDoneSync & ~io.TxAbortSync){
-    BlockingTxStatusWrite := false.B
-  } .elsewhen(TxStatusWrite){
-    BlockingTxStatusWrite := true.B
+  when( ~io.TxRetrySync & RegNext(io.TxRetrySync, false.B) ){
+    TxRetryPacketBlocked := false.B
+  } .elsewhen(TxRetryPacket){
+    TxRetryPacketBlocked := true.B
   }
 
 
@@ -390,79 +328,22 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-  // TxBDRead state is activated only once. 
-  when(StartTxBDRead){
-    BlockingTxBDRead := true.B
-  } .elsewhen(~StartTxBDRead & ~TxBDReady){
-    BlockingTxBDRead := false.B
+  val TxDonePacketBlocked = RegInit(false.B)
+
+  when( io.TxDoneSync & ~TxDonePacketBlocked ){
+    TxDonePacket := true.B
+  }.otherwise{
+    TxDonePacket := false.B
   }
 
 
 
-  
 
-
-
-
-
-  
-
-
-
-
-
-
-
-
-  when(stateNxt === StateTX & stateCur === StateTX & TxPointerRead){
-    TxPointerMSB := bd_ram.io.dato(31,2)  // Latching Tx buffer pointer from buffer descriptor. Only 30 MSB bits are latched because TxPointerMSB is only used for word-aligned accesses.
-    when( bd_ram.io.dato(1,0) =/= 0.U ){
-      printf("Warning, force to align at tx ram")
-    }
-  } .elsewhen( io.tlMst.D.fire & io.tlMst.D.bits.opcode === 1.U ){
-    TxPointerMSB := TxPointerMSB + 1.U // TxPointer is word-aligned
+  when(~io.TxDoneSync & RegNext(io.TxDoneSync, false.B)){
+    TxDonePacketBlocked := false.B
+  } .elsewhen(TxDonePacket){
+    TxDonePacketBlocked := true.B
   }
-    
-
-
-  val isTlMstBusy = RegInit(false.B)
-
-
-  when( (TxLength === 0.U) | TxAbortPulse | TxRetryPulse){
-    ReadTxDataFromMemory := false.B
-  } .elsewhen(stateNxt === StateTX & stateCur === StateTX & TxPointerRead){
-    ReadTxDataFromMemory := true.B
-  }
-
-  val ReadTxDataFromMemory_2 = ReadTxDataFromMemory & ~BlockReadTxDataFromMemory;
-
-  when(
-    (tx_fifo.io.almost_full | TxLength <= 4.U) & MasterWbTX & isTlMstBusy & (~(TxAbortPacket_NotCleared | TxRetryPacket_NotCleared))){
-    BlockReadTxDataFromMemory := true.B
-  } .elsewhen(ReadTxDataFromFifoSyncPluse | TxDonePacket | TxAbortPacket | TxRetryPacket){
-    BlockReadTxDataFromMemory := false.B
-  }
-
-
-
-  val TxError = io.RetryLimit | io.LateCollLatched | io.CarrierSenseLost
-
-  // Tx Done Interrupt
-  when(TxStatusWrite & TxIRQEn){
-    TxB_IRQ := ~TxError
-  } .otherwise{
-    TxB_IRQ := false.B
-  }
-
-  // Tx Error Interrupt
-  when(TxStatusWrite & TxIRQEn){
-    TxE_IRQ := TxError
-  } .otherwise{
-    TxE_IRQ := false.B
-  }
-
-
-
 
 
 
@@ -555,195 +436,9 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-
-
-  // Latching Tx buffer descriptor address
-  when(io.r_TxEn & (~r_TxEn_q)){
-    TxBDAddress := 0.U
-  } .elsewhen(TxStatusWrite){
-    when( TxStatusWrite & ~WrapTxStatusBit ){ //increase
-      TxBDAddress := TxBDAddress + 1.U
-    } .otherwise{ //wrap
-      TxBDAddress := 0.U
-    } 
-  }
-
-
-
-
-
-
-
-
-  val TxAbortPacketBlocked = RegInit(false.B)
-
-  when(
-    io.TxAbortSync & (~TxAbortPacketBlocked) &   MasterWbTX  & io.tlMst.D.fire & isLastD  |
-    io.TxAbortSync & (~TxAbortPacketBlocked) & (~MasterWbTX) ){
-    TxAbortPacket := true.B
-  } .otherwise{
-    TxAbortPacket := false.B
-  }
-
-
-  when(stateNxt === StateTX & stateCur === StateTX & TxAbortPacket_NotCleared){
-    TxAbortPacket_NotCleared := false.B
-  } .elsewhen(
-    io.TxAbortSync & (~TxAbortPacketBlocked) &   MasterWbTX  & io.tlMst.D.fire & isLastD |
-    io.TxAbortSync & (~TxAbortPacketBlocked) & (~MasterWbTX) ){
-    TxAbortPacket_NotCleared := true.B
-  }
-
-  when(~io.TxAbortSync & RegNext(io.TxAbortSync, false.B)){
-    TxAbortPacketBlocked := false.B
-  } .elsewhen(TxAbortPacket){
-    TxAbortPacketBlocked := true.B
-  }
-
-
-
-  val TxRetryPacketBlocked = RegInit(false.B)
-
-  when(
-    io.TxRetrySync & ~TxRetryPacketBlocked &  MasterWbTX & io.tlMst.D.fire & isLastD |
-    io.TxRetrySync & ~TxRetryPacketBlocked & ~MasterWbTX ){
-    TxRetryPacket := true.B
-  } .otherwise{
-    TxRetryPacket := false.B
-  }
-
-
-
-
-
-  when(StartTxBDRead){
-    TxRetryPacket_NotCleared := false.B
-  } .elsewhen(
-    io.TxRetrySync & ~TxRetryPacketBlocked &  MasterWbTX & io.tlMst.D.fire & isLastD |
-    io.TxRetrySync & ~TxRetryPacketBlocked & ~MasterWbTX ){
-    TxRetryPacket_NotCleared := true.B
-  }
-
-
-  when( ~io.TxRetrySync & RegNext(io.TxRetrySync, false.B) ){
-    TxRetryPacketBlocked := false.B
-  } .elsewhen(TxRetryPacket){
-    TxRetryPacketBlocked := true.B
-  }
-
-
-
-  val TxDonePacketBlocked = RegInit(false.B)
-
-  when(
-    io.TxDoneSync & ~TxDonePacketBlocked &  MasterWbTX & io.tlMst.D.fire & isLastD |
-    io.TxDoneSync & ~TxDonePacketBlocked & ~MasterWbTX  ){
-    TxDonePacket := true.B
-  }.otherwise{
-    TxDonePacket := false.B
-  }
-
-  when(stateNxt === StateTX & stateCur === StateTX & TxDonePacket_NotCleared){
-    TxDonePacket_NotCleared := false.B
-  } .elsewhen(
-    io.TxDoneSync & ~TxDonePacketBlocked &  MasterWbTX & io.tlMst.D.fire & isLastD |
-    io.TxDoneSync & ~TxDonePacketBlocked & ~MasterWbTX ){
-    TxDonePacket_NotCleared := true.B
-  }
-
-
-  when(~io.TxDoneSync & RegNext(io.TxDoneSync, false.B)){
-    TxDonePacketBlocked := false.B
-  } .elsewhen(TxDonePacket){
-    TxDonePacketBlocked := true.B
-  }
   
 
 
-
-
-
-
-
-
-
-
-
-
-
-  
-  val slvAInfo = RegEnable( io.tlSlv.A.bits, io.tlSlv.A.fire )
-  val slvDValid = RegInit(false.B); io.tlSlv.D.valid := slvDValid
-  val slvDDat = Reg(UInt(32.W))
-
-
-
-  when( io.tlSlv.D.fire ){
-    slvDValid := false.B
-  } .elsewhen(io.tlSlv.A.fire){
-    slvDValid := true.B
-    slvDDat := bd_ram.io.dato
-  }
-
-  when(slvAInfo.opcode === 4.U) {
-    io.tlSlv.D.bits := edgeIn.AccessAck(slvAInfo, slvDDat)
-  } .otherwise {
-    io.tlSlv.D.bits := edgeIn.AccessAck(slvAInfo)
-  }
-
-  io.tlSlv.A.ready := RegNext(stateNxt === StateWB & Mux( stateCur === StateWB , BDWrite.orR, BDRead ))
-  
-  assert( ~(io.tlSlv.A.ready & ~io.tlSlv.A.valid) )
-
-
-
-
-
-
-  val mstAValid = RegInit(false.B)
-  val mstABits  = Reg(new TLBundleA(edgeOut.bundle))
-
-
-  when( io.tlMst.A.fire ){
-    mstAValid := false.B
-  } 
-  .elsewhen( MasterWbTX & ~isTlMstBusy ){
-    mstAValid := true.B
-    mstABits :=
-      edgeOut.Get(
-        fromSource = 0.U,
-        toAddress = TxPointerMSB << 2,
-        lgSize = log2Ceil(32/8).U,
-      )._2
-  }
-
-  when( io.tlMst.A.fire ){
-    isTlMstBusy := true.B
-  } .elsewhen( io.tlMst.D.fire ){
-    isTlMstBusy := false.B
-  }
-
-  when( ~MasterWbTX ){
-    when(ReadTxDataFromMemory_2) {
-      MasterWbTX := true.B
-    }
-  } .elsewhen( MasterWbTX ){ //1 A + 1.4D memory to fifo
-    when( io.tlMst.D.fire & isLastD & ~ReadTxDataFromMemory_2 ){
-      MasterWbTX := false.B
-    }
-  }
-
-
-  when(io.tlMst.D.fire & io.tlMst.D.bits.opcode === 1.U) { assert( MasterWbTX ) }
-
-  val tlMstAValid_dbg = RegInit(true.B)
-  io.tlMst.A.valid := mstAValid & tlMstAValid_dbg
-  io.tlMst.A.bits  := mstABits
-
-
-  val tlMstDReady = RegInit(true.B)
-
-  io.tlMst.D.ready := tlMstDReady
 
 
 
