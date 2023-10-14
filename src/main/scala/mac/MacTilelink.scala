@@ -146,8 +146,20 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
   val TxStartFrm_wb = RegInit(false.B); io.TxStartFrm_wb := TxStartFrm_wb
-  val TxStatus = RegInit(0.U(4.W)) //[14:11]
+  val TxEndFrm_wb = RegInit(false.B); io.TxEndFrm_wb := TxEndFrm_wb
 
+  val TxLength = RegInit(0.U(16.W))
+  val LatchedTxLength = RegInit(0.U(16.W))
+
+  val TxRetryPulse                = io.TxRetrySync             & ~RegNext(io.TxRetrySync, false.B)
+  val TxDonePulse                 = io.TxDoneSync              & ~RegNext(io.TxDoneSync,  false.B)
+  val TxAbortPulse                = io.TxAbortSync             & ~RegNext(io.TxAbortSync, false.B)
+  val ReadTxDataFromFifoSyncPluse = io.ReadTxDataFromFifo_sync & ~RegNext(io.ReadTxDataFromFifo_sync, false.B)
+
+  
+  val TxStatus = RegInit(0.U(4.W)) //[14:11]
+  io.PerPacketPad    := TxStatus.extract(1)
+  io.PerPacketCrcEn  := TxStatus.extract(0)
 
   when( io.txEnq.req.fire ){
     TxStartFrm_wb := true.B
@@ -178,7 +190,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
   }
 
 
-  val txRespValid := RegInit(false.B)
+  val txRespValid = RegInit(false.B)
 
   io.txEnq.resp.valid := txRespValid
   io.txEnq.resp.bits  := 
@@ -196,32 +208,40 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-  // // Latching READY status of the Tx buffer descriptor
-  // when(TxBDRead){ // TxBDReady is sampled only once at the beginning.
-  //   TxBDReady := txBuffDesc.rd & (txBuffDesc.len > 4.U)
-  // } .elsewhen(ResetTxBDReady){ // Only packets larger then 4 bytes are transmitted.
-  //   TxBDReady := false.B
-  // }
 
-  val txEnqReqReady = RegInit(true.B); io.txEnq.req.ready := txEnqReqReady
 
-  val StartTxBDRead = (TxRetryPacket_NotCleared | TxDonePacket | TxAbortPacket) & ~TxBDReady // Reading the Tx buffer descriptor
+  val isTxBusy = RegInit(false.B); io.txEnq.req.ready := ~isTxBusy & io.r_TxEn_q
 
   when(io.txEnq.req.fire){
-    txEnqReqReady := false.B
-  } .elsewhen(StartTxBDRead){
-    txEnqReqReady := true.B
+    isTxBusy := true.B
+  } .elsewhen(txRetryPulse | txDonePulse | txAbortPulse){
+    isTxBusy := false.B
   }
 
 
-  // Writing status back to the Tx buffer descriptor
-  TxStatusWrite := (TxDonePacket | TxAbortPacket)
 
 
-  // Status writing must occur only once. Meanwhile it is blocked.
+
+
+
+  io.txEnq.data.ready    := ReadTxDataFromFifoSyncPluse & ~tx_fifo.io.empty
+  assert( ~(io.txEnq.data.ready & ~io.txEnq.data.valid), "Assert Failed, Tx should never under run!" )
+
+  io.TxData_wb       := io.txEnq.data.bits
+
+  tx_fifo.io.clear   := txAbortPulse | txRetryPulse
+
+
+
+
+
+
+
+  val BlockingTxStatusWrite = RegInit(false.B); io.BlockingTxStatusWrite := BlockingTxStatusWrite
+
   when(~io.TxDoneSync & ~io.TxAbortSync){
     BlockingTxStatusWrite := false.B
-  } .elsewhen(TxStatusWrite){
+  } .elsewhen(txDonePulse | txAbortPulse){
     BlockingTxStatusWrite := true.B
   }
 
@@ -237,188 +257,9 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
 
 
 
-
-
-  io.txEnq.data.ready    := ReadTxDataFromFifoSyncPluse & ~tx_fifo.io.empty
-  assert( ~(io.txEnq.data.ready & ~io.txEnq.data.valid), "Assert Failed, Tx should never under run!" )
-
-  io.TxData_wb       := io.txEnq.data.bits
-
-  tx_fifo.io.clear   := TxAbortPacket | TxRetryPacket
-
-
-
-
-
-
-
-
-
-  val TxRetryPacket = RegInit(false.B)
-
-  val TxDonePacket = RegInit(false.B)
-
-  val TxAbortPacket = RegInit(false.B)
-
-  val TxBDReady = RegInit(false.B)
-
-  val ReadTxDataFromFifoSyncPluse = io.ReadTxDataFromFifo_sync & ~RegNext(io.ReadTxDataFromFifo_sync, false.B)
-
-
-  val TxLength = RegInit(0.U(16.W))
-
-
-  val TxRetryPulse                = io.TxRetrySync             & ~RegNext(io.TxRetrySync, false.B)
-  val TxDonePulse                 = io.TxDoneSync              & ~RegNext(io.TxDoneSync,  false.B)
-  val TxAbortPulse                = io.TxAbortSync             & ~RegNext(io.TxAbortSync, false.B)
-  val LatchedTxLength = RegInit(0.U(16.W))
-
-
-  val BlockingTxStatusWrite = RegInit(false.B); io.BlockingTxStatusWrite := BlockingTxStatusWrite
-
-
-
-  val TxEndFrm_wb = RegInit(false.B); io.TxEndFrm_wb := TxEndFrm_wb
-
-  // Delayed stage signals
-  val r_TxEn_q = RegNext(io.r_TxEn, false.B) 
-
-
-  val TxAbortPacketBlocked = RegInit(false.B)
-
-  when( io.TxAbortSync & (~TxAbortPacketBlocked) ){
-    TxAbortPacket := true.B
-  } .otherwise{
-    TxAbortPacket := false.B
-  }
-
-
-
-  when(~io.TxAbortSync & RegNext(io.TxAbortSync, false.B)){
-    TxAbortPacketBlocked := false.B
-  } .elsewhen(TxAbortPacket){
-    TxAbortPacketBlocked := true.B
-  }
-
-
-
-  val TxRetryPacketBlocked = RegInit(false.B)
-
-  when( io.TxRetrySync & ~TxRetryPacketBlocked ){
-    TxRetryPacket := true.B
-  } .otherwise{
-    TxRetryPacket := false.B
-  }
-
-  when(StartTxBDRead){
-    TxRetryPacket_NotCleared := false.B
-  } .elsewhen( io.TxRetrySync & ~TxRetryPacketBlocked ){
-    TxRetryPacket_NotCleared := true.B
-  }
-
-
-  when( ~io.TxRetrySync & RegNext(io.TxRetrySync, false.B) ){
-    TxRetryPacketBlocked := false.B
-  } .elsewhen(TxRetryPacket){
-    TxRetryPacketBlocked := true.B
-  }
-
-
-
-
-
-
-  val TxDonePacketBlocked = RegInit(false.B)
-
-  when( io.TxDoneSync & ~TxDonePacketBlocked ){
-    TxDonePacket := true.B
-  }.otherwise{
-    TxDonePacket := false.B
-  }
-
-
-
-
-  when(~io.TxDoneSync & RegNext(io.TxDoneSync, false.B)){
-    TxDonePacketBlocked := false.B
-  } .elsewhen(TxDonePacket){
-    TxDonePacketBlocked := true.B
-  }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   // Marks which bytes are valid within the word.
   val TxValidBytesLatched = RegInit(0.U(2.W)); io.TxValidBytesLatched := TxValidBytesLatched
-
-
-  val LatchValidBytes = ShiftRegisters((TxLength < 4.U) & TxBDReady, 2, false.B, true.B)
+  val LatchValidBytes = ShiftRegisters((TxLength < 4.U), 2, false.B, true.B)
   val LatchValidBytesPluse = LatchValidBytes(0) & ~LatchValidBytes(1)
 
   // Latching valid bytes
@@ -429,10 +270,7 @@ abstract class MacTileLinkBase(edgeIn: TLEdgeIn, edgeOut: TLEdgeOut) extends Mod
   }
 
 
-  val TxIRQEn         = TxStatus.extract(3) //[14:11]
-  val WrapTxStatusBit = TxStatus.extract(2)
-  io.PerPacketPad    := TxStatus.extract(1)
-  io.PerPacketCrcEn  := TxStatus.extract(0)
+
 
 
 
