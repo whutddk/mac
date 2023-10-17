@@ -14,21 +14,6 @@ class MacTest(implicit p: Parameters) extends Mac{
 
 
 
-
-	val tlRAM = TLRAM(
-    address    = AddressSet(0x00000000L, 0x001FFFFFL),
-    cacheable  = false,
-    executable = false,
-    atomics    = false,
-    beatBytes  = 4,
-    sramReg = true,
-    devName = None,
-  )
-
-	tlRAM := tlClientNode
-
-
-
 	val tlClientIONode = 
 		TLClientNode(Seq(TLMasterPortParameters.v1(
 			Seq(TLMasterParameters.v1(
@@ -37,11 +22,8 @@ class MacTest(implicit p: Parameters) extends Mac{
 			))
 		)))
 
-	val tlBar = TLXbar()
 
-	tlBar := tlClientIONode
-	tlMasterNode := tlBar
-	ethReg.configNode  := tlBar
+	ethReg.configNode  := tlClientIONode
 
 	val intSinkNode = IntSinkNode(IntSinkPortSimple())
 	intSinkNode := ethReg.int_node

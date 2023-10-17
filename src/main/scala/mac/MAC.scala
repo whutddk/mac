@@ -11,31 +11,6 @@ import freechips.rocketchip.interrupts._
 class Mac(implicit p: Parameters) extends LazyModule with HasMacParameters{
 
 
-  val tlMasterNode =   
-        TLManagerNode(Seq(TLSlavePortParameters.v1(
-          managers = Seq(TLSlaveParameters.v1(
-          address = Seq(AddressSet(0x30000400L, 0x03FFL)),
-          regionType = RegionType.VOLATILE,
-          executable = false,
-          fifoId = Some(2),
-          supportsGet         = TransferSizes(8/8, 32/8),
-          supportsPutFull     = TransferSizes(8/8, 32/8),
-          supportsPutPartial  = TransferSizes(8/8, 32/8)
-        )),
-        beatBytes = 32/8)))
-
-
-  val tlClientNode = TLClientNode(Seq(TLMasterPortParameters.v1(
-    Seq(TLMasterParameters.v1(
-      name = "tlMst",
-      sourceId = IdRange(0, 1),
-    ))
-  )))
-
-
-
-
-
   val ethReg = LazyModule(new MacReg)
 
 
@@ -75,12 +50,6 @@ class MacIO extends Bundle with MDIO{
 class MacImp(outer: Mac)(implicit p: Parameters) extends LazyModuleImp(outer) with HasMacParameters{
 
   val io = IO(new MacIO)
-
-  val ( slv_bus, slv_edge ) = outer.tlMasterNode.in.head
-  val ( mst_bus, mst_edge ) = outer.tlClientNode.out.head
-  
-
-
 
 
 val r_ClkDiv            = Wire(UInt(8.W))
@@ -679,25 +648,7 @@ val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Modul
 
 
 
-  val wishbone = Module(new MacTileLink(slv_edge, mst_edge))
-
-    wishbone.io.tlSlv.A.valid := slv_bus.a.valid 
-    wishbone.io.tlSlv.A.bits  := slv_bus.a.bits 
-    slv_bus.a.ready := wishbone.io.tlSlv.A.ready
-
-    slv_bus.d.valid := wishbone.io.tlSlv.D.valid
-    slv_bus.d.bits  := wishbone.io.tlSlv.D.bits
-    wishbone.io.tlSlv.D.ready := slv_bus.d.ready
-
-
-
-    wishbone.io.tlMst.D.bits  := mst_bus.d.bits
-    wishbone.io.tlMst.D.valid := mst_bus.d.valid
-    mst_bus.d.ready := wishbone.io.tlMst.D.ready
-    mst_bus.a.valid := wishbone.io.tlMst.A.valid
-    mst_bus.a.bits  := wishbone.io.tlMst.A.bits
-    wishbone.io.tlMst.A.ready := mst_bus.a.ready
-
+  val wishbone = Module(new MacTileLink)
 
 
   wishbone.io.RetryCntLatched  := RetryCntLatched
