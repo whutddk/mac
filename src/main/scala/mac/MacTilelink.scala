@@ -99,7 +99,7 @@ abstract class MacTileLinkBase() extends Module{
   rxBuff.io.enq.data.bits := io.RxDataLatched2_rxclk
   rxBuff.io.enq.data.valid := WriteRxDataToFifoSyncPluse 
 
-  assert( (~rxBuff.io.enq.data.valid & ~rxBuff.io.enq.data.ready), "Assert Failed, rx overrun!" )
+  assert( ~(rxBuff.io.enq.data.valid & ~rxBuff.io.enq.data.ready), "Assert Failed, rx overrun!" )
 
 
 
@@ -258,6 +258,7 @@ class MacTileLink() extends MacTileLinkBase(){
 
   rxBuff.io.deq.data.ready := false.B
   rxBuff.io.deq.ctrl.ready := false.B
+
 }
 
 

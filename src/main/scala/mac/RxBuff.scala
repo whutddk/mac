@@ -46,6 +46,10 @@ class RxBuff extends Module{
 
   val pipoBuff = for( i <- 0 until 2 ) yield { Module(new Queue( UInt(32.W), 2048/4 )) }
   val pipoInfo = for( i <- 0 until 2 ) yield { Reg(new Packet_Info_Bundle) }
+  dontTouch(pipoBuff(0).io.enq)
+  dontTouch(pipoInfo(0))
+  dontTouch(pipoBuff(1).io.enq)
+  dontTouch(pipoInfo(1))
 
   val recCnt = RegInit(0.U(3.W))
 
