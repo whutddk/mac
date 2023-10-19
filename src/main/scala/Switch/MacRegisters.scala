@@ -76,6 +76,8 @@ class Mac_Config_Bundle extends Bundle{
 
 class MacRegIO extends Mac_Config_Bundle{
   val asyncReset = Input(AsyncReset())
+
+  val triTx = Output(Bool())
 }
 
 class MacReg(implicit p: Parameters) extends LazyModule{
@@ -319,6 +321,11 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
         RegFieldGroup("TXCTRL", Some("Tx Control Register"), 
           RegField.bytes(txPauseTV, Some(RegFieldDesc("TxPauseTV", "Tx Pause Timer Value", reset=Some(0x0)))) ++ Seq(
           RegField(1,  txPauseRq, RegFieldDesc("TxPauseRQ", "Tx Pause Request", reset=Some(0x0))),
+        )),
+
+      ( 30 << 2 ) ->
+        RegFieldGroup("BD", Some("bd"), 
+          RegField.w(1, RegWriteFn((valid, data) => { io.triTx := (valid & (data === 1.U)) ; true.B} ),Some(RegFieldDesc("bd", "bd", reset=Some(0x0)))) ++ Seq(
         )),
     )
 

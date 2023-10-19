@@ -23,6 +23,15 @@ class SwitchIO(implicit p: Parameters) extends SwitchBundle{
 
 class Switch(implicit p: Parameters) extends LazyModule with HasSwitchParameters{
 
+  val tlClientNode = TLClientNode(Seq(TLMasterPortParameters.v1(
+    Seq(TLMasterParameters.v1(
+      name = "DMA",
+      sourceId = IdRange(0, chn),
+    ))
+  )))
+
+
+
 
   val ethReg = LazyModule(new MacReg)
 
@@ -32,6 +41,7 @@ class Switch(implicit p: Parameters) extends LazyModule with HasSwitchParameters
 
 class SwitchImp(outer: Switch)(implicit p: Parameters) extends LazyModuleImp(outer) with HasSwitchParameters{
   val io = IO(new SwitchIO)
+  val ( dma_bus, dma_edge ) = outer.tlClientNode.out.head
 
   val mac = ( 0 until chn ).map{ i =>
     Module(new Mac)
@@ -46,6 +56,10 @@ class SwitchImp(outer: Switch)(implicit p: Parameters) extends LazyModuleImp(out
   outer.ethReg.module.io.asyncReset := io.asyncReset
   outer.ethReg.module.io.viewAsSupertype(new Mac_Config_Bundle) <> mac(0).io.cfg
 
+  val switchMux = Module(new SwitchMux)
+
+  switchMux.io.rxEnq(0) <> mac(0).io.rxEnq
+  switchMux.io.txDeq(0) <> mac(0).io.txDeq
 
 
 
@@ -61,18 +75,6 @@ class SwitchImp(outer: Switch)(implicit p: Parameters) extends LazyModuleImp(out
 
 
 
-
-  val rxBuff = Module(new RxBuff)
-
-  rxBuff.io.enq <> mac(0).io.rxEnq
-  rxBuff.io.deq.data.ready := false.B
-  rxBuff.io.deq.ctrl.ready := false.B
-
-  val txBuff = Module(new TxBuff)
-  txBuff.io.deq <> mac(0).io.txDeq
-  txBuff.io.enq.ctrl.valid := false.B
-  txBuff.io.enq.data.valid := false.B
-  txBuff.io.enq.data.bits  := 0.U
 
 
 
