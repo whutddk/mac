@@ -3,28 +3,11 @@ package MAC
 import chisel3._
 import chisel3.util._
 
-import org.chipsalliance.cde.config._
-import freechips.rocketchip.diplomacy._
-import freechips.rocketchip.tilelink._
-import freechips.rocketchip.interrupts._
-
-class Mac(implicit p: Parameters) extends LazyModule with HasMacParameters{
-
-
-  val ethReg = LazyModule(new MacReg)
-
-
-  lazy val module = new MacImp(this)
+import Switch._
 
 
 
-
-}
-
-
-
-class MacIO extends Bundle with MDIO{
-
+class MII extends Bundle with MDIO{
   // Tx
   val mtx_clk_pad_i = Input(Bool())
   val mtxd_pad_o    = Output(UInt(4.W))
@@ -39,7 +22,16 @@ class MacIO extends Bundle with MDIO{
 
   // Common Tx and Rx
   val mcoll_pad_i = Input(Bool())
-  val mcrs_pad_i  = Input(Bool())
+  val mcrs_pad_i  = Input(Bool())  
+}
+
+
+
+class MacIO extends Bundle{
+  val mii = new MII
+  val cfg = Flipped(new Mac_Config_Bundle)
+  val rxEnq = new Receive_Enq_Bundle
+  val txDeq = Flipped(new Transmit_Deq_Bundle)
 
   // val int_o = Output(Bool())
 
@@ -47,7 +39,8 @@ class MacIO extends Bundle with MDIO{
   val asyncReset = Input(AsyncReset())
 }
 
-class MacImp(outer: Mac)(implicit p: Parameters) extends LazyModuleImp(outer) with HasMacParameters{
+
+class Mac extends Module{
 
   val io = IO(new MacIO)
 
@@ -124,7 +117,7 @@ val miim = Module(new MIIM)
   miim.io.RStat     := r_RStat
   miim.io.ScanStat  := r_ScanStat
 
-  miim.io.mdi   := io.mdi
+  miim.io.mdi   := io.mii.mdi
 
   Busy_stat := miim.io.Busy
   LinkFail  := miim.io.LinkFail
@@ -134,9 +127,9 @@ val miim = Module(new MIIM)
   RStatStart := miim.io.RStatStart
   UpdateMIIRX_DATAReg := miim.io.UpdateMIIRX_DATAReg
 
-  io.mdc   := miim.io.mdc
-  io.mdo   := miim.io.mdo
-  io.mdoEn := miim.io.mdoEn
+  io.mii.mdc   := miim.io.mdc
+  io.mii.mdo   := miim.io.mdo
+  io.mii.mdoEn := miim.io.mdoEn
   
 
 
@@ -288,69 +281,65 @@ dontTouch(CarrierSenseLost           )
 
 
 
-
-outer.ethReg.module.io.asyncReset          := io.asyncReset
-outer.ethReg.module.io.WCtrlDataStart      := WCtrlDataStart
-outer.ethReg.module.io.RStatStart          := RStatStart
-outer.ethReg.module.io.UpdateMIIRX_DATAReg := UpdateMIIRX_DATAReg
-outer.ethReg.module.io.Prsd                := Prsd
-outer.ethReg.module.io.NValid_stat         := NValid_stat
-outer.ethReg.module.io.Busy_stat           := Busy_stat
-outer.ethReg.module.io.LinkFail            := LinkFail
-outer.ethReg.module.io.TxB_IRQ             := TxB_IRQ
-outer.ethReg.module.io.TxE_IRQ             := TxE_IRQ
-outer.ethReg.module.io.RxB_IRQ             := RxB_IRQ
-outer.ethReg.module.io.RxE_IRQ             := RxE_IRQ
-outer.ethReg.module.io.Busy_IRQ            := Busy_IRQ
-outer.ethReg.module.io.RstTxPauseRq        := RstTxPauseRq
-outer.ethReg.module.io.TxCtrlEndFrm        := TxCtrlEndFrm
-outer.ethReg.module.io.StartTxDone         := StartTxDone
-outer.ethReg.module.io.TxClk               := io.mtx_clk_pad_i
-outer.ethReg.module.io.RxClk               := io.mrx_clk_pad_i
-outer.ethReg.module.io.SetPauseTimer       := SetPauseTimer
+io.cfg.WCtrlDataStart      := WCtrlDataStart
+io.cfg.RStatStart          := RStatStart
+io.cfg.UpdateMIIRX_DATAReg := UpdateMIIRX_DATAReg
+io.cfg.Prsd                := Prsd
+io.cfg.NValid_stat         := NValid_stat
+io.cfg.Busy_stat           := Busy_stat
+io.cfg.LinkFail            := LinkFail
+io.cfg.TxB_IRQ             := TxB_IRQ
+io.cfg.TxE_IRQ             := TxE_IRQ
+io.cfg.RxB_IRQ             := RxB_IRQ
+io.cfg.RxE_IRQ             := RxE_IRQ
+io.cfg.Busy_IRQ            := Busy_IRQ
+io.cfg.RstTxPauseRq        := RstTxPauseRq
+io.cfg.TxCtrlEndFrm        := TxCtrlEndFrm
+io.cfg.StartTxDone         := StartTxDone
+io.cfg.TxClk               := io.mii.mtx_clk_pad_i
+io.cfg.RxClk               := io.mii.mrx_clk_pad_i
+io.cfg.SetPauseTimer       := SetPauseTimer
 
 
-r_RecSmall  := outer.ethReg.module.io.r_RecSmall
-r_Pad       := outer.ethReg.module.io.r_Pad
-r_HugEn     := outer.ethReg.module.io.r_HugEn
-r_CrcEn     := outer.ethReg.module.io.r_CrcEn
-r_DlyCrcEn  := outer.ethReg.module.io.r_DlyCrcEn
-r_FullD     := outer.ethReg.module.io.r_FullD
-r_ExDfrEn   := outer.ethReg.module.io.r_ExDfrEn
-r_NoBckof   := outer.ethReg.module.io.r_NoBckof
-r_LoopBck   := outer.ethReg.module.io.r_LoopBck
-r_IFG       := outer.ethReg.module.io.r_IFG
-r_Pro       := outer.ethReg.module.io.r_Pro
-r_Bro       := outer.ethReg.module.io.r_Bro
-r_NoPre     := outer.ethReg.module.io.r_NoPre
-r_TxEn      := outer.ethReg.module.io.r_TxEn
-r_RxEn      := outer.ethReg.module.io.r_RxEn
-r_HASH0     := outer.ethReg.module.io.r_HASH0
-r_HASH1     := outer.ethReg.module.io.r_HASH1
-r_IPGT      := outer.ethReg.module.io.r_IPGT
-r_IPGR1     := outer.ethReg.module.io.r_IPGR1
-r_IPGR2     := outer.ethReg.module.io.r_IPGR2
-r_MinFL     := outer.ethReg.module.io.r_MinFL
-r_MaxFL     := outer.ethReg.module.io.r_MaxFL
-r_MaxRet    := outer.ethReg.module.io.r_MaxRet
-r_CollValid := outer.ethReg.module.io.r_CollValid
-r_TxFlow    := outer.ethReg.module.io.r_TxFlow
-r_RxFlow    := outer.ethReg.module.io.r_RxFlow
-r_PassAll   := outer.ethReg.module.io.r_PassAll
-r_MiiNoPre  := outer.ethReg.module.io.r_MiiNoPre
-r_ClkDiv    := outer.ethReg.module.io.r_ClkDiv
-r_WCtrlData := outer.ethReg.module.io.r_WCtrlData
-r_RStat     := outer.ethReg.module.io.r_RStat
-r_ScanStat  := outer.ethReg.module.io.r_ScanStat
-r_RGAD      := outer.ethReg.module.io.r_RGAD
-r_FIAD      := outer.ethReg.module.io.r_FIAD
-r_CtrlData  := outer.ethReg.module.io.r_CtrlData
-r_MAC       := outer.ethReg.module.io.r_MAC
-r_TxBDNum   := outer.ethReg.module.io.r_TxBDNum
-// io.int_o    := outer.ethReg.module.io.int_o
-  // int(0)    := outer.ethReg.module.io.int_o
-r_TxPauseTV := outer.ethReg.module.io.r_TxPauseTV
-r_TxPauseRq := outer.ethReg.module.io.r_TxPauseRq
+r_RecSmall  := io.cfg.r_RecSmall
+r_Pad       := io.cfg.r_Pad
+r_HugEn     := io.cfg.r_HugEn
+r_CrcEn     := io.cfg.r_CrcEn
+r_DlyCrcEn  := io.cfg.r_DlyCrcEn
+r_FullD     := io.cfg.r_FullD
+r_ExDfrEn   := io.cfg.r_ExDfrEn
+r_NoBckof   := io.cfg.r_NoBckof
+r_LoopBck   := io.cfg.r_LoopBck
+r_IFG       := io.cfg.r_IFG
+r_Pro       := io.cfg.r_Pro
+r_Bro       := io.cfg.r_Bro
+r_NoPre     := io.cfg.r_NoPre
+r_TxEn      := io.cfg.r_TxEn
+r_RxEn      := io.cfg.r_RxEn
+r_HASH0     := io.cfg.r_HASH0
+r_HASH1     := io.cfg.r_HASH1
+r_IPGT      := io.cfg.r_IPGT
+r_IPGR1     := io.cfg.r_IPGR1
+r_IPGR2     := io.cfg.r_IPGR2
+r_MinFL     := io.cfg.r_MinFL
+r_MaxFL     := io.cfg.r_MaxFL
+r_MaxRet    := io.cfg.r_MaxRet
+r_CollValid := io.cfg.r_CollValid
+r_TxFlow    := io.cfg.r_TxFlow
+r_RxFlow    := io.cfg.r_RxFlow
+r_PassAll   := io.cfg.r_PassAll
+r_MiiNoPre  := io.cfg.r_MiiNoPre
+r_ClkDiv    := io.cfg.r_ClkDiv
+r_WCtrlData := io.cfg.r_WCtrlData
+r_RStat     := io.cfg.r_RStat
+r_ScanStat  := io.cfg.r_ScanStat
+r_RGAD      := io.cfg.r_RGAD
+r_FIAD      := io.cfg.r_FIAD
+r_CtrlData  := io.cfg.r_CtrlData
+r_MAC       := io.cfg.r_MAC
+r_TxBDNum   := io.cfg.r_TxBDNum
+r_TxPauseTV := io.cfg.r_TxPauseTV
+r_TxPauseRq := io.cfg.r_TxPauseRq
 
 
 
@@ -405,8 +394,8 @@ dontTouch(StateData           )
 // Connecting MACControl
 val maccontrol = Module(new MacControl)
 
-maccontrol.io.MTxClk                     := io.mtx_clk_pad_i
-maccontrol.io.MRxClk                     := io.mrx_clk_pad_i
+maccontrol.io.MTxClk                     := io.mii.mtx_clk_pad_i
+maccontrol.io.MRxClk                     := io.mii.mrx_clk_pad_i
 maccontrol.io.asyncReset                 := io.asyncReset
 
 maccontrol.io.TPauseRq                   := TPauseRq
@@ -466,16 +455,16 @@ dontTouch(RxEnSync        )
 io.isLoopBack := r_LoopBck
 
 // Muxed MII receive data valid
-MRxDV_Lb := Mux(r_LoopBck, io.mtxen_pad_o, io.mrxdv_pad_i & RxEnSync)
+MRxDV_Lb := Mux(r_LoopBck, io.mii.mtxen_pad_o, io.mii.mrxdv_pad_i & RxEnSync)
 
 // Muxed MII Receive Error
-MRxErr_Lb := Mux(r_LoopBck, io.mtxerr_pad_o, io.mrxerr_pad_i & RxEnSync)
+MRxErr_Lb := Mux(r_LoopBck, io.mii.mtxerr_pad_o, io.mii.mrxerr_pad_i & RxEnSync)
 
 // Muxed MII Receive Data
-MRxD_Lb := Mux(r_LoopBck, io.mtxd_pad_o, io.mrxd_pad_i)
+MRxD_Lb := Mux(r_LoopBck, io.mii.mtxd_pad_o, io.mii.mrxd_pad_i)
 
 
-val txethmac = withClockAndReset(io.mtx_clk_pad_i.asClock, io.asyncReset)( Module(new MacTx))
+val txethmac = withClockAndReset(io.mii.mtx_clk_pad_i.asClock, io.asyncReset)( Module(new MacTx))
 
 txethmac.io.TxStartFrm      := TxStartFrmOut
 txethmac.io.TxEndFrm        := TxEndFrmOut
@@ -497,9 +486,9 @@ txethmac.io.MaxRet          := r_MaxRet
 txethmac.io.NoBckof         := r_NoBckof
 txethmac.io.ExDfrEn         := r_ExDfrEn
 
-io.mtxd_pad_o    := txethmac.io.MTxD
-io.mtxen_pad_o   := txethmac.io.MTxEn
-io.mtxerr_pad_o := txethmac.io.MTxErr
+io.mii.mtxd_pad_o    := txethmac.io.MTxD
+io.mii.mtxen_pad_o   := txethmac.io.MTxEn
+io.mii.mtxerr_pad_o := txethmac.io.MTxErr
 TxDoneIn := txethmac.io.TxDone
 TxRetry := txethmac.io.TxRetry
 TxAbortIn := txethmac.io.TxAbort
@@ -542,7 +531,7 @@ dontTouch(RxStateSFD       )
 dontTouch(RxStateData      )
 dontTouch(AddressMiss      )
 
-val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Module(new MacRx))
+val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( Module(new MacRx))
 
   rxethmac.io.MRxDV               := MRxDV_Lb
   rxethmac.io.MRxD                := MRxD_Lb
@@ -576,13 +565,13 @@ val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Modul
   AddressMiss       := rxethmac.io.AddressMiss
 
 
-  withClockAndReset( io.mtx_clk_pad_i.asClock, reset.asAsyncReset ) {
+  withClockAndReset( io.mii.mtx_clk_pad_i.asClock, reset.asAsyncReset ) {
     // MII Carrier Sense Synchronization
-    CarrierSense_Tx2 := ShiftRegister(io.mcrs_pad_i, 2, false.B, true.B)
+    CarrierSense_Tx2 := ShiftRegister(io.mii.mcrs_pad_i, 2, false.B, true.B)
 
     TxCarrierSense := ~r_FullD & CarrierSense_Tx2
 
-    val Collision_Tx1 = RegNext(io.mcoll_pad_i, false.B)
+    val Collision_Tx1 = RegNext(io.mii.mcoll_pad_i, false.B)
     val Collision_Tx2 = RegInit(false.B)
 
     when(ResetCollision){
@@ -600,11 +589,11 @@ val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Modul
 
 
 
-  withClockAndReset( io.mrx_clk_pad_i.asClock, reset.asAsyncReset ) {
+  withClockAndReset( io.mii.mrx_clk_pad_i.asClock, reset.asAsyncReset ) {
     val WillTransmit_q = ShiftRegister(WillTransmit, 2, false.B, true.B)
 
     Transmitting := ~r_FullD & WillTransmit_q
-    RxEnSync := RegEnable( ShiftRegister(r_RxEn, 2), false.B, ~io.mrxdv_pad_i)
+    RxEnSync := RegEnable( ShiftRegister(r_RxEn, 2), false.B, ~io.mii.mrxdv_pad_i)
   }
 
 
@@ -618,7 +607,7 @@ val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Modul
   }
 
 
-  withClockAndReset( io.mtx_clk_pad_i.asClock, reset.asAsyncReset ) {
+  withClockAndReset( io.mii.mtx_clk_pad_i.asClock, reset.asAsyncReset ) {
     val TxPauseRq_sync = ShiftRegisters((r_TxPauseRq & r_TxFlow), 3, false.B, true.B )
 
     TPauseRq := RegNext( TxPauseRq_sync(1) & (~TxPauseRq_sync(2)), false.B )
@@ -632,7 +621,7 @@ val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Modul
   val RxAbort_latch_wire = Wire(Bool())
   val RxAbort_wb = ShiftRegister( RxAbort_latch_wire, 2, false.B, true.B )
 
-  withClockAndReset( io.mrx_clk_pad_i.asClock, reset.asAsyncReset ) {
+  withClockAndReset( io.mii.mrx_clk_pad_i.asClock, reset.asAsyncReset ) {
     val RxAbort_latch = RegInit(false.B); RxAbort_latch_wire := RxAbort_latch
     val RxAbortRst = ShiftRegister( RxAbort_wb, 2, false.B, true.B )
     
@@ -673,7 +662,7 @@ val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Modul
   val macstatus = Module(new MacStatus)
 
   macstatus.io.asyncReset          := io.asyncReset
-  macstatus.io.MRxClk              := io.mrx_clk_pad_i
+  macstatus.io.MRxClk              := io.mii.mrx_clk_pad_i
   macstatus.io.RxCrcError          := RxCrcError
   macstatus.io.MRxErr              := MRxErr_Lb
   macstatus.io.MRxDV               := MRxDV_Lb
@@ -687,7 +676,7 @@ val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Modul
   macstatus.io.RxByteCntGreat2     := RxByteCntGreat2
   macstatus.io.RxByteCntMaxFrame   := RxByteCntMaxFrame
   macstatus.io.MRxD                := MRxD_Lb
-  macstatus.io.Collision           := io.mcoll_pad_i
+  macstatus.io.Collision           := io.mii.mcoll_pad_i
   macstatus.io.CollValid           := r_CollValid
   macstatus.io.r_RecSmall          := r_RecSmall
   macstatus.io.r_MinFL             := r_MinFL
@@ -696,7 +685,7 @@ val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Modul
   macstatus.io.StartTxDone         := StartTxDone
   macstatus.io.StartTxAbort        := StartTxAbort
   macstatus.io.RetryCnt            := RetryCnt
-  macstatus.io.MTxClk              := io.mtx_clk_pad_i
+  macstatus.io.MTxClk              := io.mii.mtx_clk_pad_i
   macstatus.io.MaxCollisionOccured := MaxCollisionOccured
   macstatus.io.LateCollision       := LateCollision
   macstatus.io.DeferIndication     := DeferIndication
@@ -745,13 +734,13 @@ val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Modul
 
 
 
-  val macTileLinkTx = withClockAndReset( io.mtx_clk_pad_i.asClock, io.asyncReset ) (Module(new MacTileLinkTx))
+  val macTileLinkTx = withClockAndReset( io.mii.mtx_clk_pad_i.asClock, io.asyncReset ) (Module(new MacTileLinkTx))
 
   // Start: Generation of the ReadTxDataFromFifo_tck signal and synchronization to the WB_CLK_I
   val ReadTxDataFromFifo_sync = ShiftRegister( macTileLinkTx.io.ReadTxDataFromFifo_tck, 2, false.B, true.B)
   wishbone.io.ReadTxDataFromFifo_sync := ReadTxDataFromFifo_sync
 
-  withClockAndReset( io.mtx_clk_pad_i.asClock, io.asyncReset ){
+  withClockAndReset( io.mii.mtx_clk_pad_i.asClock, io.asyncReset ){
     macTileLinkTx.io.BlockingTxStatusWrite_sync := ShiftRegister( wishbone.io.BlockingTxStatusWrite, 2, false.B, true.B)
     macTileLinkTx.io.TxStartFrm_sync            := ShiftRegister( wishbone.io.TxStartFrm_wb, 2, false.B, true.B ) // Synchronizing TxStartFrm_wb to MTxClk
     macTileLinkTx.io.ReadTxDataFromFifo_syncb   := ShiftRegister( ReadTxDataFromFifo_sync, 2, false.B, true.B)    
@@ -802,7 +791,7 @@ val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Modul
 
 
 
-  val macTileLinkRx = withClockAndReset( io.mrx_clk_pad_i.asClock, io.asyncReset ) ( Module(new MacTileLinkRx) )
+  val macTileLinkRx = withClockAndReset( io.mii.mrx_clk_pad_i.asClock, io.asyncReset ) ( Module(new MacTileLinkRx) )
 
 
 
@@ -830,7 +819,7 @@ val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Modul
   val Busy_IRQ_sync = ShiftRegister(macTileLinkRx.io.Busy_IRQ_rck, 2, false.B, true.B)
   Busy_IRQ := Busy_IRQ_sync & ~RegNext(Busy_IRQ_sync, false.B)
 
-  withClockAndReset( io.mrx_clk_pad_i.asClock, io.asyncReset ) {
+  withClockAndReset( io.mii.mrx_clk_pad_i.asClock, io.asyncReset ) {
     val ShiftEndedSyncb = ShiftRegister( ShiftEndedSync, 2, false.B, true.B)
     RxStatusWriteLatchedSync         := ShiftEndedSyncb 
     macTileLinkRx.io.ShiftEndedSyncb := ShiftEndedSyncb 
@@ -854,12 +843,8 @@ val rxethmac = withClockAndReset(io.mrx_clk_pad_i.asClock, io.asyncReset)( Modul
   macTileLinkRx.io.RxStatusIn   := Cat(ReceivedPauseFrm, AddressMiss, false.B, InvalidSymbol, DribbleNibble, ReceivedPacketTooBig, ShortFrame, LatchedCrcError, RxLateCollision)
 
 
-
-
-
-
-
-
+  wishbone.io.rxEnq <> io.rxEnq
+  wishbone.io.txDeq <> io.txDeq
 }
 
 

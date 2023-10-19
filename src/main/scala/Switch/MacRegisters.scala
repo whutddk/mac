@@ -9,8 +9,7 @@ import org.chipsalliance.cde.config._
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.interrupts._
 
-class MacRegIO extends Bundle{
-
+class Mac_Config_Bundle extends Bundle{
   val WCtrlDataStart      = Input(Bool())
   val RStatStart          = Input(Bool())
   val UpdateMIIRX_DATAReg = Input(Bool())
@@ -68,10 +67,14 @@ class MacRegIO extends Bundle{
   val r_CtrlData  = Output(UInt(16.W))
   val r_MAC       = Output(UInt(48.W))
   val r_TxBDNum   = Output(UInt(8.W))
-  // val int_o       = Output(Bool())
   val r_TxPauseTV = Output(UInt(16.W))
   val r_TxPauseRq = Output(Bool())
+}
 
+
+
+
+class MacRegIO extends Mac_Config_Bundle{
   val asyncReset = Input(AsyncReset())
 }
 
