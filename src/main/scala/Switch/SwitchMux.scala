@@ -52,7 +52,7 @@ class SwitchMux(edgeOut: TLEdgeOut)(implicit p: Parameters) extends SwitchModule
     ))
 
 
-    def ptr = 0x8002000
+    def ptr = "h80002000".U
     def txLength       = 8.U
     def PerPacketCrcEn = true.B
     def PerPacketPad   = true.B
@@ -62,7 +62,7 @@ class SwitchMux(edgeOut: TLEdgeOut)(implicit p: Parameters) extends SwitchModule
 
 
 
-  rxBuff.io.deq.ctrl.ready := stateCur === stateRx
+  rxBuff.io.deq.ctrl.ready := stateCur === stateRx & io.dmaMst.D.fire & isLastD
 
 
   val txReqValid = RegInit(false.B)
@@ -94,17 +94,19 @@ class SwitchMux(edgeOut: TLEdgeOut)(implicit p: Parameters) extends SwitchModule
   val dmaAddress = Reg( UInt(32.W) )
 
   when( stateCur === stateIdle && stateNxt =/= stateIdle ){
-    dmaAddress := ptr.U
+    dmaAddress := ptr
   } .elsewhen( io.dmaMst.A.fire ){
     dmaAddress := dmaAddress + 4.U
   }
 
-  rxBuff.io.deq.data.ready := io.dmaMst.A.ready & stateCur === stateRx
+  rxBuff.io.deq.data.ready := io.dmaMst.A.fire & (stateCur === stateRx)
+  assert( ~(rxBuff.io.deq.data.ready & ~rxBuff.io.deq.data.valid) )
+
   rxBuff.io.deq.header.ready := ~io.triTx && ~txReqValid
 
-  when( io.dmaMst.A.fire & stateCur === stateTx ){
+  when( io.dmaMst.A.fire ){
     dmaTxAValid := false.B
-  } .elsewhen( txBuff.io.enq.req.fire | (io.dmaMst.D.fire & isLastD & stateCur === stateTx & dmaAddress >= (ptr.U + txLength)) ){
+  } .elsewhen( txBuff.io.enq.req.fire | (stateCur === stateTx & io.dmaMst.D.fire & isLastD & dmaAddress < (ptr + txLength)) ){
     dmaTxAValid := true.B
     dmaTxABits :=
       edgeOut.Get(
@@ -112,29 +114,22 @@ class SwitchMux(edgeOut: TLEdgeOut)(implicit p: Parameters) extends SwitchModule
         toAddress = dmaAddress >> 2 << 2,
         lgSize = log2Ceil(32/8).U,
       )._2
-  }
-
-
-  io.dmaMst.A.valid :=
-    Mux1H(Seq(
-      ( stateCur === stateRx ) -> rxBuff.io.deq.data.valid,
-      ( stateCur === stateTx ) -> dmaTxAValid,
-    ))
-
-  when( stateCur === stateRx ){
-    io.dmaMst.A.bits := 
+  } .elsewhen( rxBuff.io.deq.header.fire | (stateCur === stateRx & io.dmaMst.D.fire & isLastD & rxBuff.io.deq.data.valid ) ) {
+    dmaTxAValid := true.B
+    dmaTxABits :=
       edgeOut.Put(
         fromSource = 0.U,
         toAddress = dmaAddress >> 2 << 2,
         lgSize = log2Ceil(32/8).U,
         data = rxBuff.io.deq.data.bits,
         mask = "b1111".U,
-      )._2    
-  } .elsewhen( stateCur === stateTx ){
-    io.dmaMst.A.bits := dmaTxABits
-  } .otherwise{
-    io.dmaMst.A.bits := DontCare
+      )._2
   }
+
+
+  io.dmaMst.A.valid := dmaTxAValid
+  io.dmaMst.A.bits := dmaTxABits
+
 
 
   txBuff.io.enq.data.valid := io.dmaMst.D.valid & stateCur === stateTx

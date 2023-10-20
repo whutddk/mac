@@ -107,6 +107,8 @@ trait RxBuffEnq{ this: RxBuffBase =>
       } .otherwise{
         assert(false.B, "Assert Failed, Rx Under Run")
       }
+    }.elsewhen( recCnt === 5.U ){
+      recCnt := 6.U
     }
   }
 
@@ -117,7 +119,7 @@ trait RxBuffDeq{ this: RxBuffBase =>
   when( io.deq.header.fire ){
     when( isDeqPi ) { hValid(0) := false.B }
     when( isDeqPo ) { hValid(1) := false.B }
-  } .elsewhen( recCnt === 5.U ){
+  } .elsewhen( io.enq.data.fire & recCnt === 5.U ){
     when( isEnqPi ) { hValid(0) := true.B }
     when( isEnqPo ) { hValid(1) := true.B }
   }
