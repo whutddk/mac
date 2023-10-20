@@ -144,7 +144,7 @@ abstract class MacTileLinkBase() extends Module{
   }
 
 
-  when((TxLength === 0.U) & io.TxUsedData){
+  when(((TxLength - 4.U) === 0.U) & io.TxUsedData){
     TxEndFrm_wb := true.B
   } .elsewhen(txRetryPulse | txDonePulse | txAbortPulse){
     TxEndFrm_wb := false.B

@@ -35,21 +35,57 @@ class TxBuffIO extends Bundle{
 }
 
 
-class TxBuff extends Module{
+abstract class TxBuffBase extends Module{
   val io: TxBuffIO = IO(new TxBuffIO)
 
-  io.enq.data.ready := true.B
-  io.enq.req.ready := true.B
 
-  io.enq.resp.valid := false.B
-  io.enq.resp.bits := DontCare
 
-  io.deq.data.valid := false.B
-  io.deq.data.bits  := 0.U
+  val buff = Module(new Queue( UInt(32.W), 2048/4 ))
+  val reqInfo = Reg(new Transmit_Req_Bundle)
+  val respInfo = Reg(new Transmit_Resp_Bundle)
+  val enqCnt = Reg(UInt(16.W))
+  val deqReqValid = RegInit(false.B)
 
-  io.deq.req.valid := false.B
-  io.deq.req.bits  := DontCare
 
-  io.deq.resp.ready := true.B
+
   
 }
+
+
+trait TxBuffEnq{ this: TxBuffBase =>
+    io.enq.data <> buff.io.enq
+
+
+    when( io.enq.req.fire ){
+      enqCnt := 0.U
+      reqInfo := io.enq.req.bits
+    } .elsewhen( io.enq.data.fire ){
+      enqCnt := enqCnt + 4.U
+      // when( enqCnt + 4.U >= reqInfo.txLength ){
+      // }
+    }
+
+
+  io.enq.req.ready := ~buff.io.deq.valid
+
+
+  when( io.deq.req.fire ){
+    deqReqValid := false.B
+  } .elsewhen( io.enq.data.fire && enqCnt === 32.U ) {
+    deqReqValid := true.B
+  }
+
+}
+
+trait TxBuffDeq{ this: TxBuffBase =>
+  io.deq.resp <> io.enq.resp
+
+  io.deq.req.valid := deqReqValid
+  io.deq.req.bits  := reqInfo
+
+  io.deq.data <> buff.io.deq
+
+}
+
+
+class TxBuff extends TxBuffBase with TxBuffEnq with TxBuffDeq

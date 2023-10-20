@@ -112,8 +112,10 @@ class MacTileLinkTx extends Module with RequireAsyncReset{
     TxByteCnt := TxByteCnt + 1.U
   }
 
-  when(io.TxStartFrm_sync & ~TxStartFrm | io.TxUsedData & Flop & TxByteCnt === 3.U &
-    ~LastWord | TxStartFrm & io.TxUsedData & Flop & TxByteCnt === 0.U ){
+  when(
+    io.TxStartFrm_sync & ~TxStartFrm |
+    io.TxUsedData & Flop & TxByteCnt === 3.U & ~LastWord |
+    TxStartFrm & io.TxUsedData & Flop & TxByteCnt === 0.U ){
     ReadTxDataFromFifo_tck := true.B
   } .elsewhen(io.ReadTxDataFromFifo_syncb & ~RegNext(io.ReadTxDataFromFifo_syncb, false.B)){
     ReadTxDataFromFifo_tck := false.B

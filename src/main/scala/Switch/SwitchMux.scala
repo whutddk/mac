@@ -53,7 +53,7 @@ class SwitchMux(edgeOut: TLEdgeOut)(implicit p: Parameters) extends SwitchModule
 
 
     def ptr = "h80002000".U
-    def txLength       = 8.U
+    def txLength       = 64.U
     def PerPacketCrcEn = true.B
     def PerPacketPad   = true.B
 
@@ -93,7 +93,7 @@ class SwitchMux(edgeOut: TLEdgeOut)(implicit p: Parameters) extends SwitchModule
 
   val dmaAddress = Reg( UInt(32.W) )
 
-  when( stateCur === stateIdle && stateNxt =/= stateIdle ){
+  when( stateCur === stateIdle ){
     dmaAddress := ptr
   } .elsewhen( io.dmaMst.A.fire ){
     dmaAddress := dmaAddress + 4.U
