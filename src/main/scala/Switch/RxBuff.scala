@@ -112,7 +112,7 @@ trait RxBuffEnq{ this: RxBuffBase =>
 
 }
 
-trait RxBuffDeq{ this: RxBuff =>
+trait RxBuffDeq{ this: RxBuffBase =>
 
   when( io.deq.header.fire ){
     when( isDeqPi ) { hValid(0) := false.B }
@@ -121,11 +121,6 @@ trait RxBuffDeq{ this: RxBuff =>
     when( isEnqPi ) { hValid(0) := true.B }
     when( isEnqPo ) { hValid(1) := true.B }
   }
-
-
-  Mux1H(Seq( isDeqPi -> hValid(0), isDeqPo -> hValid(1) ))
-  io.header.bits  := Mux1H(Seq( isDeqPi -> hValid(0), isDeqPo -> hValid(1) ))
-
 
 
   when( io.deq.ctrl.fire ){
@@ -139,18 +134,21 @@ trait RxBuffDeq{ this: RxBuff =>
 
 
   when( isDeqPi ){
-    io.deq <> buff(0).io.deq
+    io.deq.data <> buff(0).io.deq
+    buff(1).io.deq.ready := false.B
 
-    io.header.valid := hValid(0)
-    io.header.bits  := header(0)
+    io.deq.header.valid := hValid(0)
+    io.deq.header.bits  := header(0)
 
     io.deq.ctrl.valid := cValid(0) & ~buff(0).io.deq.valid
     io.deq.ctrl.bits  := info(0)
-  } .elsewhen( isDeqPo ){
-    io.deq <> buff(1).io.deq
+  } .otherwise{
+    assert( isDeqPo )
+    io.deq.data <> buff(1).io.deq
+    buff(0).io.deq.ready := false.B
 
-    io.header.valid := hValid(1)
-    io.header.bits  := header(1)
+    io.deq.header.valid := hValid(1)
+    io.deq.header.bits  := header(1)
 
     io.deq.ctrl.valid := cValid(1) & ~buff(1).io.deq.valid
     io.deq.ctrl.bits  := info(1)
@@ -161,7 +159,7 @@ trait RxBuffDeq{ this: RxBuff =>
 }
 
 
-class RxBuff extends RxBuffRxBuff with RxBuffEnq with RxBuffDeq{
+class RxBuff extends RxBuffBase with RxBuffEnq with RxBuffDeq{
 
 }
 

@@ -324,8 +324,8 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
         )),
 
       ( 30 << 2 ) ->
-        RegFieldGroup("BD", Some("bd"), 
-          RegField.w(1, RegWriteFn((valid, data) => { io.triTx := (valid & (data === 1.U)) ; true.B} ),Some(RegFieldDesc("bd", "bd", reset=Some(0x0)))) ++ Seq(
+        RegFieldGroup("BD", Some("bd"), Seq(
+          RegField.w(1, RegWriteFn((valid, data) => { io.triTx := (valid & (data === 1.U)) ; true.B} ), RegFieldDesc("bd", "bd", reset=Some(0x0))) 
         )),
     )
 

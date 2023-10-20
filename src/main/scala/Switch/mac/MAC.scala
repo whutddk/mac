@@ -31,7 +31,7 @@ class MacIO extends Bundle{
   val mii = new MII
   val cfg = Flipped(new Mac_Config_Bundle)
   val rxEnq = new Receive_Enq_Bundle
-  val txDeq = Flipped(new Transmit_Deq_Bundle)
+  val txDeq = Flipped(new Transmit_Bundle)
 
   // val int_o = Output(Bool())
 

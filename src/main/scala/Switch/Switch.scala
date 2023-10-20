@@ -56,18 +56,23 @@ class SwitchImp(outer: Switch)(implicit p: Parameters) extends LazyModuleImp(out
   outer.ethReg.module.io.asyncReset := io.asyncReset
   outer.ethReg.module.io.viewAsSupertype(new Mac_Config_Bundle) <> mac(0).io.cfg
 
-  val switchMux = Module(new SwitchMux)
+  val switchMux = Module(new SwitchMux(dma_edge))
 
   switchMux.io.rxEnq(0) <> mac(0).io.rxEnq
   switchMux.io.txDeq(0) <> mac(0).io.txDeq
 
 
+  switchMux.io.triTx := outer.ethReg.module.io.triTx
 
 
 
 
-
-
+  switchMux.io.dmaMst.D.bits  := dma_bus.d.bits
+  switchMux.io.dmaMst.D.valid := dma_bus.d.valid
+  dma_bus.d.ready := switchMux.io.dmaMst.D.ready
+  dma_bus.a.valid := switchMux.io.dmaMst.A.valid
+  dma_bus.a.bits  := switchMux.io.dmaMst.A.bits
+  switchMux.io.dmaMst.A.ready := dma_bus.a.ready
 
 
 

@@ -39,13 +39,16 @@ class TxBuff extends Module{
   val io: TxBuffIO = IO(new TxBuffIO)
 
   io.enq.data.ready := true.B
-  io.enq.ctrl.ready := true.B
+  io.enq.req.ready := true.B
+
+  io.enq.resp.valid := false.B
+  io.enq.resp.bits := DontCare
 
   io.deq.data.valid := false.B
   io.deq.data.bits  := 0.U
 
   io.deq.req.valid := false.B
-  io.deq.req.bits  := 0.U.asTypeOf(new Transmit_Deq_Req_Bundle)
+  io.deq.req.bits  := DontCare
 
   io.deq.resp.ready := true.B
   

@@ -57,7 +57,7 @@ abstract class MacTileLinkBase() extends Module{
 
 
     val rxEnq = new Receive_Enq_Bundle
-    val txDeq = Flipped(new Transmit_Deq_Bundle)
+    val txDeq = Flipped(new Transmit_Bundle)
 
   }
 
@@ -164,7 +164,7 @@ abstract class MacTileLinkBase() extends Module{
 
 
   val txRespValid = RegInit(false.B)
-  val txRespBits  = Reg(new Transmit_Deq_Resp_Bundle)
+  val txRespBits  = Reg(new Transmit_Resp_Bundle)
 
   io.txDeq.resp.valid := txRespValid
   io.txDeq.resp.bits  := txRespBits

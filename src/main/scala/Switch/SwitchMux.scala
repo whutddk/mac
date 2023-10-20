@@ -4,7 +4,9 @@ import chisel3._
 import chisel3.util._
 
 
-
+import org.chipsalliance.cde.config._
+import freechips.rocketchip.diplomacy._
+import freechips.rocketchip.tilelink._
 
 
 
@@ -21,13 +23,19 @@ class SwitchMux(edgeOut: TLEdgeOut)(implicit p: Parameters) extends SwitchModule
 
     val triTx = Input(Bool())
 
-    val rxEnq = Vec(chn, new Receive_Enq_Bundle)
-    val txDeq = Vec(chn, Flipped(new Transmit_Deq_Bundle))
+    val rxEnq = Vec(chn, Flipped(new Receive_Enq_Bundle))
+    val txDeq = Vec(chn, new Transmit_Bundle)
 
   }
 
   val io: SwitchMuxIO = IO(new SwitchMuxIO)
+  val (_, _, isLastD, transDCnt) = edgeOut.count(io.dmaMst.D)
 
+  val rxBuff = Module(new RxBuff)
+  rxBuff.io.enq <> io.rxEnq(0)
+
+  val txBuff = Module(new TxBuff)
+  txBuff.io.deq <> io.txDeq(0)
 
   def stateIdle = 0.U
   def stateRx   = 1.U
@@ -45,20 +53,13 @@ class SwitchMux(edgeOut: TLEdgeOut)(implicit p: Parameters) extends SwitchModule
 
 
     def ptr = 0x8002000
-    def txLength       = 8
+    def txLength       = 8.U
     def PerPacketCrcEn = true.B
     def PerPacketPad   = true.B
 
 
 
-  val rxBuff = Module(new RxBuff)
-  rxBuff.io.enq <> io.rxEnq(0)
 
-
-
-
-  val txBuff = Module(new TxBuff)
-  txBuff.io.deq <> mac.io.txDeq(0)
 
 
   rxBuff.io.deq.ctrl.ready := stateCur === stateRx
@@ -73,9 +74,9 @@ class SwitchMux(edgeOut: TLEdgeOut)(implicit p: Parameters) extends SwitchModule
   }
 
   txBuff.io.enq.req.valid := txReqValid && stateCur === stateIdle
-  txBuff.io.enq.bits.txLength := txLength
-  txBuff.io.enq.bits.PerPacketCrcEn := PerPacketCrcEn
-  txBuff.io.enq.bits.PerPacketPad := PerPacketPad
+  txBuff.io.enq.req.bits.txLength := txLength
+  txBuff.io.enq.req.bits.PerPacketCrcEn := PerPacketCrcEn
+  txBuff.io.enq.req.bits.PerPacketPad := PerPacketPad
 
 
 
@@ -94,34 +95,34 @@ class SwitchMux(edgeOut: TLEdgeOut)(implicit p: Parameters) extends SwitchModule
 
   when( stateCur === stateIdle && stateNxt =/= stateIdle ){
     dmaAddress := ptr.U
-  } .elsewhen( io.A.fire ){
+  } .elsewhen( io.dmaMst.A.fire ){
     dmaAddress := dmaAddress + 4.U
   }
 
-  rxBuff.io.deq.data.ready := io.A.ready & stateCur === stateRx
-  rxBuff.io.deq.header.ready := ~io.io.triTx && ~txReqValid
+  rxBuff.io.deq.data.ready := io.dmaMst.A.ready & stateCur === stateRx
+  rxBuff.io.deq.header.ready := ~io.triTx && ~txReqValid
 
-  when( io.A.fire ){
+  when( io.dmaMst.A.fire & stateCur === stateTx ){
     dmaTxAValid := false.B
-  } .elsewhen( txBuff.io.enq.req.fire ){
+  } .elsewhen( txBuff.io.enq.req.fire | (io.dmaMst.D.fire & isLastD & stateCur === stateTx & dmaAddress >= (ptr.U + txLength)) ){
     dmaTxAValid := true.B
     dmaTxABits :=
       edgeOut.Get(
         fromSource = 0.U,
         toAddress = dmaAddress >> 2 << 2,
-        lgSize = log2Ceil(txLength).U,
+        lgSize = log2Ceil(32/8).U,
       )._2
   }
 
 
-  io.A.valid :=
+  io.dmaMst.A.valid :=
     Mux1H(Seq(
-      stateCur === stateRx -> rxBuff.io.deq.data.valid,
-      stateCur === stateTx -> dmaTxAValid,
+      ( stateCur === stateRx ) -> rxBuff.io.deq.data.valid,
+      ( stateCur === stateTx ) -> dmaTxAValid,
     ))
 
   when( stateCur === stateRx ){
-    io.A.bits := 
+    io.dmaMst.A.bits := 
       edgeOut.Put(
         fromSource = 0.U,
         toAddress = dmaAddress >> 2 << 2,
@@ -130,20 +131,20 @@ class SwitchMux(edgeOut: TLEdgeOut)(implicit p: Parameters) extends SwitchModule
         mask = "b1111".U,
       )._2    
   } .elsewhen( stateCur === stateTx ){
-    io.A.bits := dmaTxABits
+    io.dmaMst.A.bits := dmaTxABits
   } .otherwise{
-    io.A.bits := DontCare
+    io.dmaMst.A.bits := DontCare
   }
 
 
-  txBuff.io.enq.data.valid := io.D.valid & stateCur === stateTx
-  txBuff.io.enq.data.bits  := io.D.bits.data
+  txBuff.io.enq.data.valid := io.dmaMst.D.valid & stateCur === stateTx
+  txBuff.io.enq.data.bits  := io.dmaMst.D.bits.data
 
 
-  io.D.ready := 
+  io.dmaMst.D.ready := 
     Mux1H(Seq(
-      stateCur === stateRx -> true.B,
-      stateCur === stateTx -> txBuff.io.enq.data.ready,
+      ( stateCur === stateRx ) -> true.B,
+      ( stateCur === stateTx ) -> txBuff.io.enq.data.ready,
     ))
 
 
