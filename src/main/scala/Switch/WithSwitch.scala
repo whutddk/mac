@@ -12,7 +12,7 @@ trait WithSwitchMix { this: BaseSubsystem =>
 
     val switch = LazyModule(new Switch)
 
-    sbus.coupleFrom("switch_mst") { _ := TLBuffer() := switch.tlClientNode }
+    sbus.coupleFrom("switch_mst") { _ := TLBuffer() := TLWidthWidget(8 / 8) := switch.tlClientNode }
     // pbus.coupleTo("switch_cfg")   { switch0.tlMasterNode := TLFragmenter(pbus) := _ }
     pbus.coupleTo("switch_cfg")   { switch.ethReg.configNode   := TLFragmenter(pbus) := _ }
 
@@ -28,11 +28,11 @@ trait WithSwitchMixModuleImp extends LazyModuleImp {
 
   switchIO <> outer.switch.module.io
 
-  println("Warning, did you delete the rocket-chip.jar on top to reflash?")
-  println("Warning, did you delete the rocket-chip.jar on top to reflash?")
-  println("Warning, did you delete the rocket-chip.jar on top to reflash?")
-  println("Warning, did you delete the rocket-chip.jar on top to reflash?")
-  println("Warning, did you delete the rocket-chip.jar on top to reflash?")
+  // println("Warning, did you delete the rocket-chip.jar on top to reflash?")
+  // println("Warning, did you delete the rocket-chip.jar on top to reflash?")
+  // println("Warning, did you delete the rocket-chip.jar on top to reflash?")
+  // println("Warning, did you delete the rocket-chip.jar on top to reflash?")
+  // println("Warning, did you delete the rocket-chip.jar on top to reflash?")
 
 }
 

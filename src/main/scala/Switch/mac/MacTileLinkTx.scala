@@ -22,8 +22,7 @@ class MacTileLinkTxIO extends Bundle{
   val ReadTxDataFromFifo_syncb = Input(Bool())
 
   val TxEndFrm_wb = Input(Bool())
-  val TxValidBytesLatched = Input(UInt(2.W))
-  val TxData_wb = Input(UInt(32.W))
+  val TxData_wb = Input(UInt(8.W))
 }
 
 
@@ -38,8 +37,6 @@ class MacTileLinkTx extends Module with RequireAsyncReset{
   val TxStartFrm = RegInit(false.B);  io.TxStartFrm := TxStartFrm
   val TxEndFrm   = RegInit(false.B);  io.TxEndFrm   := TxEndFrm
   val TxData     = RegInit(0.U(8.W)); io.TxData     := TxData
-  val TxDataLatched = RegInit(0.U(32.W))
-  val TxByteCnt = RegInit(0.U(2.W))
   val LastWord = RegInit(false.B)
   val ReadTxDataFromFifo_tck = RegInit(false.B); io.ReadTxDataFromFifo_tck := ReadTxDataFromFifo_tck
 
@@ -65,7 +62,7 @@ class MacTileLinkTx extends Module with RequireAsyncReset{
   // Indication of the last word
   when( (TxEndFrm | io.TxAbort | io.TxRetry) & Flop ){
     LastWord := false.B
-  } .elsewhen( io.TxUsedData & Flop & TxByteCnt === 3.U ){
+  } .elsewhen( io.TxUsedData & Flop ){
     LastWord := io.TxEndFrm_wb
   }
 
@@ -73,50 +70,17 @@ class MacTileLinkTx extends Module with RequireAsyncReset{
   when(Flop & TxEndFrm | io.TxAbort | TxRetry_q){
     TxEndFrm := false.B
   } .elsewhen(Flop & LastWord){
-    TxEndFrm := 
-      Mux1H(Seq(
-        (io.TxValidBytesLatched === 1.U) -> (TxByteCnt === 0.U),
-        (io.TxValidBytesLatched === 2.U) -> (TxByteCnt === 1.U),
-        (io.TxValidBytesLatched === 3.U) -> (TxByteCnt === 2.U),
-        (io.TxValidBytesLatched === 0.U) -> (TxByteCnt === 3.U),
-      ))  
-  }
-
-  // Tx data selection (latching)
-  when( io.TxStartFrm_sync & ~TxStartFrm ){
-    TxData := io.TxData_wb( 7, 0) // little Endian Byte Ordering
-  } .elsewhen(io.TxUsedData & Flop){
-    TxData := Mux1H(Seq(
-      (TxByteCnt === 0.U) -> TxDataLatched( 7, 0),// little Endian Byte Ordering
-      (TxByteCnt === 1.U) -> TxDataLatched(15, 8),
-      (TxByteCnt === 2.U) -> TxDataLatched(23,16),
-      (TxByteCnt === 3.U) -> TxDataLatched(31,24),
-    ))
-  }
-
-  // Latching tx data
-  when(
-    io.TxStartFrm_sync & ~TxStartFrm |
-    io.TxUsedData & Flop & TxByteCnt === 3.U |
-    TxStartFrm & io.TxUsedData & Flop & TxByteCnt === 0.U){
-    TxDataLatched := io.TxData_wb
+    TxEndFrm := true.B
   }
 
 
-  // Tx Byte counter
-  when(TxAbort_q | TxRetry_q){
-    TxByteCnt := 0.U
-  } .elsewhen(TxStartFrm & ~io.TxUsedData){
-    TxByteCnt := 1.U
-  } .elsewhen(io.TxUsedData & Flop){
-    TxByteCnt := TxByteCnt + 1.U
-  }
 
   when(
     io.TxStartFrm_sync & ~TxStartFrm |
-    io.TxUsedData & Flop & TxByteCnt === 3.U & ~LastWord |
-    TxStartFrm & io.TxUsedData & Flop & TxByteCnt === 0.U ){
+    io.TxUsedData & Flop & ~LastWord |
+    TxStartFrm & io.TxUsedData & Flop ){
     ReadTxDataFromFifo_tck := true.B
+    TxData := io.TxData_wb( 7, 0)
   } .elsewhen(io.ReadTxDataFromFifo_syncb & ~RegNext(io.ReadTxDataFromFifo_syncb, false.B)){
     ReadTxDataFromFifo_tck := false.B
   }

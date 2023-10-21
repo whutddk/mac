@@ -20,8 +20,10 @@ abstract class MacTileLinkBase() extends Module{
   class MacTileLinkIO extends Bundle{
 
     val r_RxEn    = Input(Bool())         // Receive enable
-    val RxDataLatched2_rxclk  = Input(UInt(32.W))
-    val WriteRxDataToFifoSync = Input(Bool())
+
+    val syncToBuf = Flipped(Decoupled(UInt(8.W)))
+      // val RxDataLatched2_rxclk  = Input(UInt(8.W))
+      // val WriteRxDataToFifoSync = Input(Bool())
     val RxAbortSync           = Input(Bool())
     val LatchedRxLength_rxclk = Input(UInt(16.W))
     val RxStatusInLatched_rxclk = Input(UInt(9.W))
@@ -33,7 +35,7 @@ abstract class MacTileLinkBase() extends Module{
     val TxStartFrm_syncb = Input(Bool())
     val TxEndFrm_wb = Output(Bool())
 
-    val TxData_wb = Output(UInt(32.W))
+    val TxData_wb = Output(UInt(8.W))
     val ReadTxDataFromFifo_sync = Input(Bool())
 
     // Tx Status signals
@@ -49,7 +51,6 @@ abstract class MacTileLinkBase() extends Module{
     val r_TxEn    = Input(Bool())          // Transmit enable
     val BlockingTxStatusWrite = Output(Bool())
     val TxUsedData     = Input(Bool())      // Transmit packet used data    
-    val TxValidBytesLatched = Output(UInt(2.W))
     
     val TxRetrySync  = Input(Bool())
     val TxAbortSync = Input(Bool())      // Transmit packet abort
@@ -68,9 +69,9 @@ abstract class MacTileLinkBase() extends Module{
 
 
 
-  val ShiftEndedSyncPluse         = io.ShiftEndedSync          & ~RegNext(io.ShiftEndedSync, false.B)
+  val ShiftEndedSyncPluse         = io.ShiftEndedSync & io.syncToBuf.valid          & ~RegNext(io.ShiftEndedSync & io.syncToBuf.valid, false.B)
   val RxAbortPluse                = io.RxAbortSync             & ~RegNext(io.RxAbortSync, false.B)
-  val WriteRxDataToFifoSyncPluse  = io.WriteRxDataToFifoSync   & ~RegNext(io.WriteRxDataToFifoSync, false.B)
+  // val WriteRxDataToFifoSyncPluse  = io.WriteRxDataToFifoSync   & ~RegNext(io.WriteRxDataToFifoSync, false.B)
 
   val RxReady = RegInit(false.B); io.RxReady := RxReady
 
@@ -97,8 +98,7 @@ abstract class MacTileLinkBase() extends Module{
   }
 
 
-  io.rxEnq.data.bits := io.RxDataLatched2_rxclk
-  io.rxEnq.data.valid := WriteRxDataToFifoSyncPluse 
+  io.rxEnq.data <> io.syncToBuf
 
   assert( ~(io.rxEnq.data.valid & ~io.rxEnq.data.ready), "Assert Failed, rx overrun!" )
 
@@ -144,7 +144,7 @@ abstract class MacTileLinkBase() extends Module{
   }
 
 
-  when(((TxLength - 4.U) === 0.U) & io.TxUsedData){
+  when(((TxLength - 1.U) === 0.U) & io.TxUsedData){
     TxEndFrm_wb := true.B
   } .elsewhen(txRetryPulse | txDonePulse | txAbortPulse){
     TxEndFrm_wb := false.B
@@ -155,10 +155,10 @@ abstract class MacTileLinkBase() extends Module{
     TxLength        := io.txDeq.req.bits.txLength
     LatchedTxLength := io.txDeq.req.bits.txLength
   } .elsewhen( io.txDeq.data.fire ){
-    when( TxLength < 4.U ){
+    when( TxLength < 1.U ){
       TxLength := 0.U
     } .otherwise{
-      TxLength := TxLength - 4.U    // Length is subtracted at the data request
+      TxLength := TxLength - 1.U    // Length is subtracted at the data request
     }
   }
 
@@ -227,22 +227,6 @@ abstract class MacTileLinkBase() extends Module{
 
 
 
-
-
-
-
-
-  // Marks which bytes are valid within the word.
-  val TxValidBytesLatched = RegInit(0.U(2.W)); io.TxValidBytesLatched := TxValidBytesLatched
-  val LatchValidBytes = ShiftRegisters((TxLength < 4.U), 2, false.B, true.B)
-  val LatchValidBytesPluse = LatchValidBytes(0) & ~LatchValidBytes(1)
-
-  // Latching valid bytes
-  when(LatchValidBytesPluse){
-    TxValidBytesLatched := Mux(TxLength < 4.U, TxLength(1,0), 0.U)
-  } .elsewhen(txRetryPulse | txDonePulse | txAbortPulse){
-    TxValidBytesLatched := 0.U
-  }
 
 
 

@@ -96,7 +96,7 @@ class SwitchMux(edgeOut: TLEdgeOut)(implicit p: Parameters) extends SwitchModule
   when( stateCur === stateIdle ){
     dmaAddress := ptr
   } .elsewhen( io.dmaMst.A.fire ){
-    dmaAddress := dmaAddress + 4.U
+    dmaAddress := dmaAddress + 1.U
   }
 
   rxBuff.io.deq.data.ready := io.dmaMst.A.fire & (stateCur === stateRx)
@@ -111,18 +111,18 @@ class SwitchMux(edgeOut: TLEdgeOut)(implicit p: Parameters) extends SwitchModule
     dmaTxABits :=
       edgeOut.Get(
         fromSource = 0.U,
-        toAddress = dmaAddress >> 2 << 2,
-        lgSize = log2Ceil(32/8).U,
+        toAddress = dmaAddress,
+        lgSize = log2Ceil(8/8).U,
       )._2
   } .elsewhen( rxBuff.io.deq.header.fire | (stateCur === stateRx & io.dmaMst.D.fire & isLastD & rxBuff.io.deq.data.valid ) ) {
     dmaTxAValid := true.B
     dmaTxABits :=
       edgeOut.Put(
         fromSource = 0.U,
-        toAddress = dmaAddress >> 2 << 2,
-        lgSize = log2Ceil(32/8).U,
+        toAddress = dmaAddress,
+        lgSize = log2Ceil(8/8).U,
         data = rxBuff.io.deq.data.bits,
-        mask = "b1111".U,
+        mask = "b1".U,
       )._2
   }
 

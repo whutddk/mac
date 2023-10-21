@@ -14,15 +14,15 @@ class Receive_Deq_Ctrl_Bundle extends Receive_Enq_Ctrl_Bundle{
 }
 
 class Receive_Enq_Bundle extends Bundle{
-  val data = Decoupled(UInt(32.W))
+  val data = Decoupled(UInt(8.W))
   val ctrl = Decoupled(new Receive_Enq_Ctrl_Bundle)
 }
 
 
 class Receive_Deq_Bundle extends Bundle{
-  val data = Decoupled(UInt(32.W))
+  val data = Decoupled(UInt(8.W))
   val ctrl = Decoupled(new Receive_Deq_Ctrl_Bundle)
-  val header = Decoupled(Vec( 5, UInt(32.W) ) )
+  val header = Decoupled(Vec( 20, UInt(8.W) ) )
 }
 
 
@@ -49,20 +49,20 @@ class RxBuffBase extends Module{
   val isDeqPo = ~isEnqPi
 
 
-  val buff = for( i <- 0 until 2 ) yield { Module(new Queue( UInt(32.W), 2048/4 )) }
+  val buff = for( i <- 0 until 2 ) yield { Module(new Queue( UInt(8.W), 2048 )) }
   val info = for( i <- 0 until 2 ) yield { Reg(new Receive_Enq_Ctrl_Bundle) }
   // dontTouch(buff(0).io.enq)
   // dontTouch(info(0))
   // dontTouch(buff(1).io.enq)
   // dontTouch(info(1))
 
-  val header = for( i <- 0 until 2 ) yield { Reg(Vec( 5, UInt(32.W) )) }
+  val header = for( i <- 0 until 2 ) yield { Reg(Vec( 20, UInt(8.W) )) }
   val hValid = for( i <- 0 until 2 ) yield { RegInit(false.B) }
 
   val cValid = for( i <- 0 until 2 ) yield { RegInit(false.B) }
 
 
-  val recCnt = RegInit(0.U(3.W))
+  val recCnt = RegInit(0.U(5.W))
 
 
 }
@@ -98,7 +98,7 @@ trait RxBuffEnq{ this: RxBuffBase =>
   when( io.enq.ctrl.fire ){
     recCnt := 0.U
   } .elsewhen( io.enq.data.fire ){
-    when( recCnt < 5.U ){
+    when( recCnt < 20.U ){
       recCnt := recCnt + 1.U
       when( isEnqPi ){
         header(0)(recCnt) := io.enq.data.bits
@@ -107,8 +107,8 @@ trait RxBuffEnq{ this: RxBuffBase =>
       } .otherwise{
         assert(false.B, "Assert Failed, Rx Under Run")
       }
-    }.elsewhen( recCnt === 5.U ){
-      recCnt := 6.U
+    }.elsewhen( recCnt === 20.U ){
+      recCnt := 21.U
     }
   }
 
@@ -119,7 +119,7 @@ trait RxBuffDeq{ this: RxBuffBase =>
   when( io.deq.header.fire ){
     when( isDeqPi ) { hValid(0) := false.B }
     when( isDeqPo ) { hValid(1) := false.B }
-  } .elsewhen( io.enq.data.fire & recCnt === 5.U ){
+  } .elsewhen( io.enq.data.fire & recCnt === 20.U ){
     when( isEnqPi ) { hValid(0) := true.B }
     when( isEnqPo ) { hValid(1) := true.B }
   }

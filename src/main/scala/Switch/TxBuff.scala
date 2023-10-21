@@ -24,7 +24,7 @@ class Transmit_Resp_Bundle extends Bundle{
 }
 
 class Transmit_Bundle extends Bundle{
-  val data = Decoupled(UInt(32.W))
+  val data = Decoupled(UInt(8.W))
   val req  = Decoupled(new Transmit_Req_Bundle)
   val resp = Flipped(Decoupled(new Transmit_Resp_Bundle))
 }
@@ -40,7 +40,7 @@ abstract class TxBuffBase extends Module{
 
 
 
-  val buff = Module(new Queue( UInt(32.W), 2048/4 ))
+  val buff = Module(new Queue( UInt(8.W), 2048 ))
   val reqInfo = Reg(new Transmit_Req_Bundle)
   val respInfo = Reg(new Transmit_Resp_Bundle)
   val enqCnt = Reg(UInt(16.W))
@@ -60,7 +60,7 @@ trait TxBuffEnq{ this: TxBuffBase =>
       enqCnt := 0.U
       reqInfo := io.enq.req.bits
     } .elsewhen( io.enq.data.fire ){
-      enqCnt := enqCnt + 4.U
+      enqCnt := enqCnt + 1.U
       // when( enqCnt + 4.U >= reqInfo.txLength ){
       // }
     }
