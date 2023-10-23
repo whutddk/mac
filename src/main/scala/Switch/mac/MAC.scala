@@ -800,18 +800,27 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   val RxAbortSync           = ShiftRegister( macTileLinkRx.io.RxAbortLatched, 2, false.B, true.B )
   wishbone.io.RxAbortSync  := RxAbortSync
 
-  val ShiftEndedSync = ShiftRegister( macTileLinkRx.io.ShiftEnded_rck, 2, false.B, true.B )
-  wishbone.io.ShiftEndedSync := ShiftEndedSync
+  // val ShiftEndedSync = ShiftRegister( macTileLinkRx.io.ShiftEnded_rck, 2, false.B, true.B )
+  // wishbone.io.ShiftEndedSync := ShiftEndedSync
   
 
-  val req_ToAsync = Wire(new AsyncBundle(UInt(8.W)))
-
+  val req_ToAsync = Wire(new AsyncBundle(new RxFifo_Stream_Bundle))
+  val resp_ToAsync = Wire(new AsyncBundle(Bool()))
+  val fateRxRespPort = Wire( Flipped(Decoupled(Bool())) )
+  fateRxRespPort.ready := true.B
  
-  wishbone.io.syncToBuf <> FromAsyncBundle( req_ToAsync )
+  wishbone.io.rxReq <> FromAsyncBundle( req_ToAsync )
+  resp_ToAsync <> ToAsyncBundle( wishbone.io.rxResp )
 
-  withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset) {   
-    req_ToAsync <> ToAsyncBundle( macTileLinkRx.io.asyncToBuf )
+  withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset) {  
+    req_ToAsync <> ToAsyncBundle( macTileLinkRx.io.rxReq )
+    fateRxRespPort <> FromAsyncBundle( resp_ToAsync )  
   }
+
+    
+    
+
+
 
 
   wishbone.io.LatchedRxLength_rxclk   := macTileLinkRx.io.LatchedRxLength
@@ -824,10 +833,10 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   Busy_IRQ := Busy_IRQ_sync & ~RegNext(Busy_IRQ_sync, false.B)
 
   withClockAndReset( io.mii.mrx_clk_pad_i.asClock, io.asyncReset ) {
-    val ShiftEndedSyncb = ShiftRegister( ShiftEndedSync, 3, false.B, true.B) //async 3 cycle for protect wishbone.io.syncToBuf.valid
+    // val ShiftEndedSyncb = ShiftRegister( ShiftEndedSync, 3, false.B, true.B) //async 3 cycle for protect wishbone.io.syncToBuf.valid
     println("Warning, No protect in ShiftEndedSyncb?!")
-    RxStatusWriteLatchedSync         := ShiftEndedSyncb 
-    macTileLinkRx.io.ShiftEndedSyncb := ShiftEndedSyncb 
+    RxStatusWriteLatchedSync         := fateRxRespPort.fire
+    // macTileLinkRx.io.ShiftEndedSyncb := fateRxRespPort.fire
     macTileLinkRx.io.RxAbortSyncb    := ShiftRegister( RxAbortSync,    2, false.B, true.B )
     macTileLinkRx.io.Busy_IRQ_syncb  := ShiftRegister( Busy_IRQ_sync,  2, false.B, true.B )
 

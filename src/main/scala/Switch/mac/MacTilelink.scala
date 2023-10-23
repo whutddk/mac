@@ -21,13 +21,14 @@ abstract class MacTileLinkBase() extends Module{
 
     val r_RxEn    = Input(Bool())         // Receive enable
 
-    val syncToBuf = Flipped(Decoupled(UInt(8.W)))
+    val rxReq = Flipped(Decoupled(new RxFifo_Stream_Bundle))
+    val rxResp = Decoupled(new Bool())
       // val RxDataLatched2_rxclk  = Input(UInt(8.W))
       // val WriteRxDataToFifoSync = Input(Bool())
     val RxAbortSync           = Input(Bool())
     val LatchedRxLength_rxclk = Input(UInt(16.W))
     val RxStatusInLatched_rxclk = Input(UInt(9.W))
-    val ShiftEndedSync = Input(Bool())
+    // val ShiftEndedSync = Input(Bool())
     val RxReady = Output(Bool())
 
 
@@ -69,7 +70,7 @@ abstract class MacTileLinkBase() extends Module{
 
 
 
-  val ShiftEndedSyncPluse         = io.ShiftEndedSync & io.syncToBuf.valid          & ~RegNext(io.ShiftEndedSync & io.syncToBuf.valid, false.B)
+  val ShiftEndedSyncPluse         = io.rxReq.bits.isLast & io.rxReq.fire
   val RxAbortPluse                = io.RxAbortSync             & ~RegNext(io.RxAbortSync, false.B)
   // val WriteRxDataToFifoSyncPluse  = io.WriteRxDataToFifoSync   & ~RegNext(io.WriteRxDataToFifoSync, false.B)
 
@@ -98,7 +99,18 @@ abstract class MacTileLinkBase() extends Module{
   }
 
 
-  io.rxEnq.data <> io.syncToBuf
+  io.rxEnq.data.bits  := io.rxReq.bits.data
+  io.rxEnq.data.valid := io.rxReq.valid
+  io.rxReq.ready      := io.rxEnq.data.ready
+
+  val rxRespValid = RegInit(false.B)
+  when( io.rxResp.fire ){
+    rxRespValid := false.B
+  } .elsewhen( ShiftEndedSyncPluse ){
+    rxRespValid := true.B
+  }
+  io.rxResp.valid := rxRespValid
+  io.rxResp.bits  := DontCare
 
   assert( ~(io.rxEnq.data.valid & ~io.rxEnq.data.ready), "Assert Failed, rx overrun!" )
 

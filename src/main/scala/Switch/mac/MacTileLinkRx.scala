@@ -4,22 +4,28 @@ import chisel3._
 import chisel3.util._
 
 
+class RxFifo_Stream_Bundle extends Bundle{
+  val data = UInt(8.W)
+  val isLast = Bool()
+}
+
+
 
 class MacTileLinkRxIO extends Bundle{
     // val RxDataLatched2 = Output(UInt(8.W))
     // val WriteRxDataToFifo = Output(Bool())
 
-  val asyncToBuf = Decoupled(UInt(8.W))
+  val rxReq = Decoupled(new RxFifo_Stream_Bundle)
 
   val RxAbortLatched = Output(Bool())
   val LatchedRxLength = Output(UInt(16.W))
   val RxStatusInLatched = Output( UInt(9.W) )
-  val ShiftEnded_rck = Output(Bool())
+  // val ShiftEnded_rck = Output(Bool())
 
   val RxLength = Input(UInt(16.W))
   val LoadRxStatus = Input(Bool())
       val RxStatusIn = Input(UInt(9.W))
-  val ShiftEndedSyncb = Input(Bool())
+  // val ShiftEndedSyncb = Input(Bool())
   val RxAbortSyncb = Input(Bool())
   // val WriteRxDataToFifoSyncb = Input(Bool())
 
@@ -45,7 +51,7 @@ class MacTileLinkRx extends Module with RequireAsyncReset{
   val LatchedRxLength = RegEnable(io.RxLength, 0.U(16.W), io.LoadRxStatus); io.LatchedRxLength   := LatchedRxLength
   val RxStatusInLatched = RegEnable(io.RxStatusIn, 0.U(9.W), io.LoadRxStatus); io.RxStatusInLatched := RxStatusInLatched
 
-  val ShiftEnded_rck = RegInit(false.B); io.ShiftEnded_rck := ShiftEnded_rck
+  // val ShiftEnded_rck = RegInit(false.B); io.ShiftEnded_rck := ShiftEnded_rck
   val RxEnableWindow = RegInit(false.B)
   
   val Busy_IRQ_rck = RegInit(false.B); io.Busy_IRQ_rck := Busy_IRQ_rck
@@ -64,12 +70,12 @@ class MacTileLinkRx extends Module with RequireAsyncReset{
         //   WriteRxDataToFifo := false.B
         // }
 
-    // Generation of the end-of-frame signal
-    when(SetWriteRxDataToFifo & ~io.RxAbort & io.RxEndFrm){
-      ShiftEnded_rck := true.B
-    } .elsewhen(io.RxAbort | io.ShiftEndedSyncb & RegNext(io.ShiftEndedSyncb, false.B) ){
-      ShiftEnded_rck := false.B
-    }
+    // // Generation of the end-of-frame signal
+    // when(SetWriteRxDataToFifo & ~io.RxAbort & io.RxEndFrm){
+    //   ShiftEnded_rck := true.B
+    // } .elsewhen(io.RxAbort | io.ShiftEndedSyncb & RegNext(io.ShiftEndedSyncb, false.B) ){
+    //   ShiftEnded_rck := false.B
+    // }
 
     // Generation of the end-of-frame signal
     when(io.RxStartFrm){
@@ -92,12 +98,13 @@ class MacTileLinkRx extends Module with RequireAsyncReset{
     }
 
 
-  val rxFifo = Module(new Queue(UInt(8.W), 4))
+  val rxFifo = Module(new Queue(new RxFifo_Stream_Bundle, 4))
   rxFifo.io.enq.valid := SetWriteRxDataToFifo & ~io.RxAbort
-  rxFifo.io.enq.bits  := io.RxData
+  rxFifo.io.enq.bits.data   := io.RxData
+  rxFifo.io.enq.bits.isLast := io.RxEndFrm
   assert( ~(rxFifo.io.enq.valid & ~rxFifo.io.enq.ready) )
 
-  io.asyncToBuf <> rxFifo.io.deq
+  io.rxReq <> rxFifo.io.deq
 }
 
 
