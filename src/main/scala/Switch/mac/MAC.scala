@@ -736,14 +736,30 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
 
   val macTileLinkTx = withClockAndReset( io.mii.mtx_clk_pad_i.asClock, io.asyncReset ) (Module(new MacTileLinkTx))
 
+
+  val txReq_ToAsync = Wire(new AsyncBundle(UInt(8.W)))
+  // val txResp_ToAsync = Wire(new AsyncBundle(Bool()))
+  // val fateTxRespPort = Wire( Flipped(Decoupled(Bool())) )
+  // fateTxReqPort.ready := true.B
+ 
+  // wishbone.io.txResp <> FromAsyncBundle( txResp_ToAsync )
+  txReq_ToAsync <> ToAsyncBundle( wishbone.io.txReq )
+
+  withClockAndReset(io.mii.mtx_clk_pad_i.asClock, io.asyncReset) {  
+    // txResp_ToAsync <> ToAsyncBundle( macTileLinkTx.io.txResp )
+    macTileLinkTx.io.txReq <> FromAsyncBundle( txReq_ToAsync )  
+  }
+
+
+
   // Start: Generation of the ReadTxDataFromFifo_tck signal and synchronization to the WB_CLK_I
-  val ReadTxDataFromFifo_sync = ShiftRegister( macTileLinkTx.io.ReadTxDataFromFifo_tck, 2, false.B, true.B)
-  wishbone.io.ReadTxDataFromFifo_sync := ReadTxDataFromFifo_sync
+  // val ReadTxDataFromFifo_sync = ShiftRegister( macTileLinkTx.io.ReadTxDataFromFifo_tck, 2, false.B, true.B)
+  // wishbone.io.ReadTxDataFromFifo_sync := ReadTxDataFromFifo_sync
 
   withClockAndReset( io.mii.mtx_clk_pad_i.asClock, io.asyncReset ){
     macTileLinkTx.io.BlockingTxStatusWrite_sync := ShiftRegister( wishbone.io.BlockingTxStatusWrite, 2, false.B, true.B)
     macTileLinkTx.io.TxStartFrm_sync            := ShiftRegister( wishbone.io.TxStartFrm_wb, 2, false.B, true.B ) // Synchronizing TxStartFrm_wb to MTxClk
-    macTileLinkTx.io.ReadTxDataFromFifo_syncb   := ShiftRegister( ReadTxDataFromFifo_sync, 2, false.B, true.B)    
+    // macTileLinkTx.io.ReadTxDataFromFifo_syncb   := ShiftRegister( ReadTxDataFromFifo_sync, 2, false.B, true.B)    
   }
 
 
@@ -755,7 +771,7 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   TxData          := macTileLinkTx.io.TxData
 
 
-              macTileLinkTx.io.TxData_wb := wishbone.io.TxData_wb
+              // macTileLinkTx.io.TxData_wb := wishbone.io.TxData_wb
               macTileLinkTx.io.TxEndFrm_wb := wishbone.io.TxEndFrm_wb
   
               wishbone.io.TxUsedData      := TxUsedData

@@ -5,6 +5,12 @@ import chisel3.util._
 
 
 class MacTileLinkTxIO extends Bundle{
+
+  val txReq  = Flipped(Decoupled(UInt(8.W)))
+  // val txResp = Decoupled()
+
+
+
   val RstDeferLatched  = Output(Bool())
   val BlockingTxStatusWrite_sync = Input(Bool())
   val TxStartFrm_sync            = Input(Bool())
@@ -18,11 +24,11 @@ class MacTileLinkTxIO extends Bundle{
   val TxAbort        = Input(Bool())      // Transmit packet abort
   val TxDone         = Input(Bool())      // Transmission ended
 
-  val ReadTxDataFromFifo_tck = Output(Bool())
-  val ReadTxDataFromFifo_syncb = Input(Bool())
+  // val ReadTxDataFromFifo_tck = Output(Bool())
+  // val ReadTxDataFromFifo_syncb = Input(Bool())
 
   val TxEndFrm_wb = Input(Bool())
-  val TxData_wb = Input(UInt(8.W))
+  // val TxData_wb = Input(UInt(8.W))
 }
 
 
@@ -38,7 +44,9 @@ class MacTileLinkTx extends Module with RequireAsyncReset{
   val TxEndFrm   = RegInit(false.B);  io.TxEndFrm   := TxEndFrm
   val TxData     = RegInit(0.U(8.W)); io.TxData     := TxData
   val LastWord = RegInit(false.B)
-  val ReadTxDataFromFifo_tck = RegInit(false.B); io.ReadTxDataFromFifo_tck := ReadTxDataFromFifo_tck
+  val ReadTxDataFromFifo_tck = RegInit(false.B); 
+  // io.ReadTxDataFromFifo_tck := ReadTxDataFromFifo_tck
+  
 
   // Generating delayed signals
   val TxAbort_q    = RegNext( io.TxAbort, false.B)
@@ -75,15 +83,25 @@ class MacTileLinkTx extends Module with RequireAsyncReset{
 
 
 
-  when(
+  // when(
+  //   io.TxStartFrm_sync & ~TxStartFrm |
+  //   io.TxUsedData & Flop & ~LastWord |
+  //   TxStartFrm & io.TxUsedData & Flop ){
+  //   ReadTxDataFromFifo_tck := true.B
+  //   // TxData := io.TxData_wb( 7, 0)
+  //   
+  // } .elsewhen(io.ReadTxDataFromFifo_syncb & ~RegNext(io.ReadTxDataFromFifo_syncb, false.B)){
+  //   ReadTxDataFromFifo_tck := false.B
+  // }
+
+  io.txReq.ready := 
     io.TxStartFrm_sync & ~TxStartFrm |
     io.TxUsedData & Flop & ~LastWord |
-    TxStartFrm & io.TxUsedData & Flop ){
-    ReadTxDataFromFifo_tck := true.B
-    TxData := io.TxData_wb( 7, 0)
-  } .elsewhen(io.ReadTxDataFromFifo_syncb & ~RegNext(io.ReadTxDataFromFifo_syncb, false.B)){
-    ReadTxDataFromFifo_tck := false.B
-  }
+    TxStartFrm & io.TxUsedData & Flop 
+
+  TxData := io.txReq.bits
+
+  assert( ~(io.txReq.ready & ~io.txReq.valid) )
 
 }
 

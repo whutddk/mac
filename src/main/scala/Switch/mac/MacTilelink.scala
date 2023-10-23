@@ -32,12 +32,15 @@ abstract class MacTileLinkBase() extends Module{
     val RxReady = Output(Bool())
 
 
+
+    val txReq = Decoupled(UInt(8.W))
+
     val TxStartFrm_wb = Output(Bool())
     val TxStartFrm_syncb = Input(Bool())
     val TxEndFrm_wb = Output(Bool())
 
-    val TxData_wb = Output(UInt(8.W))
-    val ReadTxDataFromFifo_sync = Input(Bool())
+    // val TxData_wb = Output(UInt(8.W))
+    // val ReadTxDataFromFifo_sync = Input(Bool())
 
     // Tx Status signals
     val RetryCntLatched  = Input(UInt(4.W))  // Latched Retry Counter
@@ -143,7 +146,7 @@ abstract class MacTileLinkBase() extends Module{
   val txRetryPulse                = io.TxRetrySync             & ~RegNext(io.TxRetrySync, false.B)
   val txDonePulse                 = io.TxDoneSync              & ~RegNext(io.TxDoneSync,  false.B)
   val txAbortPulse                = io.TxAbortSync             & ~RegNext(io.TxAbortSync, false.B)
-  val ReadTxDataFromFifoSyncPluse = io.ReadTxDataFromFifo_sync & ~RegNext(io.ReadTxDataFromFifo_sync, false.B)
+  // val ReadTxDataFromFifoSyncPluse = io.ReadTxDataFromFifo_sync & ~RegNext(io.ReadTxDataFromFifo_sync, false.B)
 
   
   io.PerPacketPad    := RegEnable(io.txDeq.req.bits.PerPacketPad,   false.B, io.txDeq.req.fire)
@@ -211,11 +214,12 @@ abstract class MacTileLinkBase() extends Module{
 
 
 
-
-  io.txDeq.data.ready    := ReadTxDataFromFifoSyncPluse
+  // io.TxData_wb       := io.txDeq.data.bits
+  io.txReq <> io.txDeq.data
+  // io.txDeq.data.ready    := ReadTxDataFromFifoSyncPluse
   assert( ~(io.txDeq.data.ready & ~io.txDeq.data.valid), "Assert Failed, Tx should never under run!" )
 
-  io.TxData_wb       := io.txDeq.data.bits
+
 
 
 
