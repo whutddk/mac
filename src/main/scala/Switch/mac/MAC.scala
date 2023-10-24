@@ -756,7 +756,7 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   TxEndFrm        := macTileLinkTx.io.TxEndFrm
   TxData          := macTileLinkTx.io.TxData
 
-  macTileLinkTx.io.TxEndFrm_wb := wishbone.io.TxEndFrm_wb
+  // macTileLinkTx.io.TxEndFrm_wb := wishbone.io.TxEndFrm_wb
   
               wishbone.io.TxUsedData      := TxUsedData
   macTileLinkTx.io.TxUsedData := TxUsedData

@@ -7,6 +7,7 @@ import chisel3.util._
 class TxFifo_Stream_Bundle extends Bundle{
   val data = UInt(8.W)
   val isStart = Bool()
+  val isLast  = Bool()
 }
 
 
@@ -29,7 +30,7 @@ class MacTileLinkTxIO extends Bundle{
   val TxDone         = Input(Bool())      // Transmission ended
 
 
-  val TxEndFrm_wb = Input(Bool())
+  // val TxEndFrm_wb = Input(Bool())
 }
 
 
@@ -46,8 +47,6 @@ class MacTileLinkTx extends Module with RequireAsyncReset{
   val TxData     = RegInit(0.U(8.W)); io.TxData     := TxData
   val LastWord = RegInit(false.B)
   val ReadTxDataFromFifo_tck = RegInit(false.B); 
-  // io.ReadTxDataFromFifo_tck := ReadTxDataFromFifo_tck
-  
 
   // Generating delayed signals
   val TxAbort_q    = RegNext( io.TxAbort, false.B)
@@ -71,8 +70,8 @@ class MacTileLinkTx extends Module with RequireAsyncReset{
   // Indication of the last word
   when( (TxEndFrm | io.TxAbort | io.TxRetry) & Flop ){
     LastWord := false.B
-  } .elsewhen( io.TxUsedData & Flop ){
-    LastWord := io.TxEndFrm_wb
+  } .elsewhen( io.txReq.fire ){
+    LastWord := io.txReq.bits.isLast
   }
 
   // Tx end frame generation
@@ -89,8 +88,10 @@ class MacTileLinkTx extends Module with RequireAsyncReset{
       io.TxUsedData & Flop & ~LastWord |
       TxStartFrm & io.TxUsedData & Flop
 
+  when( io.txReq.fire ){
+    TxData := io.txReq.bits.data    
+  }
 
-  TxData := io.txReq.bits.data
 
   assert( ~(io.txReq.ready & ~io.txReq.valid) )
 

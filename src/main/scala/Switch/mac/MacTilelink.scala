@@ -33,7 +33,7 @@ abstract class MacTileLinkBase() extends Module{
 
     val txReq = Decoupled(new TxFifo_Stream_Bundle)
 
-    val TxEndFrm_wb = Output(Bool())
+    // val TxEndFrm_wb = Output(Bool())
 
 
     // Tx Status signals
@@ -131,7 +131,7 @@ abstract class MacTileLinkBase() extends Module{
 
 
   val TxStartFrm_wb = RegInit(false.B)
-  val TxEndFrm_wb = RegInit(false.B); io.TxEndFrm_wb := TxEndFrm_wb
+  val TxEndFrm_wb = RegInit(false.B)//; io.TxEndFrm_wb := TxEndFrm_wb
 
   val TxLength = RegInit(0.U(16.W))
   val LatchedTxLength = RegInit(0.U(16.W))
@@ -151,11 +151,11 @@ abstract class MacTileLinkBase() extends Module{
   }
 
 
-  when(((TxLength - 1.U) === 0.U) & io.TxUsedData){
-    TxEndFrm_wb := true.B
-  } .elsewhen(txRetryPulse | txDonePulse | txAbortPulse){
-    TxEndFrm_wb := false.B
-  }
+    when(((TxLength - 1.U) === 0.U) & io.TxUsedData){
+      TxEndFrm_wb := true.B
+    } .elsewhen(txRetryPulse | txDonePulse | txAbortPulse){
+      TxEndFrm_wb := false.B
+    }
 
   when( io.txDeq.req.fire ){
 
@@ -203,7 +203,7 @@ abstract class MacTileLinkBase() extends Module{
 
 
 
-
+  io.txReq.bits.isLast  := TxEndFrm_wb
   io.txReq.bits.data    := io.txDeq.data.bits
   io.txReq.bits.isStart := TxStartFrm_wb
   io.txReq.valid        := io.txDeq.data.valid
