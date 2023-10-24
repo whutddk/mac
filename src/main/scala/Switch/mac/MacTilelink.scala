@@ -33,10 +33,10 @@ abstract class MacTileLinkBase() extends Module{
 
 
 
-    val txReq = Decoupled(UInt(8.W))
+    val txReq = Decoupled(new TxFifo_Stream_Bundle)
 
-    val TxStartFrm_wb = Output(Bool())
-    val TxStartFrm_syncb = Input(Bool())
+    // val TxStartFrm_wb = Output(Bool())
+    // val TxStartFrm_syncb = Input(Bool())
     val TxEndFrm_wb = Output(Bool())
 
     // val TxData_wb = Output(UInt(8.W))
@@ -137,7 +137,7 @@ abstract class MacTileLinkBase() extends Module{
 
 
 
-  val TxStartFrm_wb = RegInit(false.B); io.TxStartFrm_wb := TxStartFrm_wb
+  val TxStartFrm_wb = RegInit(false.B); //io.TxStartFrm_wb := TxStartFrm_wb
   val TxEndFrm_wb = RegInit(false.B); io.TxEndFrm_wb := TxEndFrm_wb
 
   val TxLength = RegInit(0.U(16.W))
@@ -154,7 +154,7 @@ abstract class MacTileLinkBase() extends Module{
 
   when( io.txDeq.req.fire ){
     TxStartFrm_wb := true.B
-  } .elsewhen(io.TxStartFrm_syncb){
+  } .elsewhen(io.txReq.fire){
     TxStartFrm_wb := false.B
   }
 
@@ -215,9 +215,12 @@ abstract class MacTileLinkBase() extends Module{
 
 
   // io.TxData_wb       := io.txDeq.data.bits
-  io.txReq <> io.txDeq.data
+  io.txReq.bits.data    := io.txDeq.data.bits
+  io.txReq.bits.isStart := TxStartFrm_wb
+  io.txReq.valid        := io.txDeq.data.valid
+  io.txDeq.data.ready   := io.txReq.ready
   // io.txDeq.data.ready    := ReadTxDataFromFifoSyncPluse
-  assert( ~(io.txDeq.data.ready & ~io.txDeq.data.valid), "Assert Failed, Tx should never under run!" )
+  // assert( ~(io.txDeq.data.ready & ~io.txDeq.data.valid), "Assert Failed, Tx should never under run!" )
 
 
 

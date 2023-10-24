@@ -37,7 +37,6 @@ class MacStatusIO extends Bundle{
   val StatePreamble       = Input(Bool())
   val StateData           = Input(UInt(2.W))
   val CarrierSense        = Input(Bool())
-  val TxUsedData          = Input(Bool())
   val Loopback            = Input(Bool())
   val r_FullD             = Input(Bool())
   val RstDeferLatched     = Input(Bool())

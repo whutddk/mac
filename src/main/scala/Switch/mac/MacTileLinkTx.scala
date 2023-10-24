@@ -4,16 +4,22 @@ import chisel3._
 import chisel3.util._
 
 
+class TxFifo_Stream_Bundle extends Bundle{
+  val data = UInt(8.W)
+  val isStart = Bool()
+}
+
+
 class MacTileLinkTxIO extends Bundle{
 
-  val txReq  = Flipped(Decoupled(UInt(8.W)))
+  val txReq  = Flipped(Decoupled(new TxFifo_Stream_Bundle))
   // val txResp = Decoupled()
 
 
 
   val RstDeferLatched  = Output(Bool())
   val BlockingTxStatusWrite_sync = Input(Bool())
-  val TxStartFrm_sync            = Input(Bool())
+  // val TxStartFrm_sync            = Input(Bool())
 
   val TxStartFrm     = Output(Bool())     // Transmit packet start frame
   val TxEndFrm       = Output(Bool())     // Transmit packet end frame
@@ -61,9 +67,9 @@ class MacTileLinkTx extends Module with RequireAsyncReset{
     Flop := ~Flop
   }
   
-  when(io.TxStartFrm_sync){
+  when( io.txReq.valid & io.txReq.bits.isStart ){
     TxStartFrm := true.B
-  } .elsewhen(TxUsedData_q | ~io.TxStartFrm_sync & (io.TxRetry & (~TxRetry_q) | io.TxAbort & (~TxAbort_q))){
+  } .elsewhen(TxUsedData_q | io.TxRetry & (~TxRetry_q) | io.TxAbort & (~TxAbort_q) ){
     TxStartFrm := false.B
   }
 
@@ -95,11 +101,12 @@ class MacTileLinkTx extends Module with RequireAsyncReset{
   // }
 
   io.txReq.ready := 
-    io.TxStartFrm_sync & ~TxStartFrm |
-    io.TxUsedData & Flop & ~LastWord |
-    TxStartFrm & io.TxUsedData & Flop 
+      io.txReq.valid & io.txReq.bits.isStart & ~TxStartFrm |
+      io.TxUsedData & Flop & ~LastWord |
+      TxStartFrm & io.TxUsedData & Flop
 
-  TxData := io.txReq.bits
+
+  TxData := io.txReq.bits.data
 
   assert( ~(io.txReq.ready & ~io.txReq.valid) )
 

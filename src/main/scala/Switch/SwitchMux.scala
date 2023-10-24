@@ -34,6 +34,7 @@ class SwitchMux(edgeOut: TLEdgeOut)(implicit p: Parameters) extends SwitchModule
   val rxBuff = Module(new RxBuff)
   rxBuff.io.enq <> io.rxEnq(0)
 
+
   val txBuff = Module(new TxBuff)
   txBuff.io.deq <> io.txDeq(0)
 
@@ -102,7 +103,7 @@ class SwitchMux(edgeOut: TLEdgeOut)(implicit p: Parameters) extends SwitchModule
   rxBuff.io.deq.data.ready := io.dmaMst.A.fire & (stateCur === stateRx)
   assert( ~(rxBuff.io.deq.data.ready & ~rxBuff.io.deq.data.valid) )
 
-  rxBuff.io.deq.header.ready := ~io.triTx && ~txReqValid
+  rxBuff.io.deq.header.ready := ~io.triTx && ~txReqValid & stateCur === stateIdle
 
   when( io.dmaMst.A.fire ){
     dmaTxAValid := false.B

@@ -78,12 +78,24 @@ trait TxBuffEnq{ this: TxBuffBase =>
 }
 
 trait TxBuffDeq{ this: TxBuffBase =>
+  val isBusy = RegInit(false.B)
+
+  when( io.deq.req.fire ){
+    assert( ~isBusy )
+    isBusy := true.B
+  } .elsewhen(io.deq.resp.fire){
+    assert( isBusy )
+    isBusy := false.B
+  }
+
   io.deq.resp <> io.enq.resp
 
   io.deq.req.valid := deqReqValid
   io.deq.req.bits  := reqInfo
 
-  io.deq.data <> buff.io.deq
+  io.deq.data.bits := buff.io.deq.bits
+  io.deq.data.valid := buff.io.deq.valid & isBusy
+  buff.io.deq.ready := io.deq.data.ready & isBusy
 
 }
 

@@ -693,7 +693,6 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   macstatus.io.StatePreamble       := StatePreamble
   macstatus.io.StateData           := StateData
   macstatus.io.CarrierSense        := CarrierSense_Tx2
-  macstatus.io.TxUsedData          := TxUsedDataIn
   macstatus.io.Loopback            := r_LoopBck
   macstatus.io.r_FullD             := r_FullD
   macstatus.io.RstDeferLatched     := RstDeferLatched
@@ -737,7 +736,7 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   val macTileLinkTx = withClockAndReset( io.mii.mtx_clk_pad_i.asClock, io.asyncReset ) (Module(new MacTileLinkTx))
 
 
-  val txReq_ToAsync = Wire(new AsyncBundle(UInt(8.W)))
+  val txReq_ToAsync = Wire(new AsyncBundle(new TxFifo_Stream_Bundle))
   // val txResp_ToAsync = Wire(new AsyncBundle(Bool()))
   // val fateTxRespPort = Wire( Flipped(Decoupled(Bool())) )
   // fateTxReqPort.ready := true.B
@@ -758,12 +757,12 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
 
   withClockAndReset( io.mii.mtx_clk_pad_i.asClock, io.asyncReset ){
     macTileLinkTx.io.BlockingTxStatusWrite_sync := ShiftRegister( wishbone.io.BlockingTxStatusWrite, 2, false.B, true.B)
-    macTileLinkTx.io.TxStartFrm_sync            := ShiftRegister( wishbone.io.TxStartFrm_wb, 2, false.B, true.B ) // Synchronizing TxStartFrm_wb to MTxClk
+    // macTileLinkTx.io.TxStartFrm_sync            := ShiftRegister( wishbone.io.TxStartFrm_wb, 2, false.B, true.B ) // Synchronizing TxStartFrm_wb to MTxClk
     // macTileLinkTx.io.ReadTxDataFromFifo_syncb   := ShiftRegister( ReadTxDataFromFifo_sync, 2, false.B, true.B)    
   }
 
 
-  wishbone.io.TxStartFrm_syncb := ShiftRegister( macTileLinkTx.io.TxStartFrm_sync, 2, false.B, true.B )
+  // wishbone.io.TxStartFrm_syncb := ShiftRegister( macTileLinkTx.io.TxStartFrm_sync, 2, false.B, true.B )
 
   RstDeferLatched := macTileLinkTx.io.RstDeferLatched
   TxStartFrm      := macTileLinkTx.io.TxStartFrm
