@@ -16,10 +16,8 @@ class MacTileLinkTxIO extends Bundle{
   // val txResp = Decoupled()
 
 
-
   val RstDeferLatched  = Output(Bool())
   val BlockingTxStatusWrite_sync = Input(Bool())
-  // val TxStartFrm_sync            = Input(Bool())
 
   val TxStartFrm     = Output(Bool())     // Transmit packet start frame
   val TxEndFrm       = Output(Bool())     // Transmit packet end frame
@@ -30,11 +28,8 @@ class MacTileLinkTxIO extends Bundle{
   val TxAbort        = Input(Bool())      // Transmit packet abort
   val TxDone         = Input(Bool())      // Transmission ended
 
-  // val ReadTxDataFromFifo_tck = Output(Bool())
-  // val ReadTxDataFromFifo_syncb = Input(Bool())
 
   val TxEndFrm_wb = Input(Bool())
-  // val TxData_wb = Input(UInt(8.W))
 }
 
 
@@ -88,17 +83,6 @@ class MacTileLinkTx extends Module with RequireAsyncReset{
   }
 
 
-
-  // when(
-  //   io.TxStartFrm_sync & ~TxStartFrm |
-  //   io.TxUsedData & Flop & ~LastWord |
-  //   TxStartFrm & io.TxUsedData & Flop ){
-  //   ReadTxDataFromFifo_tck := true.B
-  //   // TxData := io.TxData_wb( 7, 0)
-  //   
-  // } .elsewhen(io.ReadTxDataFromFifo_syncb & ~RegNext(io.ReadTxDataFromFifo_syncb, false.B)){
-  //   ReadTxDataFromFifo_tck := false.B
-  // }
 
   io.txReq.ready := 
       io.txReq.valid & io.txReq.bits.isStart & ~TxStartFrm |

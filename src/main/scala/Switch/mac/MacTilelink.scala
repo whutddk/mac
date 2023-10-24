@@ -23,24 +23,18 @@ abstract class MacTileLinkBase() extends Module{
 
     val rxReq = Flipped(Decoupled(new RxFifo_Stream_Bundle))
     val rxResp = Decoupled(new Bool())
-      // val RxDataLatched2_rxclk  = Input(UInt(8.W))
-      // val WriteRxDataToFifoSync = Input(Bool())
+
     val RxAbortSync           = Input(Bool())
     val LatchedRxLength_rxclk = Input(UInt(16.W))
     val RxStatusInLatched_rxclk = Input(UInt(9.W))
-    // val ShiftEndedSync = Input(Bool())
     val RxReady = Output(Bool())
 
 
 
     val txReq = Decoupled(new TxFifo_Stream_Bundle)
 
-    // val TxStartFrm_wb = Output(Bool())
-    // val TxStartFrm_syncb = Input(Bool())
     val TxEndFrm_wb = Output(Bool())
 
-    // val TxData_wb = Output(UInt(8.W))
-    // val ReadTxDataFromFifo_sync = Input(Bool())
 
     // Tx Status signals
     val RetryCntLatched  = Input(UInt(4.W))  // Latched Retry Counter
@@ -75,7 +69,6 @@ abstract class MacTileLinkBase() extends Module{
 
   val ShiftEndedSyncPluse         = io.rxReq.bits.isLast & io.rxReq.fire
   val RxAbortPluse                = io.RxAbortSync             & ~RegNext(io.RxAbortSync, false.B)
-  // val WriteRxDataToFifoSyncPluse  = io.WriteRxDataToFifoSync   & ~RegNext(io.WriteRxDataToFifoSync, false.B)
 
   val RxReady = RegInit(false.B); io.RxReady := RxReady
 
@@ -137,7 +130,7 @@ abstract class MacTileLinkBase() extends Module{
 
 
 
-  val TxStartFrm_wb = RegInit(false.B); //io.TxStartFrm_wb := TxStartFrm_wb
+  val TxStartFrm_wb = RegInit(false.B)
   val TxEndFrm_wb = RegInit(false.B); io.TxEndFrm_wb := TxEndFrm_wb
 
   val TxLength = RegInit(0.U(16.W))
@@ -146,7 +139,6 @@ abstract class MacTileLinkBase() extends Module{
   val txRetryPulse                = io.TxRetrySync             & ~RegNext(io.TxRetrySync, false.B)
   val txDonePulse                 = io.TxDoneSync              & ~RegNext(io.TxDoneSync,  false.B)
   val txAbortPulse                = io.TxAbortSync             & ~RegNext(io.TxAbortSync, false.B)
-  // val ReadTxDataFromFifoSyncPluse = io.ReadTxDataFromFifo_sync & ~RegNext(io.ReadTxDataFromFifo_sync, false.B)
 
   
   io.PerPacketPad    := RegEnable(io.txDeq.req.bits.PerPacketPad,   false.B, io.txDeq.req.fire)
@@ -212,16 +204,10 @@ abstract class MacTileLinkBase() extends Module{
 
 
 
-
-
-  // io.TxData_wb       := io.txDeq.data.bits
   io.txReq.bits.data    := io.txDeq.data.bits
   io.txReq.bits.isStart := TxStartFrm_wb
   io.txReq.valid        := io.txDeq.data.valid
   io.txDeq.data.ready   := io.txReq.ready
-  // io.txDeq.data.ready    := ReadTxDataFromFifoSyncPluse
-  // assert( ~(io.txDeq.data.ready & ~io.txDeq.data.valid), "Assert Failed, Tx should never under run!" )
-
 
 
 
