@@ -29,8 +29,6 @@ class MacTileLinkTxIO extends Bundle{
   val TxAbort        = Input(Bool())      // Transmit packet abort
   val TxDone         = Input(Bool())      // Transmission ended
 
-
-  // val TxEndFrm_wb = Input(Bool())
 }
 
 

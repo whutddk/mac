@@ -69,6 +69,8 @@ class Mac_Config_Bundle extends Bundle{
   val r_TxBDNum   = Output(UInt(8.W))
   val r_TxPauseTV = Output(UInt(16.W))
   val r_TxPauseRq = Output(Bool())
+
+
 }
 
 
@@ -77,7 +79,13 @@ class Mac_Config_Bundle extends Bundle{
 class MacRegIO extends Mac_Config_Bundle{
   val asyncReset = Input(AsyncReset())
 
+
+  val r_TxPtr = Output(UInt(32.W))
+  val r_RxPtr = Output(UInt(32.W))
+  val r_TxLen = Output(UInt(16.W))
+  val r_RxLen = Input(UInt(16.W))
   val triTx = Output(Bool())
+  val triRx = Input(Bool())
 }
 
 class MacReg(implicit p: Parameters) extends LazyModule{
@@ -180,7 +188,16 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
 
     when( io.RstTxPauseRq ){ txPauseRq := false.B }
 
+    val txPtr = RegInit( "h80002000".U(32.W))
+    val rxPtr = RegInit( "h80002000".U(32.W))
+    val txLen = RegInit( 65535.U(16.W))
+    // val rxLen = RegInit( 65535.U(16.W))
+    val triRx = RegInit(false.B)
 
+    io.r_TxPtr := txPtr
+    io.r_RxPtr := rxPtr
+    io.r_TxLen := txLen
+    when( io.triRx ) { triRx := true.B }
 
 
 
@@ -324,11 +341,27 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
         )),
 
       ( 30 << 2 ) ->
-        RegFieldGroup("BD", Some("bd"), Seq(
-          RegField.w(1, RegWriteFn((valid, data) => { io.triTx := (valid & (data === 1.U)) ; true.B} ), RegFieldDesc("bd", "bd", reset=Some(0x0))) 
+        RegFieldGroup("DMATrigger", Some("Tx Control DMA"), Seq(
+          RegField.w(1, RegWriteFn((valid, data) => { io.triTx := (valid & (data === 1.U)) ; true.B} ), RegFieldDesc("bd", "bd", reset=Some(0x0))),
+          RegField(1, triRx, RegFieldDesc("bd", "bd", reset=Some(0x0))),
+        )),
+
+      ( 31 << 2 ) ->
+        RegFieldGroup("TxRxDMALength", Some("Tx  RxControl DMA"), Seq(
+          RegField(16, txLen, RegFieldDesc("txLen", "length of tx", reset=Some(65535))),
+          RegField.r(16, io.r_RxLen, RegFieldDesc("rxLen", "length of rx")),
+        )),
+
+      ( 32 << 2 ) ->
+        RegFieldGroup("TxDMAAddress", Some("Tx Control DMA"), Seq(
+          RegField(32, txPtr, RegFieldDesc("txPtr", "pointer of tx", reset=Some(0x80002000))),
+        )),
+
+      ( 33 << 2 ) ->
+        RegFieldGroup("RxDMAAddress", Some("Rx Control DMA"), Seq(
+          RegField(32, rxPtr, RegFieldDesc("rxPtr", "pointer of rx", reset=Some(0x80002000))),
         )),
     )
-
 
 
 

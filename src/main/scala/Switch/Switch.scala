@@ -62,7 +62,22 @@ class SwitchImp(outer: Switch)(implicit p: Parameters) extends LazyModuleImp(out
   switchMux.io.txDeq(0) <> mac(0).io.txDeq
 
 
-  switchMux.io.triTx := outer.ethReg.module.io.triTx
+  switchMux.io.triTx             := outer.ethReg.module.io.triTx
+  outer.ethReg.module.io.triRx := switchMux.io.triRx
+
+
+  switchMux.io.r_TxPtr           := outer.ethReg.module.io.r_TxPtr
+  switchMux.io.r_RxPtr           := outer.ethReg.module.io.r_RxPtr
+  switchMux.io.r_TxLen           := outer.ethReg.module.io.r_TxLen
+  outer.ethReg.module.io.r_RxLen := switchMux.io.r_RxLen
+
+
+
+
+
+
+
+
 
 
 

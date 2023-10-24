@@ -32,11 +32,6 @@ class RxBuffIO extends Bundle{
 }
 
 
-// class Packet_Info_Bundle extends Bundle{
-//   val LatchedRxLength   = UInt(16.W)
-//   val RxStatusInLatched = UInt(9.W)
-
-// }
 
 
 class RxBuffBase extends Module{

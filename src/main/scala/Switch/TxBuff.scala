@@ -61,8 +61,6 @@ trait TxBuffEnq{ this: TxBuffBase =>
       reqInfo := io.enq.req.bits
     } .elsewhen( io.enq.data.fire ){
       enqCnt := enqCnt + 1.U
-      // when( enqCnt + 4.U >= reqInfo.txLength ){
-      // }
     }
 
 
