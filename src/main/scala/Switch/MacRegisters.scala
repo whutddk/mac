@@ -37,7 +37,6 @@ class Mac_Config_Bundle extends Bundle{
   val r_ExDfrEn   = Output(Bool())
   val r_LoopBck   = Output(Bool())
   val r_IFG       = Output(Bool())
-  val r_Iam       = Output(Bool())
   val r_NoPre     = Output(Bool())
   val r_TxEn      = Output(Bool())
   val r_RxEn      = Output(Bool())
@@ -114,7 +113,6 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
     val ExDfrEn   = RegInit(false.B)
     val LoopBck   = RegInit(false.B)
     val IFG       = RegInit(false.B)
-    val Iam       = RegInit(false.B)
     val NoPre     = RegInit(false.B)
     val TxEn      = RegInit(false.B)
     val RxEn      = RegInit(false.B)
@@ -196,7 +194,7 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
           RegField(1, TxEn   , RegFieldDesc( "TxEn", "TxEn", reset = Some(0) ) ),
           RegField(1, NoPre  , RegFieldDesc( "NoPre", "NoPre", reset = Some(0) ) ),
           RegField.r(1, 0.U  , RegFieldDesc( "Bro", "Bro", reset = Some(0) ) ),
-          RegField(1, Iam    , RegFieldDesc( "Iam", "Iam", reset = Some(0) ) ),
+          RegField.r(1, 0.U  , RegFieldDesc( "Iam", "Iam Unused", reset = Some(0) ) ),
           RegField.r(1, 0.U  , RegFieldDesc( "Pro", "Pro", reset = Some(0) ) ),
           RegField(1, IFG    , RegFieldDesc( "IFG", "IFG", reset = Some(0) ) ),
           RegField(1, LoopBck, RegFieldDesc( "LoopBck", "LoopBck", reset = Some(0) ) ),
@@ -362,7 +360,6 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
     io.r_ExDfrEn   := ExDfrEn
     io.r_LoopBck   := LoopBck
     io.r_IFG       := IFG
-    io.r_Iam       := Iam
     io.r_NoPre     := NoPre
     io.r_TxEn     := TxEn & (TX_BD_NUM > 0.U)      // Transmission is enabled when there is at least one TxBD.
     io.r_RxEn     := RxEn & (TX_BD_NUM < "h80".U)  // Reception is enabled when there is  at least one RxBD.

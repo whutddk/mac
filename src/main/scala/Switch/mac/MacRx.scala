@@ -16,7 +16,6 @@ class MacRxIO extends Bundle{
   val MAC                 = Input(UInt(48.W))     //  Station Address  
   val r_HASH0             = Input(UInt(32.W)) //  lower 4 bytes Hash Table
   val r_HASH1             = Input(UInt(32.W)) //  upper 4 bytes Hash Table
-  val PassAll             = Input(Bool())
   val ControlFrmAddressOK = Input(Bool())
 
   val RxData          = Output(UInt(8.W))
@@ -206,7 +205,7 @@ trait MacRxFAddrCheck { this: MacRxBase =>
   when(ByteCntEq0){
     AddressMiss := false.B
   } .elsewhen(ByteCntEq7 & RxCheckEn){
-    AddressMiss := (~((io.PassAll & io.ControlFrmAddressOK)));    
+    AddressMiss := (~((io.ControlFrmAddressOK)));    
   }
    
   val IntHash = Mux(CrcHash.extract(5), io.r_HASH1, io.r_HASH0)

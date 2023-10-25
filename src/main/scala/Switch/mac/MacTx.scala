@@ -21,7 +21,6 @@ class MacTxIO extends Bundle{
   val IPGR1           = Input(UInt(7.W))         // Non back to back transmit inter packet gap parameter IPGR1 (from register)
   val IPGR2           = Input(UInt(7.W))         // Non back to back transmit inter packet gap parameter IPGR2 (from register)
   val CollValid       = Input(UInt(6.W))         // Valid collision window (from register)
-  val MaxRet          = Input(UInt(4.W))         // Maximum retry number (from register)
   val ExDfrEn         = Input(Bool())         // Excessive defferal enable (from register)
 
   val MTxD               = Output(UInt(4.W))     // Transmit nibble (to PHY)

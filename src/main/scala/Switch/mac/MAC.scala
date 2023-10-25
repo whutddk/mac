@@ -496,7 +496,6 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   rxethmac.io.MAC                 := r_MAC
   rxethmac.io.r_HASH0             := r_HASH0
   rxethmac.io.r_HASH1             := r_HASH1
-  rxethmac.io.PassAll             := true.B
   rxethmac.io.ControlFrmAddressOK := ControlFrmAddressOK
 
   RxData            := rxethmac.io.RxData
