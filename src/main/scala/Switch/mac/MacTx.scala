@@ -16,7 +16,6 @@ class MacTxIO extends Bundle{
   val FullD           = Input(Bool())         // Full duplex (from register)
   val DlyCrcEn        = Input(Bool())         // Delayed Crc enabled (from register)
   val MinFL           = Input(UInt(16.W))         // Minimum frame length (from register)
-  val MaxFL           = Input(UInt(16.W))         // Maximum frame length (from register)
   val IPGT            = Input(UInt(7.W))         // Back to back transmit inter packet gap parameter (from register)
   val IPGR1           = Input(UInt(7.W))         // Non back to back transmit inter packet gap parameter IPGR1 (from register)
   val IPGR2           = Input(UInt(7.W))         // Non back to back transmit inter packet gap parameter IPGR2 (from register)

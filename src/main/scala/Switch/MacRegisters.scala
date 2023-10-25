@@ -43,7 +43,6 @@ class Mac_Config_Bundle extends Bundle{
   val r_IPGR1     = Output(UInt(7.W))
   val r_IPGR2     = Output(UInt(7.W))
   val r_MinFL     = Output(UInt(16.W))
-  val r_MaxFL     = Output(UInt(16.W))
   val r_CollValid = Output(UInt(6.W))
   val r_MiiNoPre  = Output(Bool())
   val r_ClkDiv    = Output(UInt(8.W))
@@ -123,7 +122,6 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
     val IPGR1    = RegInit("h0C".U(7.W))    // IPGR1 Register
     val IPGR2    = RegInit("h12".U(7.W))
 
-    val maxFL = RegInit("h0600".U(16.W))
     val minFL = RegInit("h0040".U(16.W))
 
     val collValid = RegInit("h3f".U(6.W))
@@ -221,8 +219,8 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
         )),
 
       ( 6 << 2 ) ->
-        RegFieldGroup("PACKETLEN", Some("Packet Length Register"), 
-          RegField.bytes(maxFL, Some(RegFieldDesc("maxFL", "Maximum Frame Length", reset=Some(0x0600)))) ++
+        RegFieldGroup("PACKETLEN", Some("Packet Length Register"), Seq(
+          RegField.r(16, 0.U, RegFieldDesc("maxFL", "Maximum Frame Length", reset=Some(0x0600)))) ++
           RegField.bytes(minFL, Some(RegFieldDesc("minFL", "Minimum Frame Length", reset=Some(0x0040))))
         ),
       ( 7 << 2 ) ->
@@ -348,7 +346,6 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
     io.r_IPGR1     := IPGR1
     io.r_IPGR2     := IPGR2
     io.r_MinFL     := minFL
-    io.r_MaxFL     := maxFL
     io.r_CollValid := collValid
     io.r_MiiNoPre  := miiNoPre
     io.r_ClkDiv    := clkDiv

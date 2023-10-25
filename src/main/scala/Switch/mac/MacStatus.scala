@@ -21,8 +21,6 @@ class MacStatusIO extends Bundle{
   val MRxD                = Input(UInt(4.W))
   val Collision           = Input(Bool())
   val CollValid           = Input(UInt(6.W))
-  val r_MinFL             = Input(UInt(16.W))
-  val r_MaxFL             = Input(UInt(16.W))
   val StartTxDone         = Input(Bool())
   val StartTxAbort        = Input(Bool())
   val MTxClk              = Input(Bool())

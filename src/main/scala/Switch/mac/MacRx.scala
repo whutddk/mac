@@ -11,7 +11,6 @@ class MacRxIO extends Bundle{
   val MRxD                = Input(UInt(4.W))
   val Transmitting        = Input(Bool())
   val DlyCrcEn            = Input(Bool())
-  val MaxFL               = Input(UInt(16.W))
   val r_IFG               = Input(Bool())
   val r_HASH0             = Input(UInt(32.W)) //  lower 4 bytes Hash Table
   val r_HASH1             = Input(UInt(32.W)) //  upper 4 bytes Hash Table

@@ -141,7 +141,6 @@ val MRxErr_Lb                  = Wire(Bool())
 val MRxD_Lb                    = Wire(UInt(4.W))
 val Transmitting               = Wire(Bool())
 val r_DlyCrcEn                 = Wire(Bool())
-val r_MaxFL                    = Wire(UInt(16.W))
 val r_MinFL                    = Wire(UInt(16.W))
 val DribbleNibble              = Wire(Bool())
 val LoadRxStatus               = Wire(Bool())
@@ -180,7 +179,6 @@ dontTouch(MRxErr_Lb                  )
 dontTouch(MRxD_Lb                    )
 dontTouch(Transmitting               )
 dontTouch(r_DlyCrcEn                 )
-dontTouch(r_MaxFL                    )
 dontTouch(r_MinFL                    )
 dontTouch(DribbleNibble              )
 dontTouch(LoadRxStatus               )
@@ -248,7 +246,6 @@ r_IPGT      := io.cfg.r_IPGT
 r_IPGR1     := io.cfg.r_IPGR1
 r_IPGR2     := io.cfg.r_IPGR2
 r_MinFL     := io.cfg.r_MinFL
-r_MaxFL     := io.cfg.r_MaxFL
 r_CollValid := io.cfg.r_CollValid
 r_MiiNoPre  := io.cfg.r_MiiNoPre
 r_ClkDiv    := io.cfg.r_ClkDiv
@@ -349,7 +346,6 @@ txethmac.io.CrcEn           := r_CrcEn | PerPacketCrcEn
 txethmac.io.FullD           := r_FullD
 txethmac.io.DlyCrcEn        := r_DlyCrcEn
 txethmac.io.MinFL           := r_MinFL
-txethmac.io.MaxFL           := r_MaxFL
 txethmac.io.IPGT            := r_IPGT
 txethmac.io.IPGR1           := r_IPGR1
 txethmac.io.IPGR2           := r_IPGR2
@@ -402,7 +398,6 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   rxethmac.io.MRxD                := MRxD_Lb
   rxethmac.io.Transmitting        := Transmitting
   rxethmac.io.DlyCrcEn            := r_DlyCrcEn
-  rxethmac.io.MaxFL               := r_MaxFL
   rxethmac.io.r_IFG               := r_IFG
   rxethmac.io.r_HASH0             := r_HASH0
   rxethmac.io.r_HASH1             := r_HASH1
@@ -495,8 +490,6 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   macstatus.io.MRxD                := MRxD_Lb
   macstatus.io.Collision           := io.mii.mcoll_pad_i
   macstatus.io.CollValid           := r_CollValid
-  macstatus.io.r_MinFL             := r_MinFL
-  macstatus.io.r_MaxFL             := r_MaxFL
   macstatus.io.StartTxDone         := StartTxDone
   macstatus.io.StartTxAbort        := StartTxAbort
   macstatus.io.MTxClk              := io.mii.mtx_clk_pad_i
