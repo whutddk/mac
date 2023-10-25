@@ -23,19 +23,16 @@ class MacTxIO extends Bundle{
   val IPGR2           = Input(UInt(7.W))         // Non back to back transmit inter packet gap parameter IPGR2 (from register)
   val CollValid       = Input(UInt(6.W))         // Valid collision window (from register)
   val MaxRet          = Input(UInt(4.W))         // Maximum retry number (from register)
-  val NoBckof         = Input(Bool())         // No backoff (from register)
   val ExDfrEn         = Input(Bool())         // Excessive defferal enable (from register)
 
   val MTxD               = Output(UInt(4.W))     // Transmit nibble (to PHY)
   val MTxEn              = Output(Bool())     // Transmit enable (to PHY)
   val MTxErr             = Output(Bool())     // Transmit error (to PHY)
   val TxDone             = Output(Bool())     // Transmit packet done (to RISC)
-  val TxRetry            = Output(Bool())     // Transmit packet retry (to RISC)
   val TxAbort            = Output(Bool())     // Transmit packet abort (to RISC)
   val TxUsedData         = Output(Bool())     // Transmit packet used data (to RISC)
   val WillTransmit       = Output(Bool())     // Will transmit (to RxEthMAC)
   val ResetCollision     = Output(Bool())     // Reset Collision (for synchronizing collision)
-  val RetryCnt           = Output(UInt(4.W))     // Latched Retry Counter for tx status purposes
   val StartTxDone        = Output(Bool())
   val StartTxAbort       = Output(Bool())
   val MaxCollisionOccured= Output(Bool())
@@ -57,7 +54,6 @@ abstract class MacTxBase extends Module with RequireAsyncReset{
   val StartFCS              = Wire(Bool())
   val StartJam              = Wire(Bool())
   val StartDefer            = Wire(Bool())
-  val StartBackoff          = Wire(Bool())
 
 
 
@@ -73,9 +69,6 @@ abstract class MacTxBase extends Module with RequireAsyncReset{
   val ExcessiveDefer        = Wire(Bool())
 
   val MaxFrame              = Wire(Bool())
-  val RetryMax              = Wire(Bool())
-  val RandomEq0             = Wire(Bool())
-  val RandomEqByteCnt       = Wire(Bool())
 
   val StateIPG  = RegInit(false.B)
   val StateIdle = RegInit(false.B)
@@ -85,7 +78,6 @@ abstract class MacTxBase extends Module with RequireAsyncReset{
   val StateFCS = RegInit(false.B)
   val StateJam = RegInit(false.B)
   val StateJam_q = RegNext(StateJam, false.B)
-  val StateBackOff = RegInit(false.B)
   val StateDefer = RegInit(true.B)
   val Rule1 = RegInit(false.B)
 
@@ -97,7 +89,6 @@ abstract class MacTxBase extends Module with RequireAsyncReset{
   val NibCntEq7  = NibCnt === 7.U
   val NibCntEq15 = NibCnt === 15.U
 
-  val RetryCnt = RegInit(0.U(4.W)); io.RetryCnt := RetryCnt
 }
 
 
@@ -122,13 +113,10 @@ trait MacTxFSM { this: MacTxBase =>
 
   StartJam := (io.Collision ) & ((StatePreamble & NibCntEq15) | (StateData(1) | StateData(0)) | StatePAD | StateFCS)
 
-  StartBackoff := StateJam & ~RandomEq0 & ColWindow & ~RetryMax & NibCntEq7 & ~io.NoBckof
-
   StartDefer :=
     (StateIPG & ~Rule1 & io.CarrierSense & NibCnt(6,0) <= io.IPGR1 & NibCnt(6,0) =/= io.IPGR2) |
     (StateIdle & io.CarrierSense) |
-    (StateJam & NibCntEq7 & (io.NoBckof | RandomEq0 | ~ColWindow | RetryMax)) |
-    (StateBackOff & (RandomEqByteCnt)) |
+    (StateJam & NibCntEq7) |
     io.StartTxDone |
     TooBig
 
@@ -166,16 +154,10 @@ trait MacTxFSM { this: MacTxBase =>
     StateFCS := true.B
   }
 
-  when(StartBackoff | StartDefer){
+  when(StartDefer){
     StateJam := false.B
   } .elsewhen(StartJam){
     StateJam := true.B
-  }
-
-  when(StartDefer){
-    StateBackOff := false.B
-  } .elsewhen(StartBackoff){
-    StateBackOff := true.B
   }
 
   when(StartIPG){
@@ -185,7 +167,7 @@ trait MacTxFSM { this: MacTxBase =>
   }
 
   // This sections defines which interpack gap rule to use
-  when(StateIdle | StateBackOff){
+  when(StateIdle){
     Rule1 := false.B
   } .elsewhen(StatePreamble | io.FullD){
     Rule1 := true.B
@@ -201,7 +183,7 @@ trait MacTxCounter { this: MacTxBase =>
   val IncrementNibCnt =
     StateIPG | StatePreamble |
     (StateData(1) | StateData(0)) |
-    StatePAD | StateFCS | StateJam | StateBackOff |
+    StatePAD | StateFCS | StateJam |
     (StateDefer & ~ExcessiveDefer & io.TxStartFrm)
 
 
@@ -224,11 +206,9 @@ trait MacTxCounter { this: MacTxBase =>
 
   val IncrementByteCnt =
     (StateData(1) & ~ByteCntMax) |
-    (StateBackOff & (NibCnt(6,0) === 127.U)) |
     ((StatePAD | StateFCS) & NibCnt.extract(0) & ~ByteCntMax)
 
   val ResetByteCnt =
-    StartBackoff | 
     (StateIdle & io.TxStartFrm) |
     PacketFinished_q
 
@@ -309,44 +289,14 @@ trait MacTxCRC{ this: MacTxBase =>
 
 }
 
-trait MacTxRandom{ this: MacTxBase =>
 
-  val x = RegInit(0.U(10.W))
-  when(true.B){
-    x := Cat( x(8,0), ~(x.extract(2) ^ x.extract(9)) )
-  }
-
-  val RandomLatched = RegEnable(
-    Cat(
-      Mux( RetryCnt > 9.U, x.extract(9), 0.U(1.W)),
-      Mux( RetryCnt > 8.U, x.extract(8), 0.U(1.W)),
-      Mux( RetryCnt > 7.U, x.extract(7), 0.U(1.W)),
-      Mux( RetryCnt > 6.U, x.extract(6), 0.U(1.W)),
-      Mux( RetryCnt > 5.U, x.extract(5), 0.U(1.W)),
-      Mux( RetryCnt > 4.U, x.extract(4), 0.U(1.W)),
-      Mux( RetryCnt > 3.U, x.extract(3), 0.U(1.W)),
-      Mux( RetryCnt > 2.U, x.extract(2), 0.U(1.W)),
-      Mux( RetryCnt > 1.U, x.extract(1), 0.U(1.W)),
-      x.extract(0)
-    ),
-    0.U(10.W),
-    StateJam & StateJam_q
-  )
-
-  // Random Number == 0      IEEE 802.3 page 68. If 0 we go to defer and not to backoff.
-  RandomEq0 := RandomLatched === 0.U
-  RandomEqByteCnt := ByteCnt(9,0) === RandomLatched & (NibCnt(6,0).andR)
-
-}
-
-class MacTx extends MacTxBase with MacTxFSM with MacTxCounter with MacTxCRC with MacTxRandom{
+class MacTx extends MacTxBase with MacTxFSM with MacTxCounter with MacTxCRC {
   val MTxD = RegInit(0.U(4.W)); io.MTxD := MTxD
   val StopExcessiveDeferOccured = RegInit(false.B)
 
   val StatusLatch = RegInit(false.B)
   val TxUsedData  = RegNext(StartData(0) | StartData(1), false.B); io.TxUsedData := TxUsedData
   val TxDone = RegInit(false.B); io.TxDone := TxDone
-  val TxRetry = RegInit(false.B); io.TxRetry := TxRetry
   val TxAbort = RegInit(false.B); io.TxAbort := TxAbort
 
   val MTxEn = RegNext(StatePreamble | (StateData(0) | StateData(1)) | StatePAD | StateFCS | StateJam, false.B); io.MTxEn := MTxEn
@@ -360,9 +310,8 @@ class MacTx extends MacTxBase with MacTxFSM with MacTxCounter with MacTxCRC with
   val ExcessiveDeferOccured = io.TxStartFrm & StateDefer & ExcessiveDefer & ~StopExcessiveDeferOccured
   io.StartTxDone := ~io.Collision & (StateFCS & NibCntEq7 | StateData(1) & io.TxEndFrm & (~io.Pad | io.Pad & NibbleMinFl) & ~io.CrcEn)
   TooBig := ~io.Collision & MaxFrame & (StateData(0) | StateFCS);
-  val StartTxRetry = StartJam & (ColWindow & ~RetryMax)
   io.LateCollision := StartJam & ~ColWindow
-  io.MaxCollisionOccured := StartJam & ColWindow & RetryMax;
+  io.MaxCollisionOccured := StartJam & ColWindow;
   StateSFD := StatePreamble & NibCntEq15;
   io.StartTxAbort := TooBig | ExcessiveDeferOccured | io.LateCollision | io.MaxCollisionOccured
 
@@ -398,13 +347,6 @@ class MacTx extends MacTxBase with MacTxFSM with MacTxCounter with MacTxCRC with
     TxDone := true.B
   }
 
-  // Transmit packet retry
-  when(io.TxStartFrm & ~StatusLatch){
-    TxRetry := false.B
-  } .elsewhen(StartTxRetry){
-    TxRetry := true.B
-  }
-
 
   // Transmit packet abort
   when(io.TxStartFrm & ~StatusLatch & ~ExcessiveDeferOccured){
@@ -413,15 +355,6 @@ class MacTx extends MacTxBase with MacTxFSM with MacTxCounter with MacTxCRC with
     TxAbort := true.B
   }
 
-  // Retry counter
-  when(ExcessiveDeferOccured | TooBig | io.StartTxDone
-      | StateJam & NibCntEq7 & (~ColWindow | RetryMax)){
-    RetryCnt := 0.U
-  }.elsewhen(StateJam & NibCntEq7 & ColWindow & (RandomEq0 | io.NoBckof) | StateBackOff & RandomEqByteCnt){
-    RetryCnt := RetryCnt + 1.U
-  }
-
-  RetryMax := RetryCnt === io.MaxRet
 
   when( true.B ){
     MTxD := // Transmit nibble

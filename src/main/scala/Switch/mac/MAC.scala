@@ -85,7 +85,6 @@ val TxStartFrm = Wire(Bool())
 val TxEndFrm   = Wire(Bool())
 val TxUsedData = Wire(Bool())
 val TxData     = Wire(UInt(8.W))
-val TxRetry    = Wire(Bool())
 val TxAbort    = Wire(Bool())
 val TxDone     = Wire(Bool())
 val TPauseRq = Wire(Bool())
@@ -94,7 +93,6 @@ dontTouch(TxStartFrm)
 dontTouch(TxEndFrm  )
 dontTouch(TxUsedData)
 dontTouch(TxData    )
-dontTouch(TxRetry   )
 dontTouch(TxAbort   )
 dontTouch(TxDone    )
 dontTouch(TPauseRq  )
@@ -163,8 +161,6 @@ val r_IPGR2                    = Wire(UInt(7.W))
 val r_CollValid                = Wire(UInt(6.W))
 val r_TxPauseTV                = Wire(UInt(16.W))
 val r_TxPauseRq                = Wire(Bool())
-val r_MaxRet                   = Wire(UInt(4.W))
-val r_NoBckof                  = Wire(Bool())
 val r_ExDfrEn                  = Wire(Bool())
 val r_TxFlow                   = Wire(Bool())
 val r_IFG                      = Wire(Bool())
@@ -224,8 +220,6 @@ dontTouch(r_IPGR2                    )
 dontTouch(r_CollValid                )
 dontTouch(r_TxPauseTV                )
 dontTouch(r_TxPauseRq                )
-dontTouch(r_MaxRet                   )
-dontTouch(r_NoBckof                  )
 dontTouch(r_ExDfrEn                  )
 dontTouch(r_TxFlow                   )
 dontTouch(r_IFG                      )
@@ -294,7 +288,6 @@ r_CrcEn     := io.cfg.r_CrcEn
 r_DlyCrcEn  := io.cfg.r_DlyCrcEn
 r_FullD     := io.cfg.r_FullD
 r_ExDfrEn   := io.cfg.r_ExDfrEn
-r_NoBckof   := io.cfg.r_NoBckof
 r_LoopBck   := io.cfg.r_LoopBck
 r_IFG       := io.cfg.r_IFG
 r_NoPre     := io.cfg.r_NoPre
@@ -307,7 +300,6 @@ r_IPGR1     := io.cfg.r_IPGR1
 r_IPGR2     := io.cfg.r_IPGR2
 r_MinFL     := io.cfg.r_MinFL
 r_MaxFL     := io.cfg.r_MaxFL
-r_MaxRet    := io.cfg.r_MaxRet
 r_CollValid := io.cfg.r_CollValid
 r_TxFlow    := io.cfg.r_TxFlow
 r_RxFlow    := io.cfg.r_RxFlow
@@ -340,8 +332,6 @@ val ReceivedPacketGood   = Wire(Bool())
 val ReceivedLengthOK     = Wire(Bool())
 val LatchedCrcError      = Wire(Bool())
 val RxLateCollision      = Wire(Bool())
-val RetryCntLatched      = Wire(UInt(4.W))  
-val RetryCnt             = Wire(UInt(4.W))
 val StartTxAbort         = Wire(Bool())
 val MaxCollisionOccured  = Wire(Bool())
 val RetryLimit           = Wire(Bool())
@@ -361,8 +351,6 @@ dontTouch(ReceivedPacketGood  )
 dontTouch(ReceivedLengthOK    )
 dontTouch(LatchedCrcError     )
 dontTouch(RxLateCollision     )
-dontTouch(RetryCntLatched     )
-dontTouch(RetryCnt            )
 dontTouch(StartTxAbort        )
 dontTouch(MaxCollisionOccured )
 dontTouch(RetryLimit          )
@@ -460,20 +448,16 @@ txethmac.io.IPGT            := r_IPGT
 txethmac.io.IPGR1           := r_IPGR1
 txethmac.io.IPGR2           := r_IPGR2
 txethmac.io.CollValid       := r_CollValid
-txethmac.io.MaxRet          := r_MaxRet
-txethmac.io.NoBckof         := r_NoBckof
 txethmac.io.ExDfrEn         := r_ExDfrEn
 
 io.mii.mtxd_pad_o    := txethmac.io.MTxD
 io.mii.mtxen_pad_o   := txethmac.io.MTxEn
 io.mii.mtxerr_pad_o := txethmac.io.MTxErr
 TxDoneIn := txethmac.io.TxDone
-TxRetry := txethmac.io.TxRetry
 TxAbortIn := txethmac.io.TxAbort
 TxUsedDataIn := txethmac.io.TxUsedData
 WillTransmit := txethmac.io.WillTransmit
 ResetCollision := txethmac.io.ResetCollision
-RetryCnt := txethmac.io.RetryCnt
 StartTxDone := txethmac.io.StartTxDone
 StartTxAbort := txethmac.io.StartTxAbort
 MaxCollisionOccured := txethmac.io.MaxCollisionOccured
@@ -592,7 +576,6 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   val wishbone = Module(new MacTileLink)
 
 
-  wishbone.io.RetryCntLatched  := RetryCntLatched
   wishbone.io.RetryLimit       := RetryLimit
   wishbone.io.LateCollLatched  := LateCollLatched
   wishbone.io.DeferLatched     := DeferLatched
@@ -635,7 +618,6 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   macstatus.io.r_HugEn             := r_HugEn
   macstatus.io.StartTxDone         := StartTxDone
   macstatus.io.StartTxAbort        := StartTxAbort
-  macstatus.io.RetryCnt            := RetryCnt
   macstatus.io.MTxClk              := io.mii.mtx_clk_pad_i
   macstatus.io.MaxCollisionOccured := MaxCollisionOccured
   macstatus.io.LateCollision       := LateCollision
@@ -656,7 +638,6 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   DribbleNibble        := macstatus.io.DribbleNibble
   ReceivedPacketTooBig := macstatus.io.ReceivedPacketTooBig
   LoadRxStatus         := macstatus.io.LoadRxStatus
-  RetryCntLatched      := macstatus.io.RetryCntLatched
   RetryLimit           := macstatus.io.RetryLimit
   LateCollLatched      := macstatus.io.LateCollLatched
   DeferLatched         := macstatus.io.DeferLatched
@@ -705,11 +686,9 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   wishbone.io.TxUsedData      := TxUsedData
   macTileLinkTx.io.TxUsedData := TxUsedData
 
-  macTileLinkTx.io.TxRetry    := TxRetry
   macTileLinkTx.io.TxAbort    := TxAbort
   macTileLinkTx.io.TxDone     := TxDone
 
-  wishbone.io.TxRetrySync := ShiftRegister( TxRetry, 2, false.B, true.B )
   wishbone.io.TxAbortSync := ShiftRegister( TxAbort, 2, false.B, true.B )
   wishbone.io.TxDoneSync  := ShiftRegister( TxDone,  2, false.B, true.B )
 

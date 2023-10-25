@@ -25,7 +25,6 @@ class MacTileLinkTxIO extends Bundle{
   val TxData         = Output(UInt(8.W))  // Transmit packet data byte
 
   val TxUsedData     = Input(Bool())      // Transmit packet used data
-  val TxRetry        = Input(Bool())      // Transmit packet retry
   val TxAbort        = Input(Bool())      // Transmit packet abort
   val TxDone         = Input(Bool())      // Transmission ended
 
@@ -48,12 +47,11 @@ class MacTileLinkTx extends Module with RequireAsyncReset{
 
   // Generating delayed signals
   val TxAbort_q    = RegNext( io.TxAbort, false.B)
-  val TxRetry_q    = RegNext( io.TxRetry, false.B)
   val TxUsedData_q = RegNext( io.TxUsedData, false.B)
 
   // Changes for tx occur every second clock. Flop is used for this manner.
   val Flop = RegInit(false.B)
-  when( io.TxDone | io.TxAbort | TxRetry_q){
+  when( io.TxDone | io.TxAbort){
     Flop := false.B
   } .elsewhen ( io.TxUsedData ){
     Flop := ~Flop
@@ -61,19 +59,19 @@ class MacTileLinkTx extends Module with RequireAsyncReset{
   
   when( io.txReq.valid & io.txReq.bits.isStart ){
     TxStartFrm := true.B
-  } .elsewhen(TxUsedData_q | io.TxRetry & (~TxRetry_q) | io.TxAbort & (~TxAbort_q) ){
+  } .elsewhen(TxUsedData_q | io.TxAbort & (~TxAbort_q) ){
     TxStartFrm := false.B
   }
 
   // Indication of the last word
-  when( (TxEndFrm | io.TxAbort | io.TxRetry) & Flop ){
+  when( (TxEndFrm | io.TxAbort) & Flop ){
     LastWord := false.B
   } .elsewhen( io.txReq.fire ){
     LastWord := io.txReq.bits.isLast
   }
 
   // Tx end frame generation
-  when(Flop & TxEndFrm | io.TxAbort | TxRetry_q){
+  when(Flop & TxEndFrm | io.TxAbort){
     TxEndFrm := false.B
   } .elsewhen(Flop & LastWord){
     TxEndFrm := true.B

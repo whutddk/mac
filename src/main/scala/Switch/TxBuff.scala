@@ -14,7 +14,6 @@ class Transmit_Req_Bundle extends Bundle{
 }
 
 class Transmit_Resp_Bundle extends Bundle{
-  val RetryCntLatched  = UInt(4.W)
   val RetryLimit       = Bool()
   val LateCollLatched  = Bool()
   val DeferLatched     = Bool()

@@ -35,7 +35,6 @@ class Mac_Config_Bundle extends Bundle{
   val r_DlyCrcEn  = Output(Bool())
   val r_FullD     = Output(Bool())
   val r_ExDfrEn   = Output(Bool())
-  val r_NoBckof   = Output(Bool())
   val r_LoopBck   = Output(Bool())
   val r_IFG       = Output(Bool())
   val r_Iam       = Output(Bool())
@@ -49,7 +48,6 @@ class Mac_Config_Bundle extends Bundle{
   val r_IPGR2     = Output(UInt(7.W))
   val r_MinFL     = Output(UInt(16.W))
   val r_MaxFL     = Output(UInt(16.W))
-  val r_MaxRet    = Output(UInt(4.W))
   val r_CollValid = Output(UInt(6.W))
   val r_TxFlow    = Output(Bool())
   val r_RxFlow    = Output(Bool())
@@ -114,7 +112,6 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
 
     val FullD     = RegInit(false.B)
     val ExDfrEn   = RegInit(false.B)
-    val NoBckof   = RegInit(false.B)
     val LoopBck   = RegInit(false.B)
     val IFG       = RegInit(false.B)
     val Iam       = RegInit(false.B)
@@ -144,7 +141,6 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
     val minFL = RegInit("h0040".U(16.W))
 
     val collValid = RegInit("h3f".U(6.W))
-    val maxRet = RegInit("hF".U(4.W))
 
     val TX_BD_NUM = RegInit("h40".U(8.W))        // TX_BD_NUM Register
 
@@ -204,7 +200,7 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
           RegField.r(1, 0.U  , RegFieldDesc( "Pro", "Pro", reset = Some(0) ) ),
           RegField(1, IFG    , RegFieldDesc( "IFG", "IFG", reset = Some(0) ) ),
           RegField(1, LoopBck, RegFieldDesc( "LoopBck", "LoopBck", reset = Some(0) ) ),
-          RegField(1, NoBckof, RegFieldDesc( "NoBckof", "NoBckof", reset = Some(0) ) ),
+          RegField.r(1, 0.U, RegFieldDesc( "NoBckof", "NoBckof", reset = Some(0) ) ),
           RegField(1, ExDfrEn, RegFieldDesc( "ExDfrEn", "ExDfrEn", reset = Some(0) ) ),
           RegField(1, FullD  , RegFieldDesc( "FullD", "FullD", reset = Some(0) ) ),
           RegField.r(1, 0.U),
@@ -255,7 +251,7 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
         RegFieldGroup("COLLCONF", Some("Collision and Retry Configuration Register"), Seq(
           RegField(6, collValid, RegFieldDesc("collValid", "Collision Valid", reset=Some(0x3f))),
           RegField.r(10,0.U),
-          RegField(4, maxRet, RegFieldDesc("maxRet", "Maximum Retry", reset=Some(0xf))),
+          RegField.r(4, 0.U, RegFieldDesc("maxRet", "Maximum Retry", reset=Some(0xf))),
         )),
       ( 8 << 2 ) ->
         RegFieldGroup("TX_BD_NUM", Some("Transmit BD Number Register"), Seq(
@@ -364,7 +360,6 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
     io.r_DlyCrcEn  := DlyCrcEn
     io.r_FullD     := FullD
     io.r_ExDfrEn   := ExDfrEn
-    io.r_NoBckof   := NoBckof
     io.r_LoopBck   := LoopBck
     io.r_IFG       := IFG
     io.r_Iam       := Iam
@@ -377,7 +372,6 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
     io.r_IPGR2     := IPGR2
     io.r_MinFL     := minFL
     io.r_MaxFL     := maxFL
-    io.r_MaxRet    := maxRet
     io.r_CollValid := collValid
     io.r_TxFlow    := txFlow
     io.r_RxFlow    := rxFlow

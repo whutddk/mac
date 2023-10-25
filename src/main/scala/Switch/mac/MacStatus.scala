@@ -27,7 +27,6 @@ class MacStatusIO extends Bundle{
   val r_HugEn             = Input(Bool())
   val StartTxDone         = Input(Bool())
   val StartTxAbort        = Input(Bool())
-  val RetryCnt            = Input(UInt(4.W))
   val MTxClk              = Input(Bool())
   val MaxCollisionOccured = Input(Bool())
   val LateCollision       = Input(Bool())
@@ -48,7 +47,6 @@ class MacStatusIO extends Bundle{
   val DribbleNibble        = Output(Bool())
   val ReceivedPacketTooBig = Output(Bool())
   val LoadRxStatus         = Output(Bool())
-  val RetryCntLatched      = Output(UInt(4.W))
   val RetryLimit           = Output(Bool())
   val LateCollLatched      = Output(Bool())
   val DeferLatched         = Output(Bool())
@@ -127,7 +125,6 @@ class MacStatus extends RawModule{
 
 
   withClockAndReset( io.MTxClk.asClock, io.asyncReset ) {
-    val RetryCntLatched = RegEnable( io.RetryCnt, 0.U(4.W), io.StartTxDone | io.StartTxAbort); io.RetryCntLatched := RetryCntLatched
     val RetryLimit      = RegEnable( io.MaxCollisionOccured, false.B, io.StartTxDone | io.StartTxAbort ); io.RetryLimit := RetryLimit // Latched Retransmission limit
     val LateCollLatched = RegEnable( io.LateCollision, false.B, io.StartTxDone | io.StartTxAbort); io.LateCollLatched := LateCollLatched // Latched Late Collision
 

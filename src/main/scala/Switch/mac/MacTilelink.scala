@@ -36,7 +36,6 @@ abstract class MacTileLinkBase() extends Module{
 
 
     // Tx Status signals
-    val RetryCntLatched  = Input(UInt(4.W))  // Latched Retry Counter
     val RetryLimit       = Input(Bool())     // Retry limit reached (Retry Max value +1 attempts were made)
     val LateCollLatched  = Input(Bool())     // Late collision occured
     val DeferLatched     = Input(Bool())     // Defer indication (Frame was defered before sucessfully sent)
@@ -49,7 +48,6 @@ abstract class MacTileLinkBase() extends Module{
     val BlockingTxStatusWrite = Output(Bool())
     val TxUsedData     = Input(Bool())      // Transmit packet used data    
     
-    val TxRetrySync  = Input(Bool())
     val TxAbortSync = Input(Bool())      // Transmit packet abort
     val TxDoneSync  = Input(Bool())      // Transmission ended
 
@@ -75,7 +73,7 @@ abstract class MacTileLinkBase() extends Module{
   io.rxEnq.ctrl.valid := rxBuffCtrlValid
   io.rxEnq.ctrl.bits.LatchedRxLength   := RegEnable(io.LatchedRxLength_rxclk,   ShiftEndedSyncPluse )
   io.rxEnq.ctrl.bits.RxStatusInLatched := RegEnable(io.RxStatusInLatched_rxclk, ShiftEndedSyncPluse )
-  
+
 
   when( io.rxEnq.ctrl.fire ){
     rxBuffCtrlValid := false.B
@@ -134,7 +132,6 @@ abstract class MacTileLinkBase() extends Module{
   val TxLength = RegInit(0.U(16.W))
   val LatchedTxLength = RegInit(0.U(16.W))
 
-  val txRetryPulse                = io.TxRetrySync             & ~RegNext(io.TxRetrySync, false.B)
   val txDonePulse                 = io.TxDoneSync              & ~RegNext(io.TxDoneSync,  false.B)
   val txAbortPulse                = io.TxAbortSync             & ~RegNext(io.TxAbortSync, false.B)
 
@@ -151,7 +148,7 @@ abstract class MacTileLinkBase() extends Module{
 
     when(((TxLength - 1.U) === 0.U) & io.TxUsedData){
       TxEndFrm_wb := true.B
-    } .elsewhen(txRetryPulse | txDonePulse | txAbortPulse){
+    } .elsewhen(txDonePulse | txAbortPulse){
       TxEndFrm_wb := false.B
     }
 
@@ -176,14 +173,13 @@ abstract class MacTileLinkBase() extends Module{
 
   when( io.txDeq.resp.fire ){
     txRespValid := false.B
-  } .elsewhen( txRetryPulse | txDonePulse | txAbortPulse ){
+  } .elsewhen( txDonePulse | txAbortPulse ){
     txRespValid := true.B
-    txRespBits.RetryCntLatched := io.RetryCntLatched
     txRespBits.RetryLimit := io.RetryLimit
     txRespBits.LateCollLatched := io.LateCollLatched
     txRespBits.DeferLatched := io.DeferLatched
     txRespBits.CarrierSenseLost := io.CarrierSenseLost
-    txRespBits.isClear := txAbortPulse | txRetryPulse
+    txRespBits.isClear := txAbortPulse
   }
 
 
@@ -195,7 +191,7 @@ abstract class MacTileLinkBase() extends Module{
 
   when( io.txDeq.req.fire){
     isTxBusy := true.B
-  } .elsewhen(txRetryPulse | txDonePulse | txAbortPulse){
+  } .elsewhen(txDonePulse | txAbortPulse){
     isTxBusy := false.B
   }
 
