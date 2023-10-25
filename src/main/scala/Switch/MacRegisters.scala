@@ -206,7 +206,7 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
           RegField.r(1, 0.U),
           RegField(1, DlyCrcEn, RegFieldDesc( "DlyCrcEn", "DlyCrcEn", reset=Some(0)) ),
           RegField(1, CrcEn   , RegFieldDesc( "CrcEn", "CrcEn",       reset=Some(1)) ),
-          RegField(1, HugEn   , RegFieldDesc( "HugEn", "HugEn",       reset=Some(0)) ),
+          RegField.r(1, 1.U   , RegFieldDesc( "HugEn", "HugEn",       reset=Some(0)) ),
           RegField(1, Pad     , RegFieldDesc( "Pad", "Pad",           reset=Some(1)) ),
           RegField.r(1, 1.U,    RegFieldDesc( "RecSmall", "RecSmall", reset=Some(0)) )
         )),

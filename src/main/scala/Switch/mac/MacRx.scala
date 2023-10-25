@@ -10,7 +10,6 @@ class MacRxIO extends Bundle{
   val MRxDV               = Input(Bool())
   val MRxD                = Input(UInt(4.W))
   val Transmitting        = Input(Bool())
-  val HugEn               = Input(Bool())
   val DlyCrcEn            = Input(Bool())
   val MaxFL               = Input(UInt(16.W))
   val r_IFG               = Input(Bool())
@@ -27,7 +26,6 @@ class MacRxIO extends Bundle{
   val ByteCnt         = Output(UInt(16.W))
   val ByteCntEq0      = Output(Bool())
   val ByteCntGreat2   = Output(Bool())
-  val ByteCntMaxFrame = Output(Bool())
   val CrcError        = Output(Bool())
   val StateIdle       = Output(Bool())
   val StatePreamble   = Output(Bool())
@@ -86,9 +84,9 @@ trait MacRxFSM { this: MacRxBase =>
   val StartPreamble =  io.MRxDV & ~MRxDEq5 & (StateIdle & ~io.Transmitting)
   val StartSFD      =  io.MRxDV &  MRxDEq5 & (StateIdle & ~io.Transmitting | StatePreamble)
   val StartData0    =  io.MRxDV & (StateSFD & MRxDEqD & IFGCounterEq24 | StateData1)
-  val StartData1    =  io.MRxDV & StateData0 & (~io.ByteCntMaxFrame)
+  val StartData1    =  io.MRxDV & StateData0
   val StartDrop     =  io.MRxDV & (
-    (StateIdle & io.Transmitting) | (StateSFD & ~IFGCounterEq24 & MRxDEqD ) | ( StateData0 & io.ByteCntMaxFrame)
+    (StateIdle & io.Transmitting) | (StateSFD & ~IFGCounterEq24 & MRxDEqD )
   )
 
 
@@ -139,7 +137,7 @@ trait MacRxCounter { this: MacRxBase =>
 
   val ByteCntMax = ByteCnt === "hffff".U
 
-  val ResetByteCounter = io.MRxDV & (io.StateSFD & MRxDEqD | io.StateData.extract(0) & io.ByteCntMaxFrame)
+  val ResetByteCounter = io.MRxDV & (io.StateSFD & MRxDEqD)
 
   val IncrementByteCounter =
     ~ResetByteCounter & io.MRxDV & (
@@ -175,9 +173,6 @@ trait MacRxCounter { this: MacRxBase =>
 
   io.ByteCntGreat2   := ByteCnt > 2.U
   ByteCntSmall7      := ByteCnt < 7.U
-
-  io.ByteCntMaxFrame := (ByteCnt === io.MaxFL) & ~io.HugEn;
-
 
   val ResetIFGCounter = io.StateSFD & io.MRxDV & MRxDEqD | StateDrop;
   val IncrementIFGCounter = ~ResetIFGCounter & (StateDrop | io.StateIdle | io.StatePreamble | io.StateSFD) & ~IFGCounterEq24;
@@ -236,7 +231,7 @@ trait MacRxFAddrCheck { this: MacRxBase =>
 trait MacRxCRC { this: MacRxBase =>
 
   val Data_Crc   = Cat(io.MRxD.extract(0),io.MRxD.extract(1),io.MRxD.extract(2),io.MRxD.extract(3))
-  val Enable_Crc = io.MRxDV & (io.StateData.orR & ~io.ByteCntMaxFrame)
+  val Enable_Crc = io.MRxDV & (io.StateData.orR)
   val Initialize_Crc = io.StateSFD | (io.DlyCrcEn & DlyCrcCnt > 0.U & DlyCrcCnt < 9.U)
 
   when( Initialize_Crc ){
@@ -312,8 +307,8 @@ class MacRx extends MacRxBase with MacRxFSM with MacRxCounter with MacRxFAddrChe
   io.RxStartFrm := ShiftRegister(GenerateRxStartFrm, 2, false.B, true.B)
 
 
-  val GenerateRxEndFrm = StateData0 & ((~io.MRxDV & io.ByteCntGreat2) | io.ByteCntMaxFrame)
-  val DribbleRxEndFrm  = StateData1 &   ~io.MRxDV & io.ByteCntGreat2
+  val GenerateRxEndFrm = StateData0 & (~io.MRxDV & io.ByteCntGreat2)
+  val DribbleRxEndFrm  = StateData1 &  ~io.MRxDV & io.ByteCntGreat2
 
   val RxEndFrm_d = RegNext(GenerateRxEndFrm, false.B)
   io.RxEndFrm  := RegNext(RxEndFrm_d | DribbleRxEndFrm, false.B)

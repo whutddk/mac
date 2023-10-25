@@ -144,12 +144,10 @@ val MRxDV_Lb                   = Wire(Bool())
 val MRxErr_Lb                  = Wire(Bool())
 val MRxD_Lb                    = Wire(UInt(4.W))
 val Transmitting               = Wire(Bool())
-val r_HugEn                    = Wire(Bool())
 val r_DlyCrcEn                 = Wire(Bool())
 val r_MaxFL                    = Wire(UInt(16.W))
 val r_MinFL                    = Wire(UInt(16.W))
 val DribbleNibble              = Wire(Bool())
-val ReceivedPacketTooBig       = Wire(Bool())
 val r_MAC                      = Wire(UInt(48.W))
 val LoadRxStatus               = Wire(Bool())
 val r_HASH0                    = Wire(UInt(32.W))
@@ -203,12 +201,10 @@ dontTouch(MRxDV_Lb                   )
 dontTouch(MRxErr_Lb                  )
 dontTouch(MRxD_Lb                    )
 dontTouch(Transmitting               )
-dontTouch(r_HugEn                    )
 dontTouch(r_DlyCrcEn                 )
 dontTouch(r_MaxFL                    )
 dontTouch(r_MinFL                    )
 dontTouch(DribbleNibble              )
-dontTouch(ReceivedPacketTooBig       )
 dontTouch(r_MAC                      )
 dontTouch(LoadRxStatus               )
 dontTouch(r_HASH0                    )
@@ -283,7 +279,6 @@ io.cfg.RxClk               := io.mii.mrx_clk_pad_i
 io.cfg.SetPauseTimer       := SetPauseTimer
 
 r_Pad       := io.cfg.r_Pad
-r_HugEn     := io.cfg.r_HugEn
 r_CrcEn     := io.cfg.r_CrcEn
 r_DlyCrcEn  := io.cfg.r_DlyCrcEn
 r_FullD     := io.cfg.r_FullD
@@ -440,7 +435,6 @@ txethmac.io.Collision       := Collision
 txethmac.io.Pad             := PadOut
 txethmac.io.CrcEn           := CrcEnOut
 txethmac.io.FullD           := r_FullD
-txethmac.io.HugEn           := r_HugEn
 txethmac.io.DlyCrcEn        := r_DlyCrcEn
 txethmac.io.MinFL           := r_MinFL
 txethmac.io.MaxFL           := r_MaxFL
@@ -473,7 +467,6 @@ StateData := txethmac.io.StateData
 val RxByteCnt         = Wire(UInt(16.W))
 val RxByteCntEq0      = Wire(Bool())
 val RxByteCntGreat2   = Wire(Bool())
-val RxByteCntMaxFrame = Wire(Bool())
 val RxCrcError        = Wire(Bool())
 val RxStateIdle       = Wire(Bool())
 val RxStatePreamble   = Wire(Bool())
@@ -485,7 +478,6 @@ val AddressMiss       = Wire(Bool())
 dontTouch(RxByteCnt        )
 dontTouch(RxByteCntEq0     )
 dontTouch(RxByteCntGreat2  )
-dontTouch(RxByteCntMaxFrame)
 dontTouch(RxCrcError       )
 dontTouch(RxStateIdle      )
 dontTouch(RxStatePreamble  )
@@ -498,7 +490,6 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   rxethmac.io.MRxDV               := MRxDV_Lb
   rxethmac.io.MRxD                := MRxD_Lb
   rxethmac.io.Transmitting        := Transmitting
-  rxethmac.io.HugEn               := r_HugEn
   rxethmac.io.DlyCrcEn            := r_DlyCrcEn
   rxethmac.io.MaxFL               := r_MaxFL
   rxethmac.io.r_IFG               := r_IFG
@@ -515,7 +506,6 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   RxByteCnt         := rxethmac.io.ByteCnt
   RxByteCntEq0      := rxethmac.io.ByteCntEq0
   RxByteCntGreat2   := rxethmac.io.ByteCntGreat2
-  RxByteCntMaxFrame := rxethmac.io.ByteCntMaxFrame
   RxCrcError        := rxethmac.io.CrcError
   RxStateIdle       := rxethmac.io.StateIdle
   RxStatePreamble   := rxethmac.io.StatePreamble
@@ -609,13 +599,11 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   macstatus.io.RxByteCnt           := RxByteCnt
   macstatus.io.RxByteCntEq0        := RxByteCntEq0
   macstatus.io.RxByteCntGreat2     := RxByteCntGreat2
-  macstatus.io.RxByteCntMaxFrame   := RxByteCntMaxFrame
   macstatus.io.MRxD                := MRxD_Lb
   macstatus.io.Collision           := io.mii.mcoll_pad_i
   macstatus.io.CollValid           := r_CollValid
   macstatus.io.r_MinFL             := r_MinFL
   macstatus.io.r_MaxFL             := r_MaxFL
-  macstatus.io.r_HugEn             := r_HugEn
   macstatus.io.StartTxDone         := StartTxDone
   macstatus.io.StartTxAbort        := StartTxAbort
   macstatus.io.MTxClk              := io.mii.mtx_clk_pad_i
@@ -636,7 +624,6 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   LatchedCrcError      := macstatus.io.LatchedCrcError
   RxLateCollision      := macstatus.io.RxLateCollision
   DribbleNibble        := macstatus.io.DribbleNibble
-  ReceivedPacketTooBig := macstatus.io.ReceivedPacketTooBig
   LoadRxStatus         := macstatus.io.LoadRxStatus
   RetryLimit           := macstatus.io.RetryLimit
   LateCollLatched      := macstatus.io.LateCollLatched
@@ -760,7 +747,7 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
 
   macTileLinkRx.io.RxLength     := RxByteCnt
   macTileLinkRx.io.LoadRxStatus := LoadRxStatus
-  macTileLinkRx.io.RxStatusIn   := Cat(ReceivedPauseFrm, AddressMiss, false.B, false.B, DribbleNibble, ReceivedPacketTooBig, false.B, LatchedCrcError, RxLateCollision)
+  macTileLinkRx.io.RxStatusIn   := Cat(ReceivedPauseFrm, AddressMiss, false.B, false.B, DribbleNibble, false.B, false.B, LatchedCrcError, RxLateCollision)
 
 
   wishbone.io.rxEnq <> io.rxEnq

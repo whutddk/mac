@@ -14,7 +14,6 @@ class MacTxIO extends Bundle{
   val Pad             = Input(Bool())         // Pad enable (from register)
   val CrcEn           = Input(Bool())         // Crc enable (from register)
   val FullD           = Input(Bool())         // Full duplex (from register)
-  val HugEn           = Input(Bool())         // Huge packets enable (from register)
   val DlyCrcEn        = Input(Bool())         // Delayed Crc enabled (from register)
   val MinFL           = Input(UInt(16.W))         // Minimum frame length (from register)
   val MaxFL           = Input(UInt(16.W))         // Maximum frame length (from register)
@@ -60,15 +59,11 @@ abstract class MacTxBase extends Module with RequireAsyncReset{
 
   val StateSFD              = Wire(Bool())
 
-  val TooBig                = Wire(Bool())
-
   val CrcError              = Wire(Bool())
 
 
   val NibbleMinFl           = Wire(Bool())
   val ExcessiveDefer        = Wire(Bool())
-
-  val MaxFrame              = Wire(Bool())
 
   val StateIPG  = RegInit(false.B)
   val StateIdle = RegInit(false.B)
@@ -103,7 +98,7 @@ trait MacTxFSM { this: MacTxBase =>
   StartPreamble := StateIdle & io.TxStartFrm & ~io.CarrierSense
 
   StartData(0) := ~io.Collision & (StatePreamble & NibCntEq15 | StateData(1) & ~io.TxEndFrm)
-  StartData(1) := ~io.Collision & StateData(0) & ~MaxFrame
+  StartData(1) := ~io.Collision & StateData(0)
 
   val StartPAD = ~io.Collision & StateData(1) & io.TxEndFrm & io.Pad & ~NibbleMinFl
 
@@ -117,8 +112,7 @@ trait MacTxFSM { this: MacTxBase =>
     (StateIPG & ~Rule1 & io.CarrierSense & NibCnt(6,0) <= io.IPGR1 & NibCnt(6,0) =/= io.IPGR2) |
     (StateIdle & io.CarrierSense) |
     (StateJam & NibCntEq7) |
-    io.StartTxDone |
-    TooBig
+    io.StartTxDone
 
   io.DeferIndication := StateIdle & io.CarrierSense
 
@@ -219,8 +213,6 @@ trait MacTxCounter { this: MacTxBase =>
   } .elsewhen(IncrementByteCnt){
     ByteCnt := ByteCnt + 1.U
   }
-
-  MaxFrame := (ByteCnt === io.MaxFL) & ~io.HugEn;
        
   when((StateData(1) & DlyCrcCnt === 4.U) | StartJam | PacketFinished_q){
     DlyCrcCnt := 0.U
@@ -300,7 +292,7 @@ class MacTx extends MacTxBase with MacTxFSM with MacTxCounter with MacTxCRC {
   val TxAbort = RegInit(false.B); io.TxAbort := TxAbort
 
   val MTxEn = RegNext(StatePreamble | (StateData(0) | StateData(1)) | StatePAD | StateFCS | StateJam, false.B); io.MTxEn := MTxEn
-  val MTxErr = RegNext( TooBig, false.B); io.MTxErr := MTxErr// Transmit error
+  io.MTxErr := false.B
 
   val WillTransmit = RegNext(StartPreamble | StatePreamble | (StateData(0) | StateData(1)) | StatePAD | StateFCS | StateJam, false.B); io.WillTransmit := WillTransmit// WillTransmit
 
@@ -309,11 +301,10 @@ class MacTx extends MacTxBase with MacTxFSM with MacTxCounter with MacTxCRC {
   io.ResetCollision := ~(StatePreamble | (StateData(0) | StateData(1)) | StatePAD | StateFCS)
   val ExcessiveDeferOccured = io.TxStartFrm & StateDefer & ExcessiveDefer & ~StopExcessiveDeferOccured
   io.StartTxDone := ~io.Collision & (StateFCS & NibCntEq7 | StateData(1) & io.TxEndFrm & (~io.Pad | io.Pad & NibbleMinFl) & ~io.CrcEn)
-  TooBig := ~io.Collision & MaxFrame & (StateData(0) | StateFCS);
   io.LateCollision := StartJam & ~ColWindow
   io.MaxCollisionOccured := StartJam & ColWindow;
   StateSFD := StatePreamble & NibCntEq15;
-  io.StartTxAbort := TooBig | ExcessiveDeferOccured | io.LateCollision | io.MaxCollisionOccured
+  io.StartTxAbort := ExcessiveDeferOccured | io.LateCollision | io.MaxCollisionOccured
 
   when(~io.TxStartFrm){
     StopExcessiveDeferOccured := false.B
@@ -373,7 +364,7 @@ class MacTx extends MacTxBase with MacTxFSM with MacTxCounter with MacTxCRC {
       )
   }
 
-  val PacketFinished_d = io.StartTxDone | TooBig | io.LateCollision | io.MaxCollisionOccured | ExcessiveDeferOccured;
+  val PacketFinished_d = io.StartTxDone | io.LateCollision | io.MaxCollisionOccured | ExcessiveDeferOccured;
   val PacketFinished = RegNext(PacketFinished_d, false.B)
   when(true.B){
     PacketFinished_q := PacketFinished

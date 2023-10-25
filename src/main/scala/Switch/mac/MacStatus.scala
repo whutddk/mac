@@ -18,13 +18,11 @@ class MacStatusIO extends Bundle{
   val RxByteCnt           = Input(UInt(16.W))
   val RxByteCntEq0        = Input(Bool())
   val RxByteCntGreat2     = Input(Bool())
-  val RxByteCntMaxFrame   = Input(Bool())
   val MRxD                = Input(UInt(4.W))
   val Collision           = Input(Bool())
   val CollValid           = Input(UInt(6.W))
   val r_MinFL             = Input(UInt(16.W))
   val r_MaxFL             = Input(UInt(16.W))
-  val r_HugEn             = Input(Bool())
   val StartTxDone         = Input(Bool())
   val StartTxAbort        = Input(Bool())
   val MTxClk              = Input(Bool())
@@ -45,7 +43,6 @@ class MacStatusIO extends Bundle{
   val LatchedCrcError      = Output(Bool())
   val RxLateCollision      = Output(Bool())
   val DribbleNibble        = Output(Bool())
-  val ReceivedPacketTooBig = Output(Bool())
   val LoadRxStatus         = Output(Bool())
   val RetryLimit           = Output(Bool())
   val LateCollLatched      = Output(Bool())
@@ -73,9 +70,7 @@ class MacStatus extends RawModule{
 
     // Time to take a sample
     val TakeSample =
-      (io.RxStateData.orR & ~io.MRxDV) |
-      (io.RxStateData.extract(0) & io.MRxDV & io.RxByteCntMaxFrame)
-
+      (io.RxStateData.orR & ~io.MRxDV)
     
     val LoadRxStatus = RegNext(TakeSample, false.B); io.LoadRxStatus := LoadRxStatus // LoadRxStatus
     val ReceiveEnd = RegNext(LoadRxStatus, false.B); io.ReceiveEnd := ReceiveEnd     // ReceiveEnd
@@ -109,16 +104,6 @@ class MacStatus extends RawModule{
     } .elsewhen(~io.MRxDV & io.RxStateData.extract(1)){
       DribbleNibble := true.B
     }
-
-
-    val ReceivedPacketTooBig = RegInit(false.B); io.ReceivedPacketTooBig := ReceivedPacketTooBig
-
-    when(LoadRxStatus){
-      ReceivedPacketTooBig := false.B
-    } .elsewhen(TakeSample){
-      ReceivedPacketTooBig := ~io.r_HugEn & io.RxByteCnt > io.r_MaxFL
-    }
-
 
   }
 
