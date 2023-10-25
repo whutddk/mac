@@ -13,10 +13,8 @@ class MacRxIO extends Bundle{
   val DlyCrcEn            = Input(Bool())
   val MaxFL               = Input(UInt(16.W))
   val r_IFG               = Input(Bool())
-  val MAC                 = Input(UInt(48.W))     //  Station Address  
   val r_HASH0             = Input(UInt(32.W)) //  lower 4 bytes Hash Table
   val r_HASH1             = Input(UInt(32.W)) //  upper 4 bytes Hash Table
-  val ControlFrmAddressOK = Input(Bool())
 
   val RxData          = Output(UInt(8.W))
   val RxValid         = Output(Bool())
@@ -30,7 +28,6 @@ class MacRxIO extends Bundle{
   val StatePreamble   = Output(Bool())
   val StateSFD        = Output(Bool())
   val StateData       = Output(UInt(2.W))
-  val AddressMiss     = Output(Bool())
 }
 
 
@@ -192,9 +189,7 @@ trait MacRxFAddrCheck { this: MacRxBase =>
 
   val RxCheckEn   = io.StateData.orR
 
-  val AddressMiss = RegInit(false.B) // This ff holds the "Address Miss" information that is written to the RX BD status. 
 
-  io.AddressMiss := AddressMiss
 
 
 
@@ -202,11 +197,7 @@ trait MacRxFAddrCheck { this: MacRxBase =>
   val CrcHash = RegInit(0.U(6.W))
   val CrcHashGood = RegNext(StateData0 & ByteCntEq6) // Latching CRC for use in the hash table
 
-  when(ByteCntEq0){
-    AddressMiss := false.B
-  } .elsewhen(ByteCntEq7 & RxCheckEn){
-    AddressMiss := (~((io.ControlFrmAddressOK)));    
-  }
+
    
   val IntHash = Mux(CrcHash.extract(5), io.r_HASH1, io.r_HASH0)
   val ByteHash = 

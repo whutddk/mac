@@ -87,7 +87,6 @@ val TxUsedData = Wire(Bool())
 val TxData     = Wire(UInt(8.W))
 val TxAbort    = Wire(Bool())
 val TxDone     = Wire(Bool())
-val TPauseRq = Wire(Bool())
 
 dontTouch(TxStartFrm)
 dontTouch(TxEndFrm  )
@@ -95,9 +94,6 @@ dontTouch(TxUsedData)
 dontTouch(TxData    )
 dontTouch(TxAbort   )
 dontTouch(TxDone    )
-dontTouch(TPauseRq  )
-
-val RstTxPauseRq = RegInit(false.B)
 
 
 
@@ -148,19 +144,14 @@ val r_DlyCrcEn                 = Wire(Bool())
 val r_MaxFL                    = Wire(UInt(16.W))
 val r_MinFL                    = Wire(UInt(16.W))
 val DribbleNibble              = Wire(Bool())
-val r_MAC                      = Wire(UInt(48.W))
 val LoadRxStatus               = Wire(Bool())
 val r_HASH0                    = Wire(UInt(32.W))
 val r_HASH1                    = Wire(UInt(32.W))
-val r_TxBDNum                  = Wire(UInt(8.W))
 val r_IPGT                     = Wire(UInt(7.W))
 val r_IPGR1                    = Wire(UInt(7.W))
 val r_IPGR2                    = Wire(UInt(7.W))
 val r_CollValid                = Wire(UInt(6.W))
-val r_TxPauseTV                = Wire(UInt(16.W))
-val r_TxPauseRq                = Wire(Bool())
 val r_ExDfrEn                  = Wire(Bool())
-val r_TxFlow                   = Wire(Bool())
 val r_IFG                      = Wire(Bool())
 val TxB_IRQ                    = Wire(Bool())
 val TxE_IRQ                    = Wire(Bool())
@@ -171,22 +162,9 @@ val r_Pad                      = Wire(Bool())
 val r_CrcEn                    = Wire(Bool())
 val r_FullD                    = Wire(Bool())
 val r_NoPre                    = Wire(Bool())
-val r_RxFlow                   = Wire(Bool())
-val TxCtrlEndFrm               = Wire(Bool())
 val StartTxDone                = Wire(Bool())
-val SetPauseTimer              = Wire(Bool())
-val TxUsedDataIn               = Wire(Bool())
-val TxDoneIn                   = Wire(Bool())
-val TxAbortIn                  = Wire(Bool())
 val PerPacketPad               = Wire(Bool())
-val PadOut                     = Wire(Bool())
 val PerPacketCrcEn             = Wire(Bool())
-val CrcEnOut                   = Wire(Bool())
-val TxStartFrmOut              = Wire(Bool())
-val TxEndFrmOut                = Wire(Bool())
-val ReceivedPauseFrm           = Wire(Bool())
-val ControlFrmAddressOK        = Wire(Bool())
-val RxStatusWriteLatchedSync   = Wire(Bool())
 val LateCollision              = Wire(Bool())
 val DeferIndication            = Wire(Bool())
 val LateCollLatched            = Wire(Bool())
@@ -205,19 +183,14 @@ dontTouch(r_DlyCrcEn                 )
 dontTouch(r_MaxFL                    )
 dontTouch(r_MinFL                    )
 dontTouch(DribbleNibble              )
-dontTouch(r_MAC                      )
 dontTouch(LoadRxStatus               )
 dontTouch(r_HASH0                    )
 dontTouch(r_HASH1                    )
-dontTouch(r_TxBDNum                  )
 dontTouch(r_IPGT                     )
 dontTouch(r_IPGR1                    )
 dontTouch(r_IPGR2                    )
 dontTouch(r_CollValid                )
-dontTouch(r_TxPauseTV                )
-dontTouch(r_TxPauseRq                )
 dontTouch(r_ExDfrEn                  )
-dontTouch(r_TxFlow                   )
 dontTouch(r_IFG                      )
 dontTouch(TxB_IRQ                    )
 dontTouch(TxE_IRQ                    )
@@ -228,22 +201,9 @@ dontTouch(r_Pad                      )
 dontTouch(r_CrcEn                    )
 dontTouch(r_FullD                    )
 dontTouch(r_NoPre                    )
-dontTouch(r_RxFlow                   )
-dontTouch(TxCtrlEndFrm               )
 dontTouch(StartTxDone                )
-dontTouch(SetPauseTimer              )
-dontTouch(TxUsedDataIn               )
-dontTouch(TxDoneIn                   )
-dontTouch(TxAbortIn                  )
 dontTouch(PerPacketPad               )
-dontTouch(PadOut                     )
 dontTouch(PerPacketCrcEn             )
-dontTouch(CrcEnOut                   )
-dontTouch(TxStartFrmOut              )
-dontTouch(TxEndFrmOut                )
-dontTouch(ReceivedPauseFrm           )
-dontTouch(ControlFrmAddressOK        )
-dontTouch(RxStatusWriteLatchedSync )
 dontTouch(LateCollision              )
 dontTouch(DeferIndication            )
 dontTouch(LateCollLatched            )
@@ -253,9 +213,6 @@ dontTouch(CarrierSenseLost           )
 
 
 
-
-
-// val ethReg = Module(new MacReg(outer.configNode))
 
 
 
@@ -271,12 +228,9 @@ io.cfg.TxE_IRQ             := TxE_IRQ
 io.cfg.RxB_IRQ             := RxB_IRQ
 io.cfg.RxE_IRQ             := RxE_IRQ
 io.cfg.Busy_IRQ            := Busy_IRQ
-io.cfg.RstTxPauseRq        := RstTxPauseRq
-io.cfg.TxCtrlEndFrm        := TxCtrlEndFrm
 io.cfg.StartTxDone         := StartTxDone
 io.cfg.TxClk               := io.mii.mtx_clk_pad_i
 io.cfg.RxClk               := io.mii.mrx_clk_pad_i
-io.cfg.SetPauseTimer       := SetPauseTimer
 
 r_Pad       := io.cfg.r_Pad
 r_CrcEn     := io.cfg.r_CrcEn
@@ -296,8 +250,6 @@ r_IPGR2     := io.cfg.r_IPGR2
 r_MinFL     := io.cfg.r_MinFL
 r_MaxFL     := io.cfg.r_MaxFL
 r_CollValid := io.cfg.r_CollValid
-r_TxFlow    := io.cfg.r_TxFlow
-r_RxFlow    := io.cfg.r_RxFlow
 r_MiiNoPre  := io.cfg.r_MiiNoPre
 r_ClkDiv    := io.cfg.r_ClkDiv
 r_WCtrlData := io.cfg.r_WCtrlData
@@ -306,11 +258,6 @@ r_ScanStat  := io.cfg.r_ScanStat
 r_RGAD      := io.cfg.r_RGAD
 r_FIAD      := io.cfg.r_FIAD
 r_CtrlData  := io.cfg.r_CtrlData
-r_MAC       := io.cfg.r_MAC
-r_TxBDNum   := io.cfg.r_TxBDNum
-r_TxPauseTV := io.cfg.r_TxPauseTV
-r_TxPauseRq := io.cfg.r_TxPauseRq
-
 
 
 
@@ -320,11 +267,6 @@ val RxStartFrm           = Wire(Bool())
 val RxEndFrm             = Wire(Bool())
 val WillTransmit         = Wire(Bool())
 val ResetCollision       = Wire(Bool())
-val TxDataOut            = Wire(UInt(8.W))
-val WillSendControlFrame = Wire(Bool())
-val ReceiveEnd           = Wire(Bool())
-val ReceivedPacketGood   = Wire(Bool())
-val ReceivedLengthOK     = Wire(Bool())
 val LatchedCrcError      = Wire(Bool())
 val RxLateCollision      = Wire(Bool())
 val StartTxAbort         = Wire(Bool())
@@ -339,11 +281,6 @@ dontTouch(RxStartFrm          )
 dontTouch(RxEndFrm            )
 dontTouch(WillTransmit        )
 dontTouch(ResetCollision      )
-dontTouch(TxDataOut           )
-dontTouch(WillSendControlFrame)
-dontTouch(ReceiveEnd          )
-dontTouch(ReceivedPacketGood  )
-dontTouch(ReceivedLengthOK    )
 dontTouch(LatchedCrcError     )
 dontTouch(RxLateCollision     )
 dontTouch(StartTxAbort        )
@@ -353,49 +290,24 @@ dontTouch(StatePreamble       )
 dontTouch(StateData           )
 
 
-// Connecting MACControl
-val maccontrol = Module(new MacControl)
 
-maccontrol.io.MTxClk                     := io.mii.mtx_clk_pad_i
-maccontrol.io.MRxClk                     := io.mii.mrx_clk_pad_i
-maccontrol.io.asyncReset                 := io.asyncReset
 
-maccontrol.io.TPauseRq                   := TPauseRq
-maccontrol.io.TxDataIn                   := TxData
-maccontrol.io.TxStartFrmIn               := TxStartFrm
-maccontrol.io.TxUsedDataIn               := TxUsedDataIn
-maccontrol.io.TxEndFrmIn                 := TxEndFrm
-maccontrol.io.TxDoneIn                   := TxDoneIn
-maccontrol.io.TxAbortIn                  := TxAbortIn
-maccontrol.io.PadIn                      := r_Pad | PerPacketPad
-maccontrol.io.CrcEnIn                    := r_CrcEn | PerPacketCrcEn
-maccontrol.io.RxData                     := RxData
-maccontrol.io.RxValid                    := RxValid
-maccontrol.io.RxStartFrm                 := RxStartFrm
-maccontrol.io.RxEndFrm                   := RxEndFrm
-maccontrol.io.ReceiveEnd                 := ReceiveEnd
-maccontrol.io.ReceivedPacketGood         := ReceivedPacketGood
-maccontrol.io.ReceivedLengthOK           := ReceivedLengthOK
-maccontrol.io.TxFlow                     := r_TxFlow
-maccontrol.io.RxFlow                     := r_RxFlow
-maccontrol.io.DlyCrcEn                   := r_DlyCrcEn
-maccontrol.io.TxPauseTV                  := r_TxPauseTV
-maccontrol.io.MAC                        := r_MAC
-maccontrol.io.RxStatusWriteLatched_sync2 := RxStatusWriteLatchedSync
 
-TxDataOut := maccontrol.io.TxDataOut
-TxStartFrmOut := maccontrol.io.TxStartFrmOut
-TxEndFrmOut := maccontrol.io.TxEndFrmOut
-TxDone := maccontrol.io.TxDoneOut
-TxAbort := maccontrol.io.TxAbortOut
-TxUsedData := maccontrol.io.TxUsedDataOut
-PadOut := maccontrol.io.PadOut
-CrcEnOut := maccontrol.io.CrcEnOut
-WillSendControlFrame := maccontrol.io.WillSendControlFrame
-TxCtrlEndFrm := maccontrol.io.TxCtrlEndFrm
-ReceivedPauseFrm := maccontrol.io.ReceivedPauseFrm
-ControlFrmAddressOK := maccontrol.io.ControlFrmAddressOK
-SetPauseTimer := maccontrol.io.SetPauseTimer
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -427,13 +339,13 @@ MRxD_Lb := Mux(r_LoopBck, io.mii.mtxd_pad_o, io.mii.mrxd_pad_i)
 
 val txethmac = withClockAndReset(io.mii.mtx_clk_pad_i.asClock, io.asyncReset)( Module(new MacTx))
 
-txethmac.io.TxStartFrm      := TxStartFrmOut
-txethmac.io.TxEndFrm        := TxEndFrmOut
-txethmac.io.TxData          := TxDataOut
+txethmac.io.TxStartFrm      := TxStartFrm
+txethmac.io.TxEndFrm        := TxEndFrm
+txethmac.io.TxData          := TxData
 txethmac.io.CarrierSense    := TxCarrierSense
 txethmac.io.Collision       := Collision
-txethmac.io.Pad             := PadOut
-txethmac.io.CrcEn           := CrcEnOut
+txethmac.io.Pad             := r_Pad | PerPacketPad
+txethmac.io.CrcEn           := r_CrcEn | PerPacketCrcEn
 txethmac.io.FullD           := r_FullD
 txethmac.io.DlyCrcEn        := r_DlyCrcEn
 txethmac.io.MinFL           := r_MinFL
@@ -447,9 +359,9 @@ txethmac.io.ExDfrEn         := r_ExDfrEn
 io.mii.mtxd_pad_o    := txethmac.io.MTxD
 io.mii.mtxen_pad_o   := txethmac.io.MTxEn
 io.mii.mtxerr_pad_o := txethmac.io.MTxErr
-TxDoneIn := txethmac.io.TxDone
+TxDone := txethmac.io.TxDone
 TxAbortIn := txethmac.io.TxAbort
-TxUsedDataIn := txethmac.io.TxUsedData
+TxUsedData := txethmac.io.TxUsedData
 WillTransmit := txethmac.io.WillTransmit
 ResetCollision := txethmac.io.ResetCollision
 StartTxDone := txethmac.io.StartTxDone
@@ -472,7 +384,6 @@ val RxStateIdle       = Wire(Bool())
 val RxStatePreamble   = Wire(Bool())
 val RxStateSFD        = Wire(Bool())
 val RxStateData       = Wire(UInt(2.W))
-val AddressMiss       = Wire(Bool())
 
 
 dontTouch(RxByteCnt        )
@@ -483,7 +394,7 @@ dontTouch(RxStateIdle      )
 dontTouch(RxStatePreamble  )
 dontTouch(RxStateSFD       )
 dontTouch(RxStateData      )
-dontTouch(AddressMiss      )
+
 
 val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( Module(new MacRx))
 
@@ -493,10 +404,8 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   rxethmac.io.DlyCrcEn            := r_DlyCrcEn
   rxethmac.io.MaxFL               := r_MaxFL
   rxethmac.io.r_IFG               := r_IFG
-  rxethmac.io.MAC                 := r_MAC
   rxethmac.io.r_HASH0             := r_HASH0
   rxethmac.io.r_HASH1             := r_HASH1
-  rxethmac.io.ControlFrmAddressOK := ControlFrmAddressOK
 
   RxData            := rxethmac.io.RxData
   RxValid           := rxethmac.io.RxValid
@@ -510,7 +419,7 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   RxStatePreamble   := rxethmac.io.StatePreamble
   RxStateSFD        := rxethmac.io.StateSFD
   RxStateData       := rxethmac.io.StateData
-  AddressMiss       := rxethmac.io.AddressMiss
+
 
 
   withClockAndReset( io.mii.mtx_clk_pad_i.asClock, reset.asAsyncReset ) {
@@ -545,21 +454,6 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   }
 
 
-
-
-  // Synchronizing WillSendControlFrame to WB_CLK;
-  val WillSendControlFrame_sync = ShiftRegisters(WillSendControlFrame, 3, false.B, true.B)
-
-  when(true.B){
-    RstTxPauseRq := WillSendControlFrame_sync(1) & ~WillSendControlFrame_sync(2)    
-  }
-
-
-  withClockAndReset( io.mii.mtx_clk_pad_i.asClock, reset.asAsyncReset ) {
-    val TxPauseRq_sync = ShiftRegisters((r_TxPauseRq & r_TxFlow), 3, false.B, true.B )
-
-    TPauseRq := RegNext( TxPauseRq_sync(1) & (~TxPauseRq_sync(2)), false.B )
-  }
 
 
   val wishbone = Module(new MacTileLink)
@@ -609,7 +503,7 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   macstatus.io.MaxCollisionOccured := MaxCollisionOccured
   macstatus.io.LateCollision       := LateCollision
   macstatus.io.DeferIndication     := DeferIndication
-  macstatus.io.TxStartFrm          := TxStartFrmOut
+  macstatus.io.TxStartFrm          := TxStartFrm
   macstatus.io.StatePreamble       := StatePreamble
   macstatus.io.StateData           := StateData
   macstatus.io.CarrierSense        := CarrierSense_Tx2
@@ -617,9 +511,6 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   macstatus.io.r_FullD             := r_FullD
   macstatus.io.RstDeferLatched     := RstDeferLatched
 
-  ReceivedLengthOK     := macstatus.io.ReceivedLengthOK
-  ReceiveEnd           := macstatus.io.ReceiveEnd
-  ReceivedPacketGood   := macstatus.io.ReceivedPacketGood
   LatchedCrcError      := macstatus.io.LatchedCrcError
   RxLateCollision      := macstatus.io.RxLateCollision
   DribbleNibble        := macstatus.io.DribbleNibble
@@ -731,7 +622,6 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   Busy_IRQ := Busy_IRQ_sync & ~RegNext(Busy_IRQ_sync, false.B)
 
   withClockAndReset( io.mii.mrx_clk_pad_i.asClock, io.asyncReset ) {
-    RxStatusWriteLatchedSync         := fateRxRespPort.fire
     macTileLinkRx.io.Busy_IRQ_syncb  := ShiftRegister( Busy_IRQ_sync,  2, false.B, true.B )
 
     macTileLinkRx.io.RxReady  := ShiftRegister( wishbone.io.RxReady, 2, false.B, true.B )
@@ -746,7 +636,7 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
 
   macTileLinkRx.io.RxLength     := RxByteCnt
   macTileLinkRx.io.LoadRxStatus := LoadRxStatus
-  macTileLinkRx.io.RxStatusIn   := Cat(ReceivedPauseFrm, AddressMiss, false.B, false.B, DribbleNibble, false.B, false.B, LatchedCrcError, RxLateCollision)
+  macTileLinkRx.io.RxStatusIn   := Cat(false.B, false.B, false.B, false.B, DribbleNibble, false.B, false.B, LatchedCrcError, RxLateCollision)
 
 
   wishbone.io.rxEnq <> io.rxEnq

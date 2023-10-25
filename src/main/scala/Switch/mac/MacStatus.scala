@@ -37,9 +37,6 @@ class MacStatusIO extends Bundle{
   val r_FullD             = Input(Bool())
   val RstDeferLatched     = Input(Bool())
 
-  val ReceivedLengthOK     = Output(Bool())
-  val ReceiveEnd           = Output(Bool())
-  val ReceivedPacketGood   = Output(Bool())
   val LatchedCrcError      = Output(Bool())
   val RxLateCollision      = Output(Bool())
   val DribbleNibble        = Output(Bool())
@@ -64,16 +61,11 @@ class MacStatus extends RawModule{
     }
 
 
-
-    io.ReceivedPacketGood := ~LatchedCrcError                                        // ReceivedPacketGood
-    io.ReceivedLengthOK := io.RxByteCnt >= io.r_MinFL & io.RxByteCnt <= io.r_MaxFL   // ReceivedLengthOK
-
     // Time to take a sample
     val TakeSample =
       (io.RxStateData.orR & ~io.MRxDV)
     
     val LoadRxStatus = RegNext(TakeSample, false.B); io.LoadRxStatus := LoadRxStatus // LoadRxStatus
-    val ReceiveEnd = RegNext(LoadRxStatus, false.B); io.ReceiveEnd := ReceiveEnd     // ReceiveEnd
 
 
 

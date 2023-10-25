@@ -280,15 +280,14 @@ trait MacTxCRC{ this: MacTxBase =>
 
 }
 
-
 class MacTx extends MacTxBase with MacTxFSM with MacTxCounter with MacTxCRC {
   val MTxD = RegInit(0.U(4.W)); io.MTxD := MTxD
   val StopExcessiveDeferOccured = RegInit(false.B)
 
   val StatusLatch = RegInit(false.B)
   val TxUsedData  = RegNext(StartData(0) | StartData(1), false.B); io.TxUsedData := TxUsedData
-  val TxDone = RegInit(false.B); io.TxDone := TxDone
-  val TxAbort = RegInit(false.B); io.TxAbort := TxAbort
+  val TxDone = RegInit(false.B);  io.TxDone  := ~io.TxStartFrm & TxDone
+  val TxAbort = RegInit(false.B); io.TxAbort := ~io.TxStartFrm & TxAbort
 
   val MTxEn = RegNext(StatePreamble | (StateData(0) | StateData(1)) | StatePAD | StateFCS | StateJam, false.B); io.MTxEn := MTxEn
   io.MTxErr := false.B

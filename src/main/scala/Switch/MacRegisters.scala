@@ -22,12 +22,9 @@ class Mac_Config_Bundle extends Bundle{
   val RxB_IRQ             = Input(Bool())
   val RxE_IRQ             = Input(Bool())
   val Busy_IRQ            = Input(Bool())
-  val RstTxPauseRq        = Input(Bool())
-  val TxCtrlEndFrm        = Input(Bool())
   val StartTxDone         = Input(Bool())
   val TxClk               = Input(Bool())
   val RxClk               = Input(Bool())
-  val SetPauseTimer       = Input(Bool())
 
   val r_Pad       = Output(Bool())
   val r_HugEn     = Output(Bool())
@@ -48,8 +45,6 @@ class Mac_Config_Bundle extends Bundle{
   val r_MinFL     = Output(UInt(16.W))
   val r_MaxFL     = Output(UInt(16.W))
   val r_CollValid = Output(UInt(6.W))
-  val r_TxFlow    = Output(Bool())
-  val r_RxFlow    = Output(Bool())
   val r_MiiNoPre  = Output(Bool())
   val r_ClkDiv    = Output(UInt(8.W))
   val r_WCtrlData = Output(Bool())
@@ -58,10 +53,6 @@ class Mac_Config_Bundle extends Bundle{
   val r_RGAD      = Output(UInt(5.W))
   val r_FIAD      = Output(UInt(5.W))
   val r_CtrlData  = Output(UInt(16.W))
-  val r_MAC       = Output(UInt(48.W))
-  val r_TxBDNum   = Output(UInt(8.W))
-  val r_TxPauseTV = Output(UInt(16.W))
-  val r_TxPauseRq = Output(Bool())
 
 
 }
@@ -123,9 +114,6 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
     val irq_rxb  = RegInit(false.B)
     val irq_rxe  = RegInit(false.B)
     val irq_busy = RegInit(false.B)
-    val irq_txc  = RegInit(false.B)
-    val irq_rxc  = RegInit(false.B)
-
     
 
 
@@ -139,11 +127,6 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
     val minFL = RegInit("h0040".U(16.W))
 
     val collValid = RegInit("h3f".U(6.W))
-
-    val TX_BD_NUM = RegInit("h40".U(8.W))        // TX_BD_NUM Register
-
-    val txFlow  = RegInit(false.B)
-    val rxFlow  = RegInit(false.B)
 
     val clkDiv = RegInit("h64".U(8.W))
     val miiNoPre = RegInit(false.B)
@@ -163,16 +146,13 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
 
     val MIIRX_DATA = RegEnable(io.Prsd, 0.U(16.W), io.UpdateMIIRX_DATAReg)        // MIIRX_DATA Register
 
-    val Mac_ADDR0 = RegInit(0.U(32.W))
-    val Mac_ADDR1 = RegInit(0.U(16.W))
+
 
     val HASH0 = RegInit(0.U(32.W))
     val HASH1 = RegInit(0.U(32.W))
 
-    val txPauseRq = RegInit(false.B)
-    val txPauseTV = RegInit(0.U(16.W))
 
-    when( io.RstTxPauseRq ){ txPauseRq := false.B }
+
 
     val txPtr = RegInit( "h80002000".U(32.W))
     val rxPtr = RegInit( "h80002000".U(32.W))
@@ -216,8 +196,8 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
           RegField(1, irq_rxb,  RegWriteFn((valid, data) => { when ((valid & data) === 1.U) { irq_rxb := 0.U }; true.B }),  RegFieldDesc("rxb", "rxb", reset=Some(0))),
           RegField(1, irq_rxe,  RegWriteFn((valid, data) => { when ((valid & data) === 1.U) { irq_rxe := 0.U }; true.B }),  RegFieldDesc("rxe", "rxe", reset=Some(0))),
           RegField(1, irq_busy, RegWriteFn((valid, data) => { when ((valid & data) === 1.U) { irq_busy := 0.U }; true.B }), RegFieldDesc("busy", "busy", reset=Some(0))),
-          RegField(1, irq_txc,  RegWriteFn((valid, data) => { when ((valid & data) === 1.U) { irq_txc := 0.U }; true.B }),  RegFieldDesc("txc", "txc", reset=Some(0))),
-          RegField(1, irq_rxc,  RegWriteFn((valid, data) => { when ((valid & data) === 1.U) { irq_rxc := 0.U }; true.B }),  RegFieldDesc("rxc", "rxc", reset=Some(0))),
+          RegField.r(1, 0.U,  RegFieldDesc("txc", "txc", reset=Some(0))),
+          RegField.r(1, 0.U,  RegFieldDesc("rxc", "rxc", reset=Some(0))),
         )),
 
       ( 2 << 2 ) -> 
@@ -253,14 +233,14 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
         )),
       ( 8 << 2 ) ->
         RegFieldGroup("TX_BD_NUM", Some("Transmit BD Number Register"), Seq(
-          RegField(8, TX_BD_NUM, RegWriteFn((valid, data) => { when (valid & data <= "h80".U) { TX_BD_NUM := data }; true.B }), RegFieldDesc("TX_BD_NUM", "TX_BD_NUM", reset=Some(0x40))),
+          RegField.r(8, 0.U, RegFieldDesc("TX_BD_NUM", "TX_BD_NUM Un-used", reset=Some(0x40))),
         )),
 
       ( 9 << 2 ) ->
         RegFieldGroup("CTRLMODER", Some("Control Module Mode Register"), Seq(
           RegField.r(1, 1.U, RegFieldDesc("PassAll", "Pass All Receive Frames", reset=Some(0))),
-          RegField(1, rxFlow , RegFieldDesc("RxFlow", "Receive Flow Control", reset=Some(0))),
-          RegField(1, txFlow , RegFieldDesc("TxFlow", "Transmit Flow Control", reset=Some(0))),
+          RegField.r(1, 0.U , RegFieldDesc("RxFlow", "Receive Flow Control", reset=Some(0))),
+          RegField.r(1, 0.U , RegFieldDesc("TxFlow", "Transmit Flow Control", reset=Some(0))),
         )),
 
       ( 10 << 2 ) ->
@@ -301,14 +281,14 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
         )),
 
       ( 16 << 2 ) ->
-        RegFieldGroup("MAC_ADDR0", Some("MAC Address Register 0"), 
-          RegField.bytes(Mac_ADDR0)
-        ),
+        RegFieldGroup("MAC_ADDR0", Some("MAC Address Register 0"), Seq(
+          RegField.r(1)
+        )),
 
       ( 17 << 2 ) ->
-        RegFieldGroup("MAC_ADDR1", Some("MAC Address Register 1"), 
-          RegField.bytes(Mac_ADDR1)
-        ),
+        RegFieldGroup("MAC_ADDR1", Some("MAC Address Register 1"), Seq(
+          RegField.r(1)
+        )),
 
       ( 18 << 2 ) ->
         RegFieldGroup("HASH0", Some("HASH Register 0"), 
@@ -321,9 +301,9 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
         ),
         
       ( 20 << 2 ) ->
-        RegFieldGroup("TXCTRL", Some("Tx Control Register"), 
-          RegField.bytes(txPauseTV, Some(RegFieldDesc("TxPauseTV", "Tx Pause Timer Value", reset=Some(0x0)))) ++ Seq(
-          RegField(1,  txPauseRq, RegFieldDesc("TxPauseRQ", "Tx Pause Request", reset=Some(0x0))),
+        RegFieldGroup("TXCTRL", Some("Tx Control Register"), Seq(
+          RegField.r(8, 0,U, RegFieldDesc("TxPauseTV", "Tx Pause Timer Value", reset=Some(0x0))), 
+          RegField.r(1, 0.U, RegFieldDesc("TxPauseRQ", "Tx Pause Request", reset=Some(0x0))),
         )),
 
       ( 30 << 2 ) ->
@@ -361,8 +341,8 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
     io.r_LoopBck   := LoopBck
     io.r_IFG       := IFG
     io.r_NoPre     := NoPre
-    io.r_TxEn     := TxEn & (TX_BD_NUM > 0.U)      // Transmission is enabled when there is at least one TxBD.
-    io.r_RxEn     := RxEn & (TX_BD_NUM < "h80".U)  // Reception is enabled when there is  at least one RxBD.
+    io.r_TxEn     := TxEn
+    io.r_RxEn     := RxEn
 
     io.r_IPGT      := IPGT
     io.r_IPGR1     := IPGR1
@@ -370,8 +350,6 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
     io.r_MinFL     := minFL
     io.r_MaxFL     := maxFL
     io.r_CollValid := collValid
-    io.r_TxFlow    := txFlow
-    io.r_RxFlow    := rxFlow
     io.r_MiiNoPre  := miiNoPre
     io.r_ClkDiv    := clkDiv
     io.r_WCtrlData := wCtrlData
@@ -381,12 +359,8 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
     io.r_FIAD      := FIAD
     io.r_CtrlData  := MIITX_DATA
 
-    io.r_MAC := Cat( Mac_ADDR1(15,0), Mac_ADDR0(31,0) )
     io.r_HASH1 := HASH1
     io.r_HASH0 := HASH0
-    io.r_TxBDNum := TX_BD_NUM
-    io.r_TxPauseTV := txPauseTV
-    io.r_TxPauseRq := txPauseRq
 
 
 
@@ -416,60 +390,21 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
 
 
 
-    val SetTxCIrq_txclk_wire = Wire(Bool())
-    val SetTxCIrq_sync1 = RegNext(SetTxCIrq_txclk_wire, false.B)
-    val SetTxCIrq_sync2 = RegNext(SetTxCIrq_sync1, false.B)
-    val SetTxCIrq_sync3 = RegNext(SetTxCIrq_sync2, false.B)
-    val SetTxCIrq       = RegNext(SetTxCIrq_sync2 & ~SetTxCIrq_sync3, false.B)
 
-    val SetRxCIrq_rxclk_wire = Wire(Bool())
-    val SetRxCIrq_sync1 = RegNext(SetRxCIrq_rxclk_wire, false.B)
-    val SetRxCIrq_sync2 = RegNext(SetRxCIrq_sync1, false.B)
-    val SetRxCIrq_sync3 = RegNext(SetRxCIrq_sync2, false.B)
-    val SetRxCIrq       = RegNext(SetRxCIrq_sync2 & ~SetRxCIrq_sync3, false.B)
+
+
 
     when(io.TxB_IRQ){ irq_txb := true.B }
     when(io.TxE_IRQ){ irq_txe := true.B }
     when(io.RxB_IRQ){ irq_rxb := true.B }
     when(io.RxE_IRQ){ irq_rxe := true.B }
     when(io.Busy_IRQ){ irq_busy := true.B }
-    when(SetTxCIrq){ irq_txc := true.B }
-    when(SetRxCIrq){ irq_rxc := true.B }
 
 
 
 
 
-    withClockAndReset( io.TxClk.asClock, io.asyncReset ) {
-      // val ResetTxCIrq_sync1 = Reg(Bool())
-      val ResetTxCIrq_sync2 = RegNext(SetTxCIrq_sync1, false.B)
-      val SetTxCIrq_txclk   = RegInit(false.B); SetTxCIrq_txclk_wire := SetTxCIrq_txclk
 
-      // Synchronizing TxC Interrupt
-      when(io.TxCtrlEndFrm & io.StartTxDone & io.r_TxFlow){
-        SetTxCIrq_txclk := true.B
-      } .elsewhen(ResetTxCIrq_sync2){
-        SetTxCIrq_txclk := false.B
-      }
-
-    }
-
-
-    withClockAndReset( io.RxClk.asClock, io.asyncReset ) {
-      val ResetRxCIrq_sync1 = RegNext(SetRxCIrq_sync2, false.B)
-      val ResetRxCIrq_sync2 = RegNext(ResetRxCIrq_sync1, false.B)
-      val ResetRxCIrq_sync3 = RegNext(ResetRxCIrq_sync2, false.B)
-      val SetRxCIrq_rxclk   = RegInit(false.B); SetRxCIrq_rxclk_wire := SetRxCIrq_rxclk
-
-      // Synchronizing RxC Interrupt
-      when(io.SetPauseTimer & io.r_RxFlow){
-        SetRxCIrq_rxclk := true.B
-      } .elsewhen(ResetRxCIrq_sync2 & (~ResetRxCIrq_sync3)){
-        SetRxCIrq_rxclk := false.B
-      }
-
-
-    }
 
 
     // Generating interrupt signal
@@ -479,9 +414,8 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
       (irq_txe  & INT_MASK.extract(1) ) | 
       (irq_rxb  & INT_MASK.extract(2) ) | 
       (irq_rxe  & INT_MASK.extract(3) ) | 
-      (irq_busy & INT_MASK.extract(4) ) | 
-      (irq_txc  & INT_MASK.extract(5) ) | 
-      (irq_rxc  & INT_MASK.extract(6) )
+      (irq_busy & INT_MASK.extract(4) )
+
 
 
 
