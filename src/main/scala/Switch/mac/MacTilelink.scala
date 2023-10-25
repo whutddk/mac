@@ -24,7 +24,6 @@ abstract class MacTileLinkBase() extends Module{
     val rxReq = Flipped(Decoupled(new RxFifo_Stream_Bundle))
     val rxResp = Decoupled(new Bool())
 
-    val RxAbortSync           = Input(Bool())
     val LatchedRxLength_rxclk = Input(UInt(16.W))
     val RxStatusInLatched_rxclk = Input(UInt(9.W))
     val RxReady = Output(Bool())
@@ -68,27 +67,26 @@ abstract class MacTileLinkBase() extends Module{
 
 
   val ShiftEndedSyncPluse         = io.rxReq.bits.isLast & io.rxReq.fire
-  val RxAbortPluse                = io.RxAbortSync             & ~RegNext(io.RxAbortSync, false.B)
 
   val RxReady = RegInit(false.B); io.RxReady := RxReady
 
 
   val rxBuffCtrlValid = RegInit(false.B)
   io.rxEnq.ctrl.valid := rxBuffCtrlValid
-  io.rxEnq.ctrl.bits.LatchedRxLength   := RegEnable(io.LatchedRxLength_rxclk,   ShiftEndedSyncPluse | RxAbortPluse)
-  io.rxEnq.ctrl.bits.RxStatusInLatched := RegEnable(io.RxStatusInLatched_rxclk, ShiftEndedSyncPluse | RxAbortPluse)
-  io.rxEnq.ctrl.bits.isRxAbort         := RegEnable(RxAbortPluse,      false.B, ShiftEndedSyncPluse | RxAbortPluse)
+  io.rxEnq.ctrl.bits.LatchedRxLength   := RegEnable(io.LatchedRxLength_rxclk,   ShiftEndedSyncPluse )
+  io.rxEnq.ctrl.bits.RxStatusInLatched := RegEnable(io.RxStatusInLatched_rxclk, ShiftEndedSyncPluse )
+  
 
   when( io.rxEnq.ctrl.fire ){
     rxBuffCtrlValid := false.B
-  } .elsewhen( ShiftEndedSyncPluse | RxAbortPluse ){
+  } .elsewhen( ShiftEndedSyncPluse ){
     rxBuffCtrlValid := true.B
   }
 
 
 
   // RxReady generation
-  when(ShiftEndedSyncPluse | RxAbortPluse  ){
+  when(ShiftEndedSyncPluse ){
     RxReady := false.B
   } .elsewhen( io.r_RxEn & (io.rxEnq.data.ready) ){
     RxReady := true.B

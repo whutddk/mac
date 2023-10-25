@@ -6,7 +6,6 @@ import chisel3.util._
 class Receive_Enq_Ctrl_Bundle extends Bundle{
   val LatchedRxLength   = UInt(16.W)
   val RxStatusInLatched = UInt(9.W)
-  val isRxAbort         = Bool()
 }
 
 class Receive_Deq_Ctrl_Bundle extends Receive_Enq_Ctrl_Bundle{
@@ -76,10 +75,7 @@ trait RxBuffEnq{ this: RxBuffBase =>
   io.enq.data.ready := (isEnqPi & buff(0).io.enq.ready) | (isEnqPo & buff(1).io.enq.ready)
   io.enq.ctrl.ready := true.B
 
-  buff(0).reset := reset.asBool | (isEnqPi & io.enq.ctrl.fire & io.enq.ctrl.bits.isRxAbort)
-  buff(1).reset := reset.asBool | (isEnqPo & io.enq.ctrl.fire & io.enq.ctrl.bits.isRxAbort)
-
-  when( io.enq.ctrl.fire & ~io.enq.ctrl.bits.isRxAbort){
+  when( io.enq.ctrl.fire ){
     isEnqPi := ~isEnqPi
     when( isEnqPi ){
       info(0)   := io.enq.ctrl.bits

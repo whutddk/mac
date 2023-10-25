@@ -22,7 +22,6 @@ class MacStatusIO extends Bundle{
   val MRxD                = Input(UInt(4.W))
   val Collision           = Input(Bool())
   val CollValid           = Input(UInt(6.W))
-  val r_RecSmall          = Input(Bool())
   val r_MinFL             = Input(UInt(16.W))
   val r_MaxFL             = Input(UInt(16.W))
   val r_HugEn             = Input(Bool())
@@ -44,10 +43,8 @@ class MacStatusIO extends Bundle{
   val ReceivedLengthOK     = Output(Bool())
   val ReceiveEnd           = Output(Bool())
   val ReceivedPacketGood   = Output(Bool())
-  val InvalidSymbol        = Output(Bool())
   val LatchedCrcError      = Output(Bool())
   val RxLateCollision      = Output(Bool())
-  val ShortFrame           = Output(Bool())
   val DribbleNibble        = Output(Bool())
   val ReceivedPacketTooBig = Output(Bool())
   val LoadRxStatus         = Output(Bool())
@@ -56,7 +53,6 @@ class MacStatusIO extends Bundle{
   val LateCollLatched      = Output(Bool())
   val DeferLatched         = Output(Bool())
   val CarrierSenseLost     = Output(Bool())
-  val LatchedMRxErr        = Output(Bool())
 }
 
 class MacStatus extends RawModule{
@@ -73,13 +69,6 @@ class MacStatus extends RawModule{
     }
 
 
-    val LatchedMRxErr = RegInit(false.B); io.LatchedMRxErr := LatchedMRxErr // LatchedMRxErr
-
-    when(io.MRxErr & io.MRxDV & (io.RxStatePreamble | io.RxStateSFD | io.RxStateData.orR | io.RxStateIdle & ~io.Transmitting)){
-      LatchedMRxErr := true.B
-    } .otherwise{
-      LatchedMRxErr := false.B
-    }
 
     io.ReceivedPacketGood := ~LatchedCrcError                                        // ReceivedPacketGood
     io.ReceivedLengthOK := io.RxByteCnt >= io.r_MinFL & io.RxByteCnt <= io.r_MaxFL   // ReceivedLengthOK
@@ -92,14 +81,8 @@ class MacStatus extends RawModule{
     
     val LoadRxStatus = RegNext(TakeSample, false.B); io.LoadRxStatus := LoadRxStatus // LoadRxStatus
     val ReceiveEnd = RegNext(LoadRxStatus, false.B); io.ReceiveEnd := ReceiveEnd     // ReceiveEnd
-    val SetInvalidSymbol = io.MRxDV & io.MRxErr & io.MRxD === "he".U                 // Invalid symbol was received during reception in 100Mbps 
-    val InvalidSymbol = RegInit(false.B); io.InvalidSymbol := InvalidSymbol          // InvalidSymbol
 
-    when(LoadRxStatus & ~SetInvalidSymbol){
-      InvalidSymbol := false.B
-    } .elsewhen(SetInvalidSymbol){
-      InvalidSymbol := true.B
-    }
+
 
 
     val RxLateCollision = RegInit(false.B); io.RxLateCollision := RxLateCollision // Late Collision
@@ -107,7 +90,7 @@ class MacStatus extends RawModule{
 
     when(LoadRxStatus){
       RxLateCollision := false.B
-    } .elsewhen(io.Collision & (~io.r_FullD) & (~RxColWindow | io.r_RecSmall)){
+    } .elsewhen(io.Collision & (~io.r_FullD) ){
       RxLateCollision := true.B
     }
 
@@ -117,12 +100,7 @@ class MacStatus extends RawModule{
       RxColWindow := true.B
     }
 
-    val ShortFrame = RegInit(false.B); io.ShortFrame := ShortFrame //ShortFrame
-    when(LoadRxStatus){
-      ShortFrame := false.B
-    } .elsewhen(TakeSample){
-      ShortFrame := io.RxByteCnt < io.r_MinFL    
-    }
+
 
 
     // DribbleNibble

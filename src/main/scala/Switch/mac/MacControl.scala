@@ -31,7 +31,6 @@ val DlyCrcEn                   = Input(Bool())             // Delayed CRC enable
 val TxPauseTV                  = Input(UInt(16.W))         // Transmit Pause Timer Value (from registers)
 val MAC                        = Input(UInt(48.W))         // MAC address (from registers)
 val RxStatusWriteLatched_sync2 = Input(Bool())
-val r_PassAll                  = Input(Bool())
 
 val TxDataOut                  = Output(UInt(8.W))         // Transmit Packet Data (to TxEthMAC)
 val TxStartFrmOut              = Output(Bool())            // Transmit packet start frame (output to TxEthMAC)
@@ -420,7 +419,7 @@ class MacControl extends RawModule{
 
     val ReceivedPauseFrm = RegInit(false.B); io.ReceivedPauseFrm := ReceivedPauseFrm // Pause Frame received
 
-    when((io.RxStatusWriteLatched_sync2 & io.r_PassAll) | (ReceivedPauseFrm & (~io.r_PassAll))){
+    when(io.RxStatusWriteLatched_sync2 ){
       ReceivedPauseFrm := false.B
     } .elsewhen(ByteCntEq16 & TypeLengthOK & OpCodeOK){
       ReceivedPauseFrm := true.B

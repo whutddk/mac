@@ -139,9 +139,6 @@ val miim = Module(new MIIM)
 
 
 
-
-
-val r_RecSmall                 = Wire(Bool())
 val r_LoopBck                  = Wire(Bool())
 val r_TxEn                     = Wire(Bool())
 val r_RxEn                     = Wire(Bool())
@@ -153,7 +150,6 @@ val r_HugEn                    = Wire(Bool())
 val r_DlyCrcEn                 = Wire(Bool())
 val r_MaxFL                    = Wire(UInt(16.W))
 val r_MinFL                    = Wire(UInt(16.W))
-val ShortFrame                 = Wire(Bool())
 val DribbleNibble              = Wire(Bool())
 val ReceivedPacketTooBig       = Wire(Bool())
 val r_MAC                      = Wire(UInt(48.W))
@@ -180,11 +176,8 @@ val Busy_IRQ                   = Wire(Bool())
 val r_Pad                      = Wire(Bool())
 val r_CrcEn                    = Wire(Bool())
 val r_FullD                    = Wire(Bool())
-val r_Pro                      = Wire(Bool())
-val r_Bro                      = Wire(Bool())
 val r_NoPre                    = Wire(Bool())
 val r_RxFlow                   = Wire(Bool())
-val r_PassAll                  = Wire(Bool())
 val TxCtrlEndFrm               = Wire(Bool())
 val StartTxDone                = Wire(Bool())
 val SetPauseTimer              = Wire(Bool())
@@ -207,7 +200,6 @@ val DeferLatched               = Wire(Bool())
 val RstDeferLatched            = Wire(Bool())
 val CarrierSenseLost           = Wire(Bool())
 
-dontTouch(r_RecSmall                 )
 dontTouch(r_LoopBck                  )
 dontTouch(r_TxEn                     )
 dontTouch(r_RxEn                     )
@@ -219,7 +211,6 @@ dontTouch(r_HugEn                    )
 dontTouch(r_DlyCrcEn                 )
 dontTouch(r_MaxFL                    )
 dontTouch(r_MinFL                    )
-dontTouch(ShortFrame                 )
 dontTouch(DribbleNibble              )
 dontTouch(ReceivedPacketTooBig       )
 dontTouch(r_MAC                      )
@@ -246,11 +237,8 @@ dontTouch(Busy_IRQ                   )
 dontTouch(r_Pad                      )
 dontTouch(r_CrcEn                    )
 dontTouch(r_FullD                    )
-dontTouch(r_Pro                      )
-dontTouch(r_Bro                      )
 dontTouch(r_NoPre                    )
 dontTouch(r_RxFlow                   )
-dontTouch(r_PassAll                  )
 dontTouch(TxCtrlEndFrm               )
 dontTouch(StartTxDone                )
 dontTouch(SetPauseTimer              )
@@ -300,8 +288,6 @@ io.cfg.TxClk               := io.mii.mtx_clk_pad_i
 io.cfg.RxClk               := io.mii.mrx_clk_pad_i
 io.cfg.SetPauseTimer       := SetPauseTimer
 
-
-r_RecSmall  := io.cfg.r_RecSmall
 r_Pad       := io.cfg.r_Pad
 r_HugEn     := io.cfg.r_HugEn
 r_CrcEn     := io.cfg.r_CrcEn
@@ -311,8 +297,6 @@ r_ExDfrEn   := io.cfg.r_ExDfrEn
 r_NoBckof   := io.cfg.r_NoBckof
 r_LoopBck   := io.cfg.r_LoopBck
 r_IFG       := io.cfg.r_IFG
-r_Pro       := io.cfg.r_Pro
-r_Bro       := io.cfg.r_Bro
 r_NoPre     := io.cfg.r_NoPre
 r_TxEn      := io.cfg.r_TxEn
 r_RxEn      := io.cfg.r_RxEn
@@ -327,7 +311,6 @@ r_MaxRet    := io.cfg.r_MaxRet
 r_CollValid := io.cfg.r_CollValid
 r_TxFlow    := io.cfg.r_TxFlow
 r_RxFlow    := io.cfg.r_RxFlow
-r_PassAll   := io.cfg.r_PassAll
 r_MiiNoPre  := io.cfg.r_MiiNoPre
 r_ClkDiv    := io.cfg.r_ClkDiv
 r_WCtrlData := io.cfg.r_WCtrlData
@@ -348,7 +331,6 @@ val RxData               = Wire(UInt(8.W))
 val RxValid              = Wire(Bool())
 val RxStartFrm           = Wire(Bool())
 val RxEndFrm             = Wire(Bool())
-val RxAbort              = Wire(Bool())
 val WillTransmit         = Wire(Bool())
 val ResetCollision       = Wire(Bool())
 val TxDataOut            = Wire(UInt(8.W))
@@ -356,7 +338,6 @@ val WillSendControlFrame = Wire(Bool())
 val ReceiveEnd           = Wire(Bool())
 val ReceivedPacketGood   = Wire(Bool())
 val ReceivedLengthOK     = Wire(Bool())
-val InvalidSymbol        = Wire(Bool())
 val LatchedCrcError      = Wire(Bool())
 val RxLateCollision      = Wire(Bool())
 val RetryCntLatched      = Wire(UInt(4.W))  
@@ -371,7 +352,6 @@ dontTouch(RxData              )
 dontTouch(RxValid             )
 dontTouch(RxStartFrm          )
 dontTouch(RxEndFrm            )
-dontTouch(RxAbort             )
 dontTouch(WillTransmit        )
 dontTouch(ResetCollision      )
 dontTouch(TxDataOut           )
@@ -379,7 +359,6 @@ dontTouch(WillSendControlFrame)
 dontTouch(ReceiveEnd          )
 dontTouch(ReceivedPacketGood  )
 dontTouch(ReceivedLengthOK    )
-dontTouch(InvalidSymbol       )
 dontTouch(LatchedCrcError     )
 dontTouch(RxLateCollision     )
 dontTouch(RetryCntLatched     )
@@ -420,7 +399,6 @@ maccontrol.io.DlyCrcEn                   := r_DlyCrcEn
 maccontrol.io.TxPauseTV                  := r_TxPauseTV
 maccontrol.io.MAC                        := r_MAC
 maccontrol.io.RxStatusWriteLatched_sync2 := RxStatusWriteLatchedSync
-maccontrol.io.r_PassAll                  := r_PassAll
 
 TxDataOut := maccontrol.io.TxDataOut
 TxStartFrmOut := maccontrol.io.TxStartFrmOut
@@ -541,11 +519,9 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   rxethmac.io.MaxFL               := r_MaxFL
   rxethmac.io.r_IFG               := r_IFG
   rxethmac.io.MAC                 := r_MAC
-  rxethmac.io.r_Bro               := r_Bro
-  rxethmac.io.r_Pro               := r_Pro
   rxethmac.io.r_HASH0             := r_HASH0
   rxethmac.io.r_HASH1             := r_HASH1
-  rxethmac.io.PassAll             := r_PassAll
+  rxethmac.io.PassAll             := true.B
   rxethmac.io.ControlFrmAddressOK := ControlFrmAddressOK
 
   RxData            := rxethmac.io.RxData
@@ -561,7 +537,6 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   RxStatePreamble   := rxethmac.io.StatePreamble
   RxStateSFD        := rxethmac.io.StateSFD
   RxStateData       := rxethmac.io.StateData
-  RxAbort           := rxethmac.io.RxAbort
   AddressMiss       := rxethmac.io.AddressMiss
 
 
@@ -613,29 +588,6 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
     TPauseRq := RegNext( TxPauseRq_sync(1) & (~TxPauseRq_sync(2)), false.B )
   }
 
-  val LatchedMRxErr = Wire(Bool())
-
-
-
-
-  val RxAbort_latch_wire = Wire(Bool())
-  val RxAbort_wb = ShiftRegister( RxAbort_latch_wire, 2, false.B, true.B )
-
-  withClockAndReset( io.mii.mrx_clk_pad_i.asClock, reset.asAsyncReset ) {
-    val RxAbort_latch = RegInit(false.B); RxAbort_latch_wire := RxAbort_latch
-    val RxAbortRst = ShiftRegister( RxAbort_wb, 2, false.B, true.B )
-    
-    // Synchronizing RxAbort to the WISHBONE clock
-    when(RxAbort | (ShortFrame & ~r_RecSmall) | LatchedMRxErr & ~InvalidSymbol | (ReceivedPauseFrm & (~r_PassAll))){
-      RxAbort_latch := true.B
-    } .elsewhen(RxAbortRst){
-      RxAbort_latch := false.B
-    }
-
-  }
-
-
-
 
   val wishbone = Module(new MacTileLink)
 
@@ -678,7 +630,6 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   macstatus.io.MRxD                := MRxD_Lb
   macstatus.io.Collision           := io.mii.mcoll_pad_i
   macstatus.io.CollValid           := r_CollValid
-  macstatus.io.r_RecSmall          := r_RecSmall
   macstatus.io.r_MinFL             := r_MinFL
   macstatus.io.r_MaxFL             := r_MaxFL
   macstatus.io.r_HugEn             := r_HugEn
@@ -700,10 +651,8 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   ReceivedLengthOK     := macstatus.io.ReceivedLengthOK
   ReceiveEnd           := macstatus.io.ReceiveEnd
   ReceivedPacketGood   := macstatus.io.ReceivedPacketGood
-  InvalidSymbol        := macstatus.io.InvalidSymbol
   LatchedCrcError      := macstatus.io.LatchedCrcError
   RxLateCollision      := macstatus.io.RxLateCollision
-  ShortFrame           := macstatus.io.ShortFrame
   DribbleNibble        := macstatus.io.DribbleNibble
   ReceivedPacketTooBig := macstatus.io.ReceivedPacketTooBig
   LoadRxStatus         := macstatus.io.LoadRxStatus
@@ -712,7 +661,6 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   LateCollLatched      := macstatus.io.LateCollLatched
   DeferLatched         := macstatus.io.DeferLatched
   CarrierSenseLost     := macstatus.io.CarrierSenseLost
-  LatchedMRxErr        := macstatus.io.LatchedMRxErr
 
 
 
@@ -743,9 +691,6 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   }
 
 
-
-
-
   withClockAndReset( io.mii.mtx_clk_pad_i.asClock, io.asyncReset ){
     macTileLinkTx.io.BlockingTxStatusWrite_sync := ShiftRegister( wishbone.io.BlockingTxStatusWrite, 2, false.B, true.B)
   }
@@ -756,9 +701,8 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   TxEndFrm        := macTileLinkTx.io.TxEndFrm
   TxData          := macTileLinkTx.io.TxData
 
-  // macTileLinkTx.io.TxEndFrm_wb := wishbone.io.TxEndFrm_wb
   
-              wishbone.io.TxUsedData      := TxUsedData
+  wishbone.io.TxUsedData      := TxUsedData
   macTileLinkTx.io.TxUsedData := TxUsedData
 
   macTileLinkTx.io.TxRetry    := TxRetry
@@ -791,15 +735,7 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
 
 
   val macTileLinkRx = withClockAndReset( io.mii.mrx_clk_pad_i.asClock, io.asyncReset ) ( Module(new MacTileLinkRx) )
-
-
-
-
-
-
-  val RxAbortSync           = ShiftRegister( macTileLinkRx.io.RxAbortLatched, 2, false.B, true.B )
-  wishbone.io.RxAbortSync  := RxAbortSync
-  
+ 
 
   val req_ToAsync = Wire(new AsyncBundle(new RxFifo_Stream_Bundle))
   val resp_ToAsync = Wire(new AsyncBundle(Bool()))
@@ -831,14 +767,12 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
 
   withClockAndReset( io.mii.mrx_clk_pad_i.asClock, io.asyncReset ) {
     RxStatusWriteLatchedSync         := fateRxRespPort.fire
-    macTileLinkRx.io.RxAbortSyncb    := ShiftRegister( RxAbortSync,    2, false.B, true.B )
     macTileLinkRx.io.Busy_IRQ_syncb  := ShiftRegister( Busy_IRQ_sync,  2, false.B, true.B )
 
     macTileLinkRx.io.RxReady  := ShiftRegister( wishbone.io.RxReady, 2, false.B, true.B )
   }
 
   macTileLinkRx.io.RxData   := RxData
-  macTileLinkRx.io.RxAbort  := RxAbort_latch_wire
   macTileLinkRx.io.RxValid  := RxValid
 
   macTileLinkRx.io.RxStartFrm := RxStartFrm
@@ -847,7 +781,7 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
 
   macTileLinkRx.io.RxLength     := RxByteCnt
   macTileLinkRx.io.LoadRxStatus := LoadRxStatus
-  macTileLinkRx.io.RxStatusIn   := Cat(ReceivedPauseFrm, AddressMiss, false.B, InvalidSymbol, DribbleNibble, ReceivedPacketTooBig, ShortFrame, LatchedCrcError, RxLateCollision)
+  macTileLinkRx.io.RxStatusIn   := Cat(ReceivedPauseFrm, AddressMiss, false.B, false.B, DribbleNibble, ReceivedPacketTooBig, false.B, LatchedCrcError, RxLateCollision)
 
 
   wishbone.io.rxEnq <> io.rxEnq

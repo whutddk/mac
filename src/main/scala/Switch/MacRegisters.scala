@@ -29,7 +29,6 @@ class Mac_Config_Bundle extends Bundle{
   val RxClk               = Input(Bool())
   val SetPauseTimer       = Input(Bool())
 
-  val r_RecSmall  = Output(Bool())
   val r_Pad       = Output(Bool())
   val r_HugEn     = Output(Bool())
   val r_CrcEn     = Output(Bool())
@@ -39,9 +38,7 @@ class Mac_Config_Bundle extends Bundle{
   val r_NoBckof   = Output(Bool())
   val r_LoopBck   = Output(Bool())
   val r_IFG       = Output(Bool())
-  val r_Pro       = Output(Bool())
   val r_Iam       = Output(Bool())
-  val r_Bro       = Output(Bool())
   val r_NoPre     = Output(Bool())
   val r_TxEn      = Output(Bool())
   val r_RxEn      = Output(Bool())
@@ -56,7 +53,6 @@ class Mac_Config_Bundle extends Bundle{
   val r_CollValid = Output(UInt(6.W))
   val r_TxFlow    = Output(Bool())
   val r_RxFlow    = Output(Bool())
-  val r_PassAll   = Output(Bool())
   val r_MiiNoPre  = Output(Bool())
   val r_ClkDiv    = Output(UInt(8.W))
   val r_WCtrlData = Output(Bool())
@@ -111,7 +107,6 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
     val (int, _) = outer.int_node.out(0)
 
 
-    val RecSmall  = RegInit(false.B)
     val Pad       = RegInit(true.B)
     val HugEn     = RegInit(false.B)
     val CrcEn     = RegInit(true.B)
@@ -122,9 +117,7 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
     val NoBckof   = RegInit(false.B)
     val LoopBck   = RegInit(false.B)
     val IFG       = RegInit(false.B)
-    val Pro       = RegInit(false.B)
     val Iam       = RegInit(false.B)
-    val Bro       = RegInit(false.B)
     val NoPre     = RegInit(false.B)
     val TxEn      = RegInit(false.B)
     val RxEn      = RegInit(false.B)
@@ -157,7 +150,6 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
 
     val txFlow  = RegInit(false.B)
     val rxFlow  = RegInit(false.B)
-    val passAll = RegInit(false.B)
 
     val clkDiv = RegInit("h64".U(8.W))
     val miiNoPre = RegInit(false.B)
@@ -207,9 +199,9 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
           RegField(1, RxEn   , RegFieldDesc( "RxEn", "RxEn", reset = Some(0))) ,
           RegField(1, TxEn   , RegFieldDesc( "TxEn", "TxEn", reset = Some(0) ) ),
           RegField(1, NoPre  , RegFieldDesc( "NoPre", "NoPre", reset = Some(0) ) ),
-          RegField(1, Bro    , RegFieldDesc( "Bro", "Bro", reset = Some(0) ) ),
+          RegField.r(1, 0.U  , RegFieldDesc( "Bro", "Bro", reset = Some(0) ) ),
           RegField(1, Iam    , RegFieldDesc( "Iam", "Iam", reset = Some(0) ) ),
-          RegField(1, Pro    , RegFieldDesc( "Pro", "Pro", reset = Some(0) ) ),
+          RegField.r(1, 0.U  , RegFieldDesc( "Pro", "Pro", reset = Some(0) ) ),
           RegField(1, IFG    , RegFieldDesc( "IFG", "IFG", reset = Some(0) ) ),
           RegField(1, LoopBck, RegFieldDesc( "LoopBck", "LoopBck", reset = Some(0) ) ),
           RegField(1, NoBckof, RegFieldDesc( "NoBckof", "NoBckof", reset = Some(0) ) ),
@@ -220,7 +212,7 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
           RegField(1, CrcEn   , RegFieldDesc( "CrcEn", "CrcEn",       reset=Some(1)) ),
           RegField(1, HugEn   , RegFieldDesc( "HugEn", "HugEn",       reset=Some(0)) ),
           RegField(1, Pad     , RegFieldDesc( "Pad", "Pad",           reset=Some(1)) ),
-          RegField(1, RecSmall, RegFieldDesc( "RecSmall", "RecSmall", reset=Some(0)) )
+          RegField.r(1, 1.U,    RegFieldDesc( "RecSmall", "RecSmall", reset=Some(0)) )
         )),
 
       ( 1 << 2 ) ->
@@ -272,7 +264,7 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
 
       ( 9 << 2 ) ->
         RegFieldGroup("CTRLMODER", Some("Control Module Mode Register"), Seq(
-          RegField(1, passAll, RegFieldDesc("PassAll", "Pass All Receive Frames", reset=Some(0))),
+          RegField.r(1, 1.U, RegFieldDesc("PassAll", "Pass All Receive Frames", reset=Some(0))),
           RegField(1, rxFlow , RegFieldDesc("RxFlow", "Receive Flow Control", reset=Some(0))),
           RegField(1, txFlow , RegFieldDesc("TxFlow", "Transmit Flow Control", reset=Some(0))),
         )),
@@ -366,7 +358,6 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
 
 
 
-    io.r_RecSmall  := RecSmall
     io.r_Pad       := Pad
     io.r_HugEn     := HugEn
     io.r_CrcEn     := CrcEn
@@ -376,9 +367,7 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
     io.r_NoBckof   := NoBckof
     io.r_LoopBck   := LoopBck
     io.r_IFG       := IFG
-    io.r_Pro       := Pro
     io.r_Iam       := Iam
-    io.r_Bro       := Bro
     io.r_NoPre     := NoPre
     io.r_TxEn     := TxEn & (TX_BD_NUM > 0.U)      // Transmission is enabled when there is at least one TxBD.
     io.r_RxEn     := RxEn & (TX_BD_NUM < "h80".U)  // Reception is enabled when there is  at least one RxBD.
@@ -392,7 +381,6 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
     io.r_CollValid := collValid
     io.r_TxFlow    := txFlow
     io.r_RxFlow    := rxFlow
-    io.r_PassAll   := passAll
     io.r_MiiNoPre  := miiNoPre
     io.r_ClkDiv    := clkDiv
     io.r_WCtrlData := wCtrlData

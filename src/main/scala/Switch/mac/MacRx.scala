@@ -15,8 +15,6 @@ class MacRxIO extends Bundle{
   val MaxFL               = Input(UInt(16.W))
   val r_IFG               = Input(Bool())
   val MAC                 = Input(UInt(48.W))     //  Station Address  
-  val r_Bro               = Input(Bool())       //  broadcast disable
-  val r_Pro               = Input(Bool())       //  promiscuous enable 
   val r_HASH0             = Input(UInt(32.W)) //  lower 4 bytes Hash Table
   val r_HASH1             = Input(UInt(32.W)) //  upper 4 bytes Hash Table
   val PassAll             = Input(Bool())
@@ -35,7 +33,6 @@ class MacRxIO extends Bundle{
   val StatePreamble   = Output(Bool())
   val StateSFD        = Output(Bool())
   val StateData       = Output(UInt(2.W))
-  val RxAbort         = Output(Bool())
   val AddressMiss     = Output(Bool())
 }
 
@@ -72,9 +69,6 @@ abstract class MacRxBase extends Module with RequireAsyncReset{
 
   val RxData_d = RegInit(0.U(8.W))
   val RxData = RegNext(RxData_d, 0.U); io.RxData := RxData
-
-  val Broadcast = RegInit(false.B)
-  val Multicast = RegInit(false.B)
 
   val Crc = RegInit("hFFFFFFFF".U(32.W))
 
@@ -202,58 +196,23 @@ trait MacRxFAddrCheck { this: MacRxBase =>
 
   val HashBit = Wire(UInt(1.W))
 
-
-  val BroadcastOK = Broadcast & ~io.r_Bro
   val RxCheckEn   = io.StateData.orR
 
-  val RxAbort = RegInit(false.B)  // Address Error Reported at end of address cycle// RxAbort clears after one cycle
   val AddressMiss = RegInit(false.B) // This ff holds the "Address Miss" information that is written to the RX BD status. 
-  val MulticastOK = RegInit(false.B) // Hash Address Check, Multicast
-  val UnicastOK = RegInit(false.B)  // Address Detection (unicast)  // start with ByteCntEq2 due to delay of addres from RxData
 
-  io.RxAbort     := RxAbort
   io.AddressMiss := AddressMiss
 
 
-  val RxAddressInvalid = ~(UnicastOK | BroadcastOK | MulticastOK | io.r_Pro);
+
 
   val CrcHash = RegInit(0.U(6.W))
   val CrcHashGood = RegNext(StateData0 & ByteCntEq6) // Latching CRC for use in the hash table
 
-  when(RxAddressInvalid & ByteCntEq7 & RxCheckEn){
-    RxAbort := true.B  
-  } .otherwise{
-    RxAbort := false.B
-  }
-
   when(ByteCntEq0){
     AddressMiss := false.B
   } .elsewhen(ByteCntEq7 & RxCheckEn){
-    AddressMiss := (~(UnicastOK | BroadcastOK | MulticastOK | (io.PassAll & io.ControlFrmAddressOK)));    
+    AddressMiss := (~((io.PassAll & io.ControlFrmAddressOK)));    
   }
-
-  when(io.RxEndFrm | RxAbort){
-    MulticastOK := false.B
-  } .elsewhen(CrcHashGood & Multicast){
-    MulticastOK := HashBit
-  }
-
-  when(RxCheckEn & ByteCntEq2){
-    UnicastOK := RxData === io.MAC(47,40)
-  } .elsewhen(RxCheckEn & ByteCntEq3){
-    UnicastOK := ( RxData === io.MAC(39,32)) & UnicastOK
-  } .elsewhen(RxCheckEn & ByteCntEq4){
-    UnicastOK := ( RxData === io.MAC(31,24)) & UnicastOK
-  } .elsewhen(RxCheckEn & ByteCntEq5){
-    UnicastOK := ( RxData === io.MAC(23,16)) & UnicastOK
-  } .elsewhen(RxCheckEn & ByteCntEq6){
-    UnicastOK := ( RxData === io.MAC(15,8))  & UnicastOK
-  } .elsewhen(RxCheckEn & ByteCntEq7){
-    UnicastOK := ( RxData === io.MAC(7,0))   & UnicastOK
-  } .elsewhen(io.RxEndFrm | RxAbort){
-    UnicastOK := false.B
-  }
-
    
   val IntHash = Mux(CrcHash.extract(5), io.r_HASH1, io.r_HASH0)
   val ByteHash = 
@@ -343,23 +302,6 @@ class MacRx extends MacRxBase with MacRxFSM with MacRxCounter with MacRxFAddrChe
   } .elsewhen(~DelayData){
     RxData_d := 0.U        // Delaying data to be valid for two cycles.        // Zero when not active.
   }
-
- 
-  when(StateData0 & LatchedByte =/= "hFF".U & ByteCntSmall7){
-    Broadcast := false.B
-  } .elsewhen(StateData0 & LatchedByte === "hFF".U & ByteCntEq1){
-    Broadcast := true.B
-  } .elsewhen(io.RxAbort | io.RxEndFrm){
-    Broadcast := false.B
-  }
-
-     
-  when(StateData0 & ByteCntEq1 & LatchedByte.extract(0)){
-    Multicast := true.B
-  } .elsewhen(io.RxAbort | io.RxEndFrm){
-    Multicast := false.B
-  }
-
 
 
   io.RxValid := ShiftRegister(GenerateRxValid, 2, false.B, true.B)
