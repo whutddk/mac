@@ -140,7 +140,6 @@ val MRxDV_Lb                   = Wire(Bool())
 val MRxErr_Lb                  = Wire(Bool())
 val MRxD_Lb                    = Wire(UInt(4.W))
 val Transmitting               = Wire(Bool())
-val r_DlyCrcEn                 = Wire(Bool())
 val DribbleNibble              = Wire(Bool())
 val LoadRxStatus               = Wire(Bool())
 val r_HASH0                    = Wire(UInt(32.W))
@@ -156,7 +155,6 @@ val TxE_IRQ                    = Wire(Bool())
 val RxB_IRQ                    = Wire(Bool())
 val RxE_IRQ                    = Wire(Bool())
 val Busy_IRQ                   = Wire(Bool())
-val r_CrcEn                    = Wire(Bool())
 val r_FullD                    = Wire(Bool())
 val r_NoPre                    = Wire(Bool())
 val StartTxDone                = Wire(Bool())
@@ -175,7 +173,6 @@ dontTouch(MRxDV_Lb                   )
 dontTouch(MRxErr_Lb                  )
 dontTouch(MRxD_Lb                    )
 dontTouch(Transmitting               )
-dontTouch(r_DlyCrcEn                 )
 dontTouch(DribbleNibble              )
 dontTouch(LoadRxStatus               )
 dontTouch(r_HASH0                    )
@@ -191,7 +188,6 @@ dontTouch(TxE_IRQ                    )
 dontTouch(RxB_IRQ                    )
 dontTouch(RxE_IRQ                    )
 dontTouch(Busy_IRQ                   )
-dontTouch(r_CrcEn                    )
 dontTouch(r_FullD                    )
 dontTouch(r_NoPre                    )
 dontTouch(StartTxDone                )
@@ -224,8 +220,6 @@ io.cfg.StartTxDone         := StartTxDone
 io.cfg.TxClk               := io.mii.mtx_clk_pad_i
 io.cfg.RxClk               := io.mii.mrx_clk_pad_i
 
-r_CrcEn     := io.cfg.r_CrcEn
-r_DlyCrcEn  := io.cfg.r_DlyCrcEn
 r_FullD     := io.cfg.r_FullD
 r_ExDfrEn   := io.cfg.r_ExDfrEn
 r_LoopBck   := io.cfg.r_LoopBck
@@ -333,9 +327,8 @@ txethmac.io.TxEndFrm        := TxEndFrm
 txethmac.io.TxData          := TxData
 txethmac.io.CarrierSense    := TxCarrierSense
 txethmac.io.Collision       := Collision
-txethmac.io.CrcEn           := r_CrcEn | PerPacketCrcEn
+txethmac.io.CrcEn           := PerPacketCrcEn
 txethmac.io.FullD           := r_FullD
-txethmac.io.DlyCrcEn        := r_DlyCrcEn
 txethmac.io.IPGT            := r_IPGT
 txethmac.io.IPGR1           := r_IPGR1
 txethmac.io.IPGR2           := r_IPGR2
@@ -387,7 +380,6 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   rxethmac.io.MRxDV               := MRxDV_Lb
   rxethmac.io.MRxD                := MRxD_Lb
   rxethmac.io.Transmitting        := Transmitting
-  rxethmac.io.DlyCrcEn            := r_DlyCrcEn
   rxethmac.io.r_IFG               := r_IFG
   rxethmac.io.r_HASH0             := r_HASH0
   rxethmac.io.r_HASH1             := r_HASH1

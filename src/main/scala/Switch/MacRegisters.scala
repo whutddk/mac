@@ -26,9 +26,6 @@ class Mac_Config_Bundle extends Bundle{
   val TxClk               = Input(Bool())
   val RxClk               = Input(Bool())
 
-  val r_HugEn     = Output(Bool())
-  val r_CrcEn     = Output(Bool())
-  val r_DlyCrcEn  = Output(Bool())
   val r_FullD     = Output(Bool())
   val r_ExDfrEn   = Output(Bool())
   val r_LoopBck   = Output(Bool())
@@ -92,9 +89,6 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
     val (int, _) = outer.int_node.out(0)
 
 
-    val HugEn     = RegInit(false.B)
-    val CrcEn     = RegInit(true.B)
-    val DlyCrcEn  = RegInit(false.B)
 
     val FullD     = RegInit(false.B)
     val ExDfrEn   = RegInit(false.B)
@@ -175,8 +169,8 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
           RegField(1, ExDfrEn, RegFieldDesc( "ExDfrEn", "ExDfrEn", reset = Some(0) ) ),
           RegField(1, FullD  , RegFieldDesc( "FullD", "FullD", reset = Some(0) ) ),
           RegField.r(1, 0.U),
-          RegField(1, DlyCrcEn, RegFieldDesc( "DlyCrcEn", "DlyCrcEn", reset=Some(0)) ),
-          RegField(1, CrcEn   , RegFieldDesc( "CrcEn", "CrcEn",       reset=Some(1)) ),
+          RegField.r(1, 0.U, RegFieldDesc( "DlyCrcEn", "DlyCrcEn", reset=Some(0)) ),
+          RegField.r(1, 0.U, RegFieldDesc( "CrcEn", "CrcEn",       reset=Some(1)) ),
           RegField.r(1, 1.U   , RegFieldDesc( "HugEn", "HugEn",       reset=Some(0)) ),
           RegField.r(1, 1.U   , RegFieldDesc( "Pad", "Pad",           reset=Some(1)) ),
           RegField.r(1, 1.U,    RegFieldDesc( "RecSmall", "RecSmall", reset=Some(0)) )
@@ -325,9 +319,6 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
 
 
 
-    io.r_HugEn     := HugEn
-    io.r_CrcEn     := CrcEn
-    io.r_DlyCrcEn  := DlyCrcEn
     io.r_FullD     := FullD
     io.r_ExDfrEn   := ExDfrEn
     io.r_LoopBck   := LoopBck

@@ -10,7 +10,6 @@ class MacRxIO extends Bundle{
   val MRxDV               = Input(Bool())
   val MRxD                = Input(UInt(4.W))
   val Transmitting        = Input(Bool())
-  val DlyCrcEn            = Input(Bool())
   val r_IFG               = Input(Bool())
   val r_HASH0             = Input(UInt(32.W)) //  lower 4 bytes Hash Table
   val r_HASH1             = Input(UInt(32.W)) //  upper 4 bytes Hash Table
@@ -51,7 +50,6 @@ abstract class MacRxBase extends Module with RequireAsyncReset{
 
   val ByteCntSmall7 = Wire(Bool())
 
-  val DlyCrcCnt  = RegInit(0.U(4.W))
 
   val StateData0    = RegInit(false.B)
   val StateData1    = RegInit(false.B)
@@ -137,19 +135,14 @@ trait MacRxCounter { this: MacRxBase =>
   val IncrementByteCounter =
     ~ResetByteCounter & io.MRxDV & (
       io.StatePreamble | io.StateSFD | io.StateIdle & ~io.Transmitting |
-      (io.StateData.extract(1) & ~ByteCntMax & ~(io.DlyCrcEn & DlyCrcCnt.orR))
+      (io.StateData.extract(1) & ~ByteCntMax)
     )
 
   val ByteCntDelayed = ByteCnt + 4.U
-  io.ByteCnt := Mux(io.DlyCrcEn, ByteCntDelayed, ByteCnt)
+  io.ByteCnt := ByteCnt
 
-  when( DlyCrcCnt === 9.U ){
-    DlyCrcCnt := 0.U
-  } .elsewhen(io.DlyCrcEn & io.StateSFD){
-    DlyCrcCnt := 1.U
-  } .elsewhen(io.DlyCrcEn & (DlyCrcCnt.orR)){
-    DlyCrcCnt :=  DlyCrcCnt + 1.U
-  }
+
+
 
   when( ResetByteCounter ){
     ByteCnt := 0.U
@@ -221,7 +214,7 @@ trait MacRxCRC { this: MacRxBase =>
 
   val Data_Crc   = Cat(io.MRxD.extract(0),io.MRxD.extract(1),io.MRxD.extract(2),io.MRxD.extract(3))
   val Enable_Crc = io.MRxDV & (io.StateData.orR)
-  val Initialize_Crc = io.StateSFD | (io.DlyCrcEn & DlyCrcCnt > 0.U & DlyCrcCnt < 9.U)
+  val Initialize_Crc = io.StateSFD
 
   when( Initialize_Crc ){
     Crc := "hFFFFFFFF".U
@@ -271,7 +264,7 @@ class MacRx extends MacRxBase with MacRxFSM with MacRxCounter with MacRxFAddrChe
 
 
 
-  val GenerateRxValid = StateData0 & (~ByteCntEq0 | DlyCrcCnt >= 3.U);
+  val GenerateRxValid = StateData0 & ~ByteCntEq0;
   val DelayData   = RegNext(StateData0, false.B)
   val LatchedByte = RegInit(0.U(8.W))
   when(true.B) {
@@ -291,7 +284,7 @@ class MacRx extends MacRxBase with MacRxFSM with MacRxCounter with MacRxFAddrChe
   io.RxValid := ShiftRegister(GenerateRxValid, 2, false.B, true.B)
 
 
-  val GenerateRxStartFrm = StateData0 & ( (ByteCntEq1 & ~io.DlyCrcEn) | ((DlyCrcCnt === 3.U) & io.DlyCrcEn) )
+  val GenerateRxStartFrm = StateData0 & ByteCntEq1
 
   io.RxStartFrm := ShiftRegister(GenerateRxStartFrm, 2, false.B, true.B)
 
