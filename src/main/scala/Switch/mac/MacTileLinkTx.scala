@@ -42,7 +42,7 @@ class MacTileLinkTx extends Module with RequireAsyncReset{
   val TxStartFrm = RegInit(false.B);  io.TxStartFrm := TxStartFrm
   val TxEndFrm   = RegInit(false.B);  io.TxEndFrm   := TxEndFrm
   val TxData     = RegInit(0.U(8.W)); io.TxData     := TxData
-  val LastWord = RegInit(false.B)
+  // val LastWord = RegInit(false.B)
   val ReadTxDataFromFifo_tck = RegInit(false.B); 
 
   // Generating delayed signals
@@ -63,17 +63,17 @@ class MacTileLinkTx extends Module with RequireAsyncReset{
     TxStartFrm := false.B
   }
 
-  // Indication of the last word
-  when( (TxEndFrm | io.TxAbort) & Flop ){
-    LastWord := false.B
-  } .elsewhen( io.txReq.fire ){
-    LastWord := io.txReq.bits.isLast
-  }
+          // // Indication of the last word
+          // when( (TxEndFrm | io.TxAbort) & Flop ){
+          //   LastWord := false.B
+          // } .elsewhen( io.txReq.fire ){
+          //   LastWord := io.txReq.bits.isLast
+          // }
 
   // Tx end frame generation
   when(Flop & TxEndFrm | io.TxAbort){
     TxEndFrm := false.B
-  } .elsewhen(Flop & LastWord){
+  } .elsewhen( io.txReq.fire & io.txReq.bits.isLast ){
     TxEndFrm := true.B
   }
 
@@ -81,7 +81,7 @@ class MacTileLinkTx extends Module with RequireAsyncReset{
 
   io.txReq.ready := 
       io.txReq.valid & io.txReq.bits.isStart & ~TxStartFrm |
-      io.TxUsedData & Flop & ~LastWord |
+      io.TxUsedData & Flop & ~TxEndFrm |
       TxStartFrm & io.TxUsedData & Flop
 
   when( io.txReq.fire ){
