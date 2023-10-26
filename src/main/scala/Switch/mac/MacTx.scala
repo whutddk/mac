@@ -14,7 +14,6 @@ class MacTxIO extends Bundle{
 
   val CrcEn           = Input(Bool())         // Crc enable (from register)
   val FullD           = Input(Bool())         // Full duplex (from register)
-  val DlyCrcEn        = Input(Bool())         // Delayed Crc enabled (from register)
   val IPGT            = Input(UInt(7.W))         // Back to back transmit inter packet gap parameter (from register)
   val IPGR1           = Input(UInt(7.W))         // Non back to back transmit inter packet gap parameter IPGR1 (from register)
   val IPGR2           = Input(UInt(7.W))         // Non back to back transmit inter packet gap parameter IPGR2 (from register)
@@ -74,7 +73,6 @@ abstract class MacTxBase extends Module with RequireAsyncReset{
   val Rule1 = RegInit(false.B)
 
   val ColWindow = RegInit(true.B)
-  val DlyCrcCnt = RegInit(0.U(3.W)) // Delayed CRC counter
   val PacketFinished_q = RegInit(false.B)
   val ByteCnt = RegInit(0.U(16.W)) // Transmit Byte Counter
   val NibCnt = RegInit(0.U(16.W)) // Nibble Counter
@@ -211,11 +209,6 @@ trait MacTxCounter { this: MacTxBase =>
     ByteCnt := ByteCnt + 1.U
   }
        
-  when((StateData(1) & DlyCrcCnt === 4.U) | StartJam | PacketFinished_q){
-    DlyCrcCnt := 0.U
-  }.elsewhen(io.DlyCrcEn & (StateSFD | StateData(1) & (DlyCrcCnt.orR))){
-    DlyCrcCnt := DlyCrcCnt + 1.U
-  }
 
 }
 
@@ -223,7 +216,7 @@ trait MacTxCounter { this: MacTxBase =>
 
 trait MacTxCRC{ this: MacTxBase =>
 
-  val Initialize_Crc = StateIdle | StatePreamble | (DlyCrcCnt.orR)
+  val Initialize_Crc = StateIdle | StatePreamble
   val Enable_Crc = ~StateFCS
 
   val Data_Crc = 

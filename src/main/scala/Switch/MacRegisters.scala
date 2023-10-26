@@ -209,8 +209,8 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
 
       ( 6 << 2 ) ->
         RegFieldGroup("PACKETLEN", Some("Packet Length Register"), Seq(
-          RegField.r(16, 0.U, RegFieldDesc("maxFL", "Maximum Frame Length", reset=Some(0x0600))) ++
-          RegField.r(16, 64.U, RegFieldDesc("minFL", "Minimum Frame Length", reset=Some(0x0040)))
+          RegField.r(16, 0.U, RegFieldDesc("maxFL", "Maximum Frame Length", reset=Some(0x0600))),
+          RegField.r(16, 64.U, RegFieldDesc("minFL", "Minimum Frame Length", reset=Some(0x0040))),
         )),
       ( 7 << 2 ) ->
         RegFieldGroup("COLLCONF", Some("Collision and Retry Configuration Register"), Seq(
@@ -269,12 +269,12 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
 
       ( 16 << 2 ) ->
         RegFieldGroup("MAC_ADDR0", Some("MAC Address Register 0"), Seq(
-          RegField.r(1)
+          RegField(32)
         )),
 
       ( 17 << 2 ) ->
         RegFieldGroup("MAC_ADDR1", Some("MAC Address Register 1"), Seq(
-          RegField.r(1)
+          RegField(32)
         )),
 
       ( 18 << 2 ) ->
@@ -289,7 +289,7 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
         
       ( 20 << 2 ) ->
         RegFieldGroup("TXCTRL", Some("Tx Control Register"), Seq(
-          RegField.r(8, 0,U, RegFieldDesc("TxPauseTV", "Tx Pause Timer Value", reset=Some(0x0))), 
+          RegField.r(8, 0.U, RegFieldDesc("TxPauseTV", "Tx Pause Timer Value", reset=Some(0x0))), 
           RegField.r(1, 0.U, RegFieldDesc("TxPauseRQ", "Tx Pause Request", reset=Some(0x0))),
         )),
 
