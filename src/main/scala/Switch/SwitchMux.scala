@@ -59,8 +59,6 @@ class SwitchMux(edgeOut: TLEdgeOut)(implicit p: Parameters) extends SwitchModule
 
 
     def PerPacketCrcEn = true.B
-    def PerPacketPad   = true.B
-
 
 
 
@@ -80,7 +78,6 @@ class SwitchMux(edgeOut: TLEdgeOut)(implicit p: Parameters) extends SwitchModule
   txBuff.io.enq.req.valid := txReqValid && stateCur === stateIdle
   txBuff.io.enq.req.bits.txLength := io.r_TxLen
   txBuff.io.enq.req.bits.PerPacketCrcEn := PerPacketCrcEn
-  txBuff.io.enq.req.bits.PerPacketPad := PerPacketPad
 
 
 

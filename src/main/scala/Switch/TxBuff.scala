@@ -10,7 +10,6 @@ import chisel3.util._
 class Transmit_Req_Bundle extends Bundle{
   val txLength       = UInt(16.W)
   val PerPacketCrcEn = Bool()
-  val PerPacketPad   = Bool()
 }
 
 class Transmit_Resp_Bundle extends Bundle{

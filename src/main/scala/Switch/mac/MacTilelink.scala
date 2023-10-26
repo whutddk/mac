@@ -41,7 +41,6 @@ abstract class MacTileLinkBase() extends Module{
     val DeferLatched     = Input(Bool())     // Defer indication (Frame was defered before sucessfully sent)
     val CarrierSenseLost = Input(Bool())     // Carrier Sense was lost during the frame transmission
     val PerPacketCrcEn = Output(Bool())     // Per packet crc enable
-    val PerPacketPad   = Output(Bool())     // Per packet pading
 
     //Register
     val r_TxEn    = Input(Bool())          // Transmit enable
@@ -136,7 +135,6 @@ abstract class MacTileLinkBase() extends Module{
   val txAbortPulse                = io.TxAbortSync             & ~RegNext(io.TxAbortSync, false.B)
 
   
-  io.PerPacketPad    := RegEnable(io.txDeq.req.bits.PerPacketPad,   false.B, io.txDeq.req.fire)
   io.PerPacketCrcEn  := RegEnable(io.txDeq.req.bits.PerPacketCrcEn, false.B, io.txDeq.req.fire)
 
   when( io.txDeq.req.fire ){

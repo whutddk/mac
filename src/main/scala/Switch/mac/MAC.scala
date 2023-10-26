@@ -141,7 +141,6 @@ val MRxErr_Lb                  = Wire(Bool())
 val MRxD_Lb                    = Wire(UInt(4.W))
 val Transmitting               = Wire(Bool())
 val r_DlyCrcEn                 = Wire(Bool())
-val r_MinFL                    = Wire(UInt(16.W))
 val DribbleNibble              = Wire(Bool())
 val LoadRxStatus               = Wire(Bool())
 val r_HASH0                    = Wire(UInt(32.W))
@@ -157,12 +156,10 @@ val TxE_IRQ                    = Wire(Bool())
 val RxB_IRQ                    = Wire(Bool())
 val RxE_IRQ                    = Wire(Bool())
 val Busy_IRQ                   = Wire(Bool())
-val r_Pad                      = Wire(Bool())
 val r_CrcEn                    = Wire(Bool())
 val r_FullD                    = Wire(Bool())
 val r_NoPre                    = Wire(Bool())
 val StartTxDone                = Wire(Bool())
-val PerPacketPad               = Wire(Bool())
 val PerPacketCrcEn             = Wire(Bool())
 val LateCollision              = Wire(Bool())
 val DeferIndication            = Wire(Bool())
@@ -179,7 +176,6 @@ dontTouch(MRxErr_Lb                  )
 dontTouch(MRxD_Lb                    )
 dontTouch(Transmitting               )
 dontTouch(r_DlyCrcEn                 )
-dontTouch(r_MinFL                    )
 dontTouch(DribbleNibble              )
 dontTouch(LoadRxStatus               )
 dontTouch(r_HASH0                    )
@@ -195,12 +191,10 @@ dontTouch(TxE_IRQ                    )
 dontTouch(RxB_IRQ                    )
 dontTouch(RxE_IRQ                    )
 dontTouch(Busy_IRQ                   )
-dontTouch(r_Pad                      )
 dontTouch(r_CrcEn                    )
 dontTouch(r_FullD                    )
 dontTouch(r_NoPre                    )
 dontTouch(StartTxDone                )
-dontTouch(PerPacketPad               )
 dontTouch(PerPacketCrcEn             )
 dontTouch(LateCollision              )
 dontTouch(DeferIndication            )
@@ -230,7 +224,6 @@ io.cfg.StartTxDone         := StartTxDone
 io.cfg.TxClk               := io.mii.mtx_clk_pad_i
 io.cfg.RxClk               := io.mii.mrx_clk_pad_i
 
-r_Pad       := io.cfg.r_Pad
 r_CrcEn     := io.cfg.r_CrcEn
 r_DlyCrcEn  := io.cfg.r_DlyCrcEn
 r_FullD     := io.cfg.r_FullD
@@ -245,7 +238,6 @@ r_HASH1     := io.cfg.r_HASH1
 r_IPGT      := io.cfg.r_IPGT
 r_IPGR1     := io.cfg.r_IPGR1
 r_IPGR2     := io.cfg.r_IPGR2
-r_MinFL     := io.cfg.r_MinFL
 r_CollValid := io.cfg.r_CollValid
 r_MiiNoPre  := io.cfg.r_MiiNoPre
 r_ClkDiv    := io.cfg.r_ClkDiv
@@ -341,11 +333,9 @@ txethmac.io.TxEndFrm        := TxEndFrm
 txethmac.io.TxData          := TxData
 txethmac.io.CarrierSense    := TxCarrierSense
 txethmac.io.Collision       := Collision
-txethmac.io.Pad             := r_Pad | PerPacketPad
 txethmac.io.CrcEn           := r_CrcEn | PerPacketCrcEn
 txethmac.io.FullD           := r_FullD
 txethmac.io.DlyCrcEn        := r_DlyCrcEn
-txethmac.io.MinFL           := r_MinFL
 txethmac.io.IPGT            := r_IPGT
 txethmac.io.IPGR1           := r_IPGR1
 txethmac.io.IPGR2           := r_IPGR2
@@ -460,7 +450,6 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   wishbone.io.CarrierSenseLost := CarrierSenseLost
 
   PerPacketCrcEn := wishbone.io.PerPacketCrcEn
-  PerPacketPad   := wishbone.io.PerPacketPad
 
   wishbone.io.r_TxEn     := r_TxEn
   wishbone.io.r_RxEn     := r_RxEn

@@ -11,11 +11,10 @@ class MacTxIO extends Bundle{
   val TxData          = Input(UInt(8.W))         // Transmit packet data byte
   val CarrierSense    = Input(Bool())         // Carrier sense (synchronized)
   val Collision       = Input(Bool())         // Collision (synchronized)
-  val Pad             = Input(Bool())         // Pad enable (from register)
+
   val CrcEn           = Input(Bool())         // Crc enable (from register)
   val FullD           = Input(Bool())         // Full duplex (from register)
   val DlyCrcEn        = Input(Bool())         // Delayed Crc enabled (from register)
-  val MinFL           = Input(UInt(16.W))         // Minimum frame length (from register)
   val IPGT            = Input(UInt(7.W))         // Back to back transmit inter packet gap parameter (from register)
   val IPGR1           = Input(UInt(7.W))         // Non back to back transmit inter packet gap parameter IPGR1 (from register)
   val IPGR2           = Input(UInt(7.W))         // Non back to back transmit inter packet gap parameter IPGR2 (from register)
@@ -98,10 +97,10 @@ trait MacTxFSM { this: MacTxBase =>
   StartData(0) := ~io.Collision & (StatePreamble & NibCntEq15 | StateData(1) & ~io.TxEndFrm)
   StartData(1) := ~io.Collision & StateData(0)
 
-  val StartPAD = ~io.Collision & StateData(1) & io.TxEndFrm & io.Pad & ~NibbleMinFl
+  val StartPAD = ~io.Collision & StateData(1) & io.TxEndFrm & ~NibbleMinFl
 
   StartFCS :=
-    (~io.Collision & StateData(1) & io.TxEndFrm & (~io.Pad | io.Pad & NibbleMinFl) & io.CrcEn) |
+    (~io.Collision & StateData(1) & io.TxEndFrm & NibbleMinFl & io.CrcEn) |
     (~io.Collision & StatePAD & NibbleMinFl & io.CrcEn)
 
   StartJam := (io.Collision ) & ((StatePreamble & NibCntEq15) | (StateData(1) | StateData(0)) | StatePAD | StateFCS)
@@ -192,7 +191,7 @@ trait MacTxCounter { this: MacTxBase =>
     NibCnt := NibCnt + 1.U
   }
 
-  NibbleMinFl := NibCnt >= (((io.MinFL-4.U)<<1) - 1.U)  // FCS should not be included in NibbleMinFl
+  NibbleMinFl := NibCnt >= (((64.U-4.U)<<1) - 1.U)  // FCS should not be included in NibbleMinFl
 
   ExcessiveDefer := NibCnt(13,0) === "h17b7".U & ~io.ExDfrEn;   // 6071 nibbles
 
@@ -297,7 +296,7 @@ class MacTx extends MacTxBase with MacTxFSM with MacTxCounter with MacTxCRC {
 
   io.ResetCollision := ~(StatePreamble | (StateData(0) | StateData(1)) | StatePAD | StateFCS)
   val ExcessiveDeferOccured = io.TxStartFrm & StateDefer & ExcessiveDefer & ~StopExcessiveDeferOccured
-  io.StartTxDone := ~io.Collision & (StateFCS & NibCntEq7 | StateData(1) & io.TxEndFrm & (~io.Pad | io.Pad & NibbleMinFl) & ~io.CrcEn)
+  io.StartTxDone := ~io.Collision & (StateFCS & NibCntEq7 | StateData(1) & io.TxEndFrm & NibbleMinFl & ~io.CrcEn)
   io.LateCollision := StartJam & ~ColWindow
   io.MaxCollisionOccured := StartJam & ColWindow;
   StateSFD := StatePreamble & NibCntEq15;
