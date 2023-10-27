@@ -56,22 +56,20 @@ class SwitchImp(outer: Switch)(implicit p: Parameters) extends LazyModuleImp(out
   outer.ethReg.module.io.asyncReset := io.asyncReset
   outer.ethReg.module.io.viewAsSupertype(new Mac_Config_Bundle) <> mac(0).io.cfg
 
-  val switchMux = Module(new SwitchMux(dma_edge))
+  val dmaMst = Module(new DMAMst(dma_edge))
 
-  switchMux.io.rxEnq(0) <> mac(0).io.rxEnq
-  switchMux.io.txDeq(0) <> mac(0).io.txDeq
-
-
-  switchMux.io.triTx             := outer.ethReg.module.io.triTx
-  outer.ethReg.module.io.triRx := switchMux.io.triRx
+  dmaMst.io.rxEnq(0) <> mac(0).io.rxEnq
+  dmaMst.io.txDeq(0) <> mac(0).io.txDeq
 
 
-  switchMux.io.r_TxPtr           := outer.ethReg.module.io.r_TxPtr
-  switchMux.io.r_RxPtr           := outer.ethReg.module.io.r_RxPtr
-  switchMux.io.r_TxLen           := outer.ethReg.module.io.r_TxLen
-  outer.ethReg.module.io.r_RxLen := switchMux.io.r_RxLen
+  dmaMst.io.triTx             := outer.ethReg.module.io.triTx
+  outer.ethReg.module.io.triRx := dmaMst.io.triRx
 
 
+  dmaMst.io.r_TxPtr           := outer.ethReg.module.io.r_TxPtr
+  dmaMst.io.r_RxPtr           := outer.ethReg.module.io.r_RxPtr
+  dmaMst.io.r_TxLen           := outer.ethReg.module.io.r_TxLen
+  outer.ethReg.module.io.r_RxLen := dmaMst.io.r_RxLen
 
 
 
@@ -82,12 +80,14 @@ class SwitchImp(outer: Switch)(implicit p: Parameters) extends LazyModuleImp(out
 
 
 
-  switchMux.io.dmaMst.D.bits  := dma_bus.d.bits
-  switchMux.io.dmaMst.D.valid := dma_bus.d.valid
-  dma_bus.d.ready := switchMux.io.dmaMst.D.ready
-  dma_bus.a.valid := switchMux.io.dmaMst.A.valid
-  dma_bus.a.bits  := switchMux.io.dmaMst.A.bits
-  switchMux.io.dmaMst.A.ready := dma_bus.a.ready
+
+
+  dmaMst.io.dmaMst.D.bits  := dma_bus.d.bits
+  dmaMst.io.dmaMst.D.valid := dma_bus.d.valid
+  dma_bus.d.ready := dmaMst.io.dmaMst.D.ready
+  dma_bus.a.valid := dmaMst.io.dmaMst.A.valid
+  dma_bus.a.bits  := dmaMst.io.dmaMst.A.bits
+  dmaMst.io.dmaMst.A.ready := dma_bus.a.ready
 
 
 

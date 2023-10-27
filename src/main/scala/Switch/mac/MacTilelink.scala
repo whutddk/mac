@@ -21,16 +21,16 @@ abstract class MacTileLinkBase() extends Module{
 
     val r_RxEn    = Input(Bool())         // Receive enable
 
-    val rxReq = Flipped(Decoupled(new RxFifo_Stream_Bundle))
+    val rxReq = Flipped(Decoupled(new Mac_Stream_Bundle))
     val rxResp = Decoupled(new Bool())
 
-    val LatchedRxLength_rxclk = Input(UInt(16.W))
+    // val LatchedRxLength_rxclk = Input(UInt(16.W))
     val RxStatusInLatched_rxclk = Input(UInt(9.W))
     val RxReady = Output(Bool())
 
 
 
-    val txReq = Decoupled(new TxFifo_Stream_Bundle)
+    val txReq = Decoupled(new Mac_Stream_Bundle)
 
     // val TxEndFrm_wb = Output(Bool())
 
@@ -70,7 +70,7 @@ abstract class MacTileLinkBase() extends Module{
 
   val rxBuffCtrlValid = RegInit(false.B)
   io.rxEnq.ctrl.valid := rxBuffCtrlValid
-  io.rxEnq.ctrl.bits.LatchedRxLength   := RegEnable(io.LatchedRxLength_rxclk,   ShiftEndedSyncPluse )
+  // io.rxEnq.ctrl.bits.LatchedRxLength   := RegEnable(io.LatchedRxLength_rxclk,   ShiftEndedSyncPluse )
   io.rxEnq.ctrl.bits.RxStatusInLatched := RegEnable(io.RxStatusInLatched_rxclk, ShiftEndedSyncPluse )
 
 
@@ -85,14 +85,14 @@ abstract class MacTileLinkBase() extends Module{
   // RxReady generation
   when(ShiftEndedSyncPluse ){
     RxReady := false.B
-  } .elsewhen( io.r_RxEn & (io.rxEnq.data.ready) ){
+  } .elsewhen( io.r_RxEn & (io.rxEnq.req.ready) ){
     RxReady := true.B
   }
 
 
-  io.rxEnq.data.bits  := io.rxReq.bits.data
-  io.rxEnq.data.valid := io.rxReq.valid
-  io.rxReq.ready      := io.rxEnq.data.ready
+  io.rxEnq.req.bits  := io.rxReq.bits
+  io.rxEnq.req.valid := io.rxReq.valid
+  io.rxReq.ready      := io.rxEnq.req.ready
 
   val rxRespValid = RegInit(false.B)
   when( io.rxResp.fire ){
@@ -103,7 +103,7 @@ abstract class MacTileLinkBase() extends Module{
   io.rxResp.valid := rxRespValid
   io.rxResp.bits  := DontCare
 
-  assert( ~(io.rxEnq.data.valid & ~io.rxEnq.data.ready), "Assert Failed, rx overrun!" )
+  assert( ~(io.rxEnq.req.valid & ~io.rxEnq.req.ready), "Assert Failed, rx overrun!" )
 
 
 
@@ -125,42 +125,40 @@ abstract class MacTileLinkBase() extends Module{
 
 
 
-  val TxStartFrm_wb = RegInit(false.B)
-  val TxEndFrm_wb = RegInit(false.B)//; io.TxEndFrm_wb := TxEndFrm_wb
+  // val TxStartFrm_wb = RegInit(false.B)
+  // val TxEndFrm_wb = RegInit(false.B)
 
-  val TxLength = RegInit(0.U(16.W))
-  val LatchedTxLength = RegInit(0.U(16.W))
+  // val TxLength = RegInit(0.U(16.W))
 
   val txDonePulse                 = io.TxDoneSync              & ~RegNext(io.TxDoneSync,  false.B)
   val txAbortPulse                = io.TxAbortSync             & ~RegNext(io.TxAbortSync, false.B)
 
   
-  io.PerPacketCrcEn  := RegEnable(io.txDeq.req.bits.PerPacketCrcEn, false.B, io.txDeq.req.fire)
+  io.PerPacketCrcEn  := false.B
 
-  when( io.txDeq.req.fire ){
-    TxStartFrm_wb := true.B
-  } .elsewhen(io.txReq.fire){
-    TxStartFrm_wb := false.B
-  }
+  // when( io.txDeq.req.fire ){
+  //   TxStartFrm_wb := true.B
+  // } .elsewhen(io.txReq.fire){
+  //   TxStartFrm_wb := false.B
+  // }
 
 
-    when(((TxLength - 1.U) === 0.U) & io.TxUsedData){
-      TxEndFrm_wb := true.B
-    } .elsewhen(txDonePulse | txAbortPulse){
-      TxEndFrm_wb := false.B
-    }
+    // when(((TxLength - 1.U) === 0.U) & io.TxUsedData){
+    //   TxEndFrm_wb := true.B
+    // } .elsewhen(txDonePulse | txAbortPulse){
+    //   TxEndFrm_wb := false.B
+    // }
 
-  when( io.txDeq.req.fire ){
-
-    TxLength        := io.txDeq.req.bits.txLength
-    LatchedTxLength := io.txDeq.req.bits.txLength
-  } .elsewhen( io.txDeq.data.fire ){
-    when( TxLength < 1.U ){
-      TxLength := 0.U
-    } .otherwise{
-      TxLength := TxLength - 1.U    // Length is subtracted at the data request
-    }
-  }
+  //     val TxLength = RegInit(0.U(16.W))
+  // when( io.txDeq.req.fire ){
+  //   TxLength        := io.txDeq.req.bits.txLength
+  // } .elsewhen( io.txDeq.data.fire ){
+  //   when( TxLength < 1.U ){
+  //     TxLength := 0.U
+  //   } .otherwise{
+  //     TxLength := TxLength - 1.U    // Length is subtracted at the data request
+  //   }
+  // }
 
 
   val txRespValid = RegInit(false.B)
@@ -195,13 +193,13 @@ abstract class MacTileLinkBase() extends Module{
 
 
 
-  io.txReq.bits.isLast  := TxEndFrm_wb
-  io.txReq.bits.data    := io.txDeq.data.bits
-  io.txReq.bits.isStart := TxStartFrm_wb
-  io.txReq.valid        := io.txDeq.data.valid
-  io.txDeq.data.ready   := io.txReq.ready
+  // io.txReq.bits.isLast  := TxEndFrm_wb
 
+  // io.txReq.bits.isStart := TxStartFrm_wb
+  // io.txReq.valid        := io.txDeq.data.valid
+  // io.txDeq.data.ready   := io.txReq.ready
 
+  io.txReq <> io.txDeq.req
 
 
 

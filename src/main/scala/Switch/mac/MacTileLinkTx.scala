@@ -4,16 +4,12 @@ import chisel3._
 import chisel3.util._
 
 
-class TxFifo_Stream_Bundle extends Bundle{
-  val data = UInt(8.W)
-  val isStart = Bool()
-  val isLast  = Bool()
-}
+
 
 
 class MacTileLinkTxIO extends Bundle{
 
-  val txReq  = Flipped(Decoupled(new TxFifo_Stream_Bundle))
+  val txReq  = Flipped(Decoupled(new Mac_Stream_Bundle))
   // val txResp = Decoupled()
 
 
@@ -63,12 +59,7 @@ class MacTileLinkTx extends Module with RequireAsyncReset{
     TxStartFrm := false.B
   }
 
-          // // Indication of the last word
-          // when( (TxEndFrm | io.TxAbort) & Flop ){
-          //   LastWord := false.B
-          // } .elsewhen( io.txReq.fire ){
-          //   LastWord := io.txReq.bits.isLast
-          // }
+
 
   // Tx end frame generation
   when(Flop & TxEndFrm | io.TxAbort){

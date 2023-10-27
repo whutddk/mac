@@ -3,8 +3,10 @@ package Switch
 import chisel3._
 import chisel3.util._
 
+import MAC._
+
 class Receive_Enq_Ctrl_Bundle extends Bundle{
-  val LatchedRxLength   = UInt(16.W)
+  // val LatchedRxLength   = UInt(16.W)
   val RxStatusInLatched = UInt(9.W)
 }
 
@@ -13,13 +15,13 @@ class Receive_Deq_Ctrl_Bundle extends Receive_Enq_Ctrl_Bundle{
 }
 
 class Receive_Enq_Bundle extends Bundle{
-  val data = Decoupled(UInt(8.W))
+  val req = Decoupled(new Mac_Stream_Bundle)
   val ctrl = Decoupled(new Receive_Enq_Ctrl_Bundle)
 }
 
 
 class Receive_Deq_Bundle extends Bundle{
-  val data = Decoupled(UInt(8.W))
+  val req = Decoupled(new Mac_Stream_Bundle)
   val ctrl = Decoupled(new Receive_Deq_Ctrl_Bundle)
   val header = Decoupled(Vec( 20, UInt(8.W) ) )
 }
@@ -43,7 +45,7 @@ class RxBuffBase extends Module{
   val isDeqPo = ~isEnqPi
 
 
-  val buff = for( i <- 0 until 2 ) yield { Module(new Queue( UInt(8.W), 2048 )) }
+  val buff = for( i <- 0 until 2 ) yield { Module(new Queue( new Mac_Stream_Bundle, 2048 )) }
   val info = for( i <- 0 until 2 ) yield { Reg(new Receive_Enq_Ctrl_Bundle) }
   // dontTouch(buff(0).io.enq)
   // dontTouch(info(0))
@@ -66,13 +68,13 @@ trait RxBuffEnq{ this: RxBuffBase =>
 
 
 
-  buff(0).io.enq.valid := isEnqPi & io.enq.data.valid
-  buff(0).io.enq.bits  := io.enq.data.bits
+  buff(0).io.enq.valid := isEnqPi & io.enq.req.valid
+  buff(0).io.enq.bits  := io.enq.req.bits
 
-  buff(1).io.enq.valid := isEnqPo & io.enq.data.valid
-  buff(1).io.enq.bits  := io.enq.data.bits
+  buff(1).io.enq.valid := isEnqPo & io.enq.req.valid
+  buff(1).io.enq.bits  := io.enq.req.bits
 
-  io.enq.data.ready := (isEnqPi & buff(0).io.enq.ready) | (isEnqPo & buff(1).io.enq.ready)
+  io.enq.req.ready := (isEnqPi & buff(0).io.enq.ready) | (isEnqPo & buff(1).io.enq.ready)
   io.enq.ctrl.ready := true.B
 
   when( io.enq.ctrl.fire ){
@@ -88,13 +90,13 @@ trait RxBuffEnq{ this: RxBuffBase =>
 
   when( io.enq.ctrl.fire ){
     recCnt := 0.U
-  } .elsewhen( io.enq.data.fire ){
+  } .elsewhen( io.enq.req.fire ){
     when( recCnt < 20.U ){
       recCnt := recCnt + 1.U
       when( isEnqPi ){
-        header(0)(recCnt) := io.enq.data.bits
+        header(0)(recCnt) := io.enq.req.bits.data
       } .elsewhen( isEnqPo ){
-        header(1)(recCnt) := io.enq.data.bits
+        header(1)(recCnt) := io.enq.req.bits.data
       } .otherwise{
         assert(false.B, "Assert Failed, Rx Under Run")
       }
@@ -110,7 +112,7 @@ trait RxBuffDeq{ this: RxBuffBase =>
   when( io.deq.header.fire ){
     when( isDeqPi ) { hValid(0) := false.B }
     when( isDeqPo ) { hValid(1) := false.B }
-  } .elsewhen( io.enq.data.fire & recCnt === 20.U ){
+  } .elsewhen( io.enq.req.fire & recCnt === 20.U ){
     when( isEnqPi ) { hValid(0) := true.B }
     when( isEnqPo ) { hValid(1) := true.B }
   }
@@ -127,7 +129,7 @@ trait RxBuffDeq{ this: RxBuffBase =>
 
 
   when( isDeqPi ){
-    io.deq.data <> buff(0).io.deq
+    io.deq.req <> buff(0).io.deq
     buff(1).io.deq.ready := false.B
 
     io.deq.header.valid := hValid(0)
@@ -137,7 +139,7 @@ trait RxBuffDeq{ this: RxBuffBase =>
     io.deq.ctrl.bits  := info(0)
   } .otherwise{
     assert( isDeqPo )
-    io.deq.data <> buff(1).io.deq
+    io.deq.req <> buff(1).io.deq
     buff(0).io.deq.ready := false.B
 
     io.deq.header.valid := hValid(1)

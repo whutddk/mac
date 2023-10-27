@@ -516,7 +516,7 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   val macTileLinkTx = withClockAndReset( io.mii.mtx_clk_pad_i.asClock, io.asyncReset ) (Module(new MacTileLinkTx))
 
 
-  val txReq_ToAsync = Wire(new AsyncBundle(new TxFifo_Stream_Bundle))
+  val txReq_ToAsync = Wire(new AsyncBundle(new Mac_Stream_Bundle))
   txReq_ToAsync <> ToAsyncBundle( wishbone.io.txReq )
   withClockAndReset(io.mii.mtx_clk_pad_i.asClock, io.asyncReset) {  
     macTileLinkTx.io.txReq <> FromAsyncBundle( txReq_ToAsync )  
@@ -567,7 +567,7 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   val macTileLinkRx = withClockAndReset( io.mii.mrx_clk_pad_i.asClock, io.asyncReset ) ( Module(new MacTileLinkRx) )
  
 
-  val req_ToAsync = Wire(new AsyncBundle(new RxFifo_Stream_Bundle))
+  val req_ToAsync = Wire(new AsyncBundle(new Mac_Stream_Bundle))
   val resp_ToAsync = Wire(new AsyncBundle(Bool()))
   val fateRxRespPort = Wire( Flipped(Decoupled(Bool())) )
   fateRxRespPort.ready := true.B
@@ -586,7 +586,7 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
 
 
 
-  wishbone.io.LatchedRxLength_rxclk   := macTileLinkRx.io.LatchedRxLength
+  // wishbone.io.LatchedRxLength_rxclk   := macTileLinkRx.io.LatchedRxLength
   wishbone.io.RxStatusInLatched_rxclk := macTileLinkRx.io.RxStatusInLatched
       
 
@@ -608,7 +608,7 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   macTileLinkRx.io.RxEndFrm := RxEndFrm
 
 
-  macTileLinkRx.io.RxLength     := RxByteCnt
+  // macTileLinkRx.io.RxLength     := RxByteCnt
   macTileLinkRx.io.LoadRxStatus := LoadRxStatus
   macTileLinkRx.io.RxStatusIn   := Cat(false.B, false.B, false.B, false.B, DribbleNibble, false.B, false.B, LatchedCrcError, RxLateCollision)
 

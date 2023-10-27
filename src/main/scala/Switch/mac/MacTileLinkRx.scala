@@ -4,8 +4,9 @@ import chisel3._
 import chisel3.util._
 
 
-class RxFifo_Stream_Bundle extends Bundle{
+class Mac_Stream_Bundle extends Bundle{
   val data = UInt(8.W)
+  val isStart = Bool()
   val isLast = Bool()
 }
 
@@ -13,12 +14,12 @@ class RxFifo_Stream_Bundle extends Bundle{
 
 class MacTileLinkRxIO extends Bundle{
 
-  val rxReq = Decoupled(new RxFifo_Stream_Bundle)
+  val rxReq = Decoupled(new Mac_Stream_Bundle)
 
-  val LatchedRxLength = Output(UInt(16.W))
+  // val LatchedRxLength = Output(UInt(16.W))
   val RxStatusInLatched = Output( UInt(9.W) )
 
-  val RxLength = Input(UInt(16.W))
+  // val RxLength = Input(UInt(16.W))
   val LoadRxStatus = Input(Bool())
       val RxStatusIn = Input(UInt(9.W))
 
@@ -40,7 +41,7 @@ class MacTileLinkRx extends Module with RequireAsyncReset{
 
   val ShiftWillEnd = RegInit(false.B)
 
-  val LatchedRxLength = RegEnable(io.RxLength, 0.U(16.W), io.LoadRxStatus); io.LatchedRxLength   := LatchedRxLength
+  // val LatchedRxLength = RegEnable(io.RxLength, 0.U(16.W), io.LoadRxStatus); io.LatchedRxLength   := LatchedRxLength
   val RxStatusInLatched = RegEnable(io.RxStatusIn, 0.U(9.W), io.LoadRxStatus); io.RxStatusInLatched := RxStatusInLatched
 
   // val ShiftEnded_rck = RegInit(false.B); io.ShiftEnded_rck := ShiftEnded_rck
@@ -70,9 +71,10 @@ class MacTileLinkRx extends Module with RequireAsyncReset{
     }
 
 
-  val rxFifo = Module(new Queue(new RxFifo_Stream_Bundle, 4))
+  val rxFifo = Module(new Queue(new Mac_Stream_Bundle, 4))
   rxFifo.io.enq.valid := SetWriteRxDataToFifo
   rxFifo.io.enq.bits.data   := io.RxData
+  rxFifo.io.enq.bits.isStart := io.RxStartFrm
   rxFifo.io.enq.bits.isLast := io.RxEndFrm
   assert( ~(rxFifo.io.enq.valid & ~rxFifo.io.enq.ready) )
 

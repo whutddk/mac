@@ -11,7 +11,7 @@ import freechips.rocketchip.tilelink._
 
 
 
-class SwitchMux(edgeOut: TLEdgeOut)(implicit p: Parameters) extends SwitchModule{
+abstract class SwitchMuxBase(edgeOut: TLEdgeOut)(implicit p: Parameters) extends SwitchModule{
 
   class MacTileLinkMasterIO extends Bundle{
     val A = Decoupled(new TLBundleA(edgeOut.bundle))
@@ -49,37 +49,34 @@ class SwitchMux(edgeOut: TLEdgeOut)(implicit p: Parameters) extends SwitchModule
 
   val stateNxt = Wire(UInt(2.W))
   val stateCur = RegNext(stateNxt, stateIdle)
+  val stateDMA = RegInit(0.U(2.W))
+
+  when( stateNxt =/= stateIdle && stateCur === stateIdle ){
+    stateDMA := 1.U
+  } .elsewhen( io.dmaMst.A.fire ){
+    stateDMA := 2.U
+  } .elsewhen( io.dmaMst.D.fire & isLastD ){
+    when( stateCur === stateTx & dmaAddress < (io.r_TxPtr + io.r_TxLen) ){
+      stateDMA := 0.U
+    } .elsewhen( stateCur === stateRx & rxBuff.io.deq.data.valid  ){
+      stateDMA := 0.U
+    } .otherwise{
+      stateDMA := 1.U
+    }
+  }
+
+
 
   stateNxt := 
     Mux1H(Seq(
-      ( stateCur === stateIdle ) -> Mux( rxBuff.io.deq.header.fire, stateRx, Mux( txBuff.io.enq.req.fire, stateTx, stateIdle ) ),
+      ( stateCur === stateIdle ) -> Mux( (io.triTx & io.r_TxLen > 32.U), stateTx, Mux( rxBuff.io.deq.header.fire, stateRx, stateIdle ) ),
       ( stateCur === stateRx   ) -> Mux( rxBuff.io.deq.ctrl.fire, stateIdle, stateRx ),
       ( stateCur === stateTx   ) -> Mux( txBuff.io.enq.resp.fire, stateIdle, stateTx ),
     ))
 
-
-    def PerPacketCrcEn = true.B
-
-
-
   io.triRx := rxBuff.io.deq.ctrl.fire
   io.r_RxLen := RegEnable( rxBuff.io.deq.ctrl.bits.LatchedRxLength, rxBuff.io.deq.ctrl.fire )
   rxBuff.io.deq.ctrl.ready := stateCur === stateRx & io.dmaMst.D.fire & isLastD
-
-
-  val txReqValid = RegInit(false.B)
-
-  when( txBuff.io.enq.req.fire ){
-    txReqValid := false.B
-  } .elsewhen( io.triTx & io.r_TxLen > 32.U ){
-    txReqValid := true.B
-  }
-
-  txBuff.io.enq.req.valid := txReqValid && stateCur === stateIdle
-  txBuff.io.enq.req.bits.txLength := io.r_TxLen
-  txBuff.io.enq.req.bits.PerPacketCrcEn := PerPacketCrcEn
-
-
 
 
   txBuff.io.enq.resp.ready := true.B
@@ -88,8 +85,8 @@ class SwitchMux(edgeOut: TLEdgeOut)(implicit p: Parameters) extends SwitchModule
 
 
 
-  val dmaTxAValid = RegInit(false.B)
-  val dmaTxABits  = Reg(new TLBundleA(edgeOut.bundle))
+  val dmaAValid = RegInit(false.B)
+  val dmaABits  = Reg(new TLBundleA(edgeOut.bundle))
 
 
   val dmaAddress = Reg( UInt(32.W) )
@@ -105,39 +102,21 @@ class SwitchMux(edgeOut: TLEdgeOut)(implicit p: Parameters) extends SwitchModule
   rxBuff.io.deq.data.ready := io.dmaMst.A.fire & (stateCur === stateRx)
   assert( ~(rxBuff.io.deq.data.ready & ~rxBuff.io.deq.data.valid) )
 
-  rxBuff.io.deq.header.ready := ~(io.triTx & io.r_TxLen > 32.U) && ~txReqValid & stateCur === stateIdle
+  rxBuff.io.deq.header.ready := ~(io.triTx & io.r_TxLen > 32.U) & stateCur === stateIdle
 
   when( io.dmaMst.A.fire ){
-    dmaTxAValid := false.B
-  } .elsewhen( txBuff.io.enq.req.fire ){
-    dmaTxAValid := true.B
-    dmaTxABits :=
-      edgeOut.Get(
-        fromSource = 0.U,
-        toAddress = io.r_TxPtr,
-        lgSize = log2Ceil(8/8).U,
-      )._2
-  } .elsewhen( stateCur === stateTx & io.dmaMst.D.fire & isLastD & dmaAddress < (io.r_TxPtr + io.r_TxLen) ){
-    dmaTxAValid := true.B
-    dmaTxABits :=
+    dmaAValid := false.B
+  }.elsewhen( stateDMA === 1.U & ~io.dmaMst.A.valid & stateCur === stateTx ){
+    dmaAValid := true.B
+    dmaABits :=
       edgeOut.Get(
         fromSource = 0.U,
         toAddress = dmaAddress,
         lgSize = log2Ceil(8/8).U,
       )._2
-  } .elsewhen( rxBuff.io.deq.header.fire ) {
-    dmaTxAValid := true.B
-    dmaTxABits :=
-      edgeOut.Put(
-        fromSource = 0.U,
-        toAddress = io.r_RxPtr,
-        lgSize = log2Ceil(8/8).U,
-        data = rxBuff.io.deq.data.bits,
-        mask = "b1".U,
-      )._2
-  } .elsewhen( stateCur === stateRx & io.dmaMst.D.fire & isLastD & rxBuff.io.deq.data.valid ) {
-    dmaTxAValid := true.B
-    dmaTxABits :=
+  } .elsewhen( stateDMA === 1.U & ~io.dmaMst.A.valid & stateCur === stateRx ) {
+    dmaAValid := true.B
+    dmaABits :=
       edgeOut.Put(
         fromSource = 0.U,
         toAddress = dmaAddress,
@@ -148,19 +127,21 @@ class SwitchMux(edgeOut: TLEdgeOut)(implicit p: Parameters) extends SwitchModule
   }
 
 
-  io.dmaMst.A.valid := dmaTxAValid
-  io.dmaMst.A.bits := dmaTxABits
+  io.dmaMst.A.valid := dmaAValid
+  io.dmaMst.A.bits := dmaABits
 
 
 
-  txBuff.io.enq.data.valid := io.dmaMst.D.valid & stateCur === stateTx
-  txBuff.io.enq.data.bits  := io.dmaMst.D.bits.data
+  txBuff.io.enq.req.valid := io.dmaMst.D.valid & stateCur === stateTx
+  txBuff.io.enq.req.bits.data  := io.dmaMst.D.bits.data
+  txBuff.io.enq.req.bits.isStart := dmaAddress === io.r_TxPtr
+  txBuff.io.enq.req.bits.isLast  := dmaAddress === (io.r_TxPtr + io.r_TxLen)
 
 
   io.dmaMst.D.ready := 
     Mux1H(Seq(
       ( stateCur === stateRx ) -> true.B,
-      ( stateCur === stateTx ) -> txBuff.io.enq.data.ready,
+      ( stateCur === stateTx ) -> txBuff.io.enq.req.ready,
     ))
 
 
@@ -168,3 +149,11 @@ class SwitchMux(edgeOut: TLEdgeOut)(implicit p: Parameters) extends SwitchModule
 }
 
 
+
+
+trait SwitchMuxDMATx{ this: SwitchMuxBase =>
+
+}
+
+class SwitchMux(edgeOut: TLEdgeOut)(implicit p: Parameters) extends SwitchMuxBase(TLEdgeOut)
+with SwitchMuxDMATx
