@@ -22,9 +22,7 @@ abstract class MacTileLinkBase() extends Module{
     val r_RxEn    = Input(Bool())         // Receive enable
 
     val rxReq = Flipped(Decoupled(new Mac_Stream_Bundle))
-    val rxResp = Decoupled(new Bool())
 
-    // val LatchedRxLength_rxclk = Input(UInt(16.W))
     val RxStatusInLatched_rxclk = Input(UInt(9.W))
     val RxReady = Output(Bool())
 
@@ -32,7 +30,6 @@ abstract class MacTileLinkBase() extends Module{
 
     val txReq = Decoupled(new Mac_Stream_Bundle)
 
-    // val TxEndFrm_wb = Output(Bool())
 
 
     // Tx Status signals
@@ -51,8 +48,8 @@ abstract class MacTileLinkBase() extends Module{
     val TxDoneSync  = Input(Bool())      // Transmission ended
 
 
-    val rxEnq = new Receive_Enq_Bundle
-    val txDeq = Flipped(new Transmit_Bundle)
+    val rxEnq = Decoupled(new Mac_Stream_Bundle)
+    val txDeq = Flipped(Decoupled(new Mac_Stream_Bundle))
 
   }
 
@@ -62,48 +59,28 @@ abstract class MacTileLinkBase() extends Module{
 
 
 
-
-  val ShiftEndedSyncPluse         = io.rxReq.bits.isLast & io.rxReq.fire
-
   val RxReady = RegInit(false.B); io.RxReady := RxReady
 
 
-  val rxBuffCtrlValid = RegInit(false.B)
-  io.rxEnq.ctrl.valid := rxBuffCtrlValid
-  // io.rxEnq.ctrl.bits.LatchedRxLength   := RegEnable(io.LatchedRxLength_rxclk,   ShiftEndedSyncPluse )
-  io.rxEnq.ctrl.bits.RxStatusInLatched := RegEnable(io.RxStatusInLatched_rxclk, ShiftEndedSyncPluse )
 
-
-  when( io.rxEnq.ctrl.fire ){
-    rxBuffCtrlValid := false.B
-  } .elsewhen( ShiftEndedSyncPluse ){
-    rxBuffCtrlValid := true.B
-  }
 
 
 
   // RxReady generation
-  when(ShiftEndedSyncPluse ){
+  when(io.rxReq.bits.isLast & io.rxReq.fire ){
     RxReady := false.B
-  } .elsewhen( io.r_RxEn & (io.rxEnq.req.ready) ){
+  } .elsewhen( io.r_RxEn & (io.rxEnq.ready) ){
     RxReady := true.B
   }
 
 
-  io.rxEnq.req.bits  := io.rxReq.bits
-  io.rxEnq.req.valid := io.rxReq.valid
-  io.rxReq.ready      := io.rxEnq.req.ready
+  io.rxEnq.bits  := io.rxReq.bits
+  io.rxEnq.valid := io.rxReq.valid
+  io.rxReq.ready      := io.rxEnq.ready
 
-  val rxRespValid = RegInit(false.B)
-  when( io.rxResp.fire ){
-    rxRespValid := false.B
-  } .elsewhen( ShiftEndedSyncPluse ){
-    rxRespValid := true.B
-  }
-  io.rxResp.valid := rxRespValid
-  io.rxResp.bits  := DontCare
 
-  assert( ~(io.rxEnq.req.valid & ~io.rxEnq.req.ready), "Assert Failed, rx overrun!" )
+
+  assert( ~(io.rxEnq.valid & ~io.rxEnq.ready), "Assert Failed, rx overrun!" )
 
 
 
@@ -121,14 +98,6 @@ abstract class MacTileLinkBase() extends Module{
 
 
 
-
-
-
-
-  // val TxStartFrm_wb = RegInit(false.B)
-  // val TxEndFrm_wb = RegInit(false.B)
-
-  // val TxLength = RegInit(0.U(16.W))
 
   val txDonePulse                 = io.TxDoneSync              & ~RegNext(io.TxDoneSync,  false.B)
   val txAbortPulse                = io.TxAbortSync             & ~RegNext(io.TxAbortSync, false.B)
@@ -136,46 +105,24 @@ abstract class MacTileLinkBase() extends Module{
   
   io.PerPacketCrcEn  := false.B
 
-  // when( io.txDeq.req.fire ){
-  //   TxStartFrm_wb := true.B
-  // } .elsewhen(io.txReq.fire){
-  //   TxStartFrm_wb := false.B
-  // }
 
 
-    // when(((TxLength - 1.U) === 0.U) & io.TxUsedData){
-    //   TxEndFrm_wb := true.B
-    // } .elsewhen(txDonePulse | txAbortPulse){
-    //   TxEndFrm_wb := false.B
-    // }
 
-  //     val TxLength = RegInit(0.U(16.W))
-  // when( io.txDeq.req.fire ){
-  //   TxLength        := io.txDeq.req.bits.txLength
-  // } .elsewhen( io.txDeq.data.fire ){
-  //   when( TxLength < 1.U ){
-  //     TxLength := 0.U
-  //   } .otherwise{
-  //     TxLength := TxLength - 1.U    // Length is subtracted at the data request
-  //   }
-  // }
+  when( txDonePulse | txAbortPulse ){
 
+    when(io.RetryLimit) {printf("Warning, io.RetryLimit\n")}
+    when(io.LateCollLatched) {printf("Warning, io.LateCollLatched\n")}
+    when(io.DeferLatched) {printf("Warning, io.DeferLatched\n")}
+    when(io.CarrierSenseLost) {printf("Warning, io.CarrierSenseLost\n")}
+    when(txAbortPulse) {printf("Warning, txAbortPulse\n")}
+  }
 
-  val txRespValid = RegInit(false.B)
-  val txRespBits  = Reg(new Transmit_Resp_Bundle)
+  val killTrans = RegInit(false.B)
 
-  io.txDeq.resp.valid := txRespValid
-  io.txDeq.resp.bits  := txRespBits
-
-  when( io.txDeq.resp.fire ){
-    txRespValid := false.B
-  } .elsewhen( txDonePulse | txAbortPulse ){
-    txRespValid := true.B
-    txRespBits.RetryLimit := io.RetryLimit
-    txRespBits.LateCollLatched := io.LateCollLatched
-    txRespBits.DeferLatched := io.DeferLatched
-    txRespBits.CarrierSenseLost := io.CarrierSenseLost
-    txRespBits.isClear := txAbortPulse
+  when( (io.txDeq.fire & io.txDeq.bits.isLast) | ~io.txDeq.valid ){
+    killTrans := false.B
+  } .elsewhen( txAbortPulse ){
+    killTrans := true.B
   }
 
 
@@ -183,23 +130,22 @@ abstract class MacTileLinkBase() extends Module{
 
 
 
-  val isTxBusy = RegInit(false.B); io.txDeq.req.ready := ~isTxBusy & io.r_TxEn
+  val isTxEnable = RegInit(false.B)
 
-  when( io.txDeq.req.fire){
-    isTxBusy := true.B
-  } .elsewhen(txDonePulse | txAbortPulse){
-    isTxBusy := false.B
+ 
+
+  when( io.txDeq.fire & io.txDeq.bits.isLast & ~io.r_TxEn ){
+    isTxEnable := false.B
+  } .elsewhen( io.r_TxEn ){
+    isTxEnable := true.B
   }
 
 
+  io.txDeq.ready := Mux( killTrans, true.B,  isTxEnable & io.txReq.ready )
+  io.txReq.valid := Mux( killTrans, false.B, isTxEnable & io.txDeq.valid )
+  io.txReq.bits  := io.txDeq.bits
 
-  // io.txReq.bits.isLast  := TxEndFrm_wb
 
-  // io.txReq.bits.isStart := TxStartFrm_wb
-  // io.txReq.valid        := io.txDeq.data.valid
-  // io.txDeq.data.ready   := io.txReq.ready
-
-  io.txReq <> io.txDeq.req
 
 
 

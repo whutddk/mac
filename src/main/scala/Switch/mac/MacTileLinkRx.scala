@@ -41,8 +41,14 @@ class MacTileLinkRx extends Module with RequireAsyncReset{
 
   val ShiftWillEnd = RegInit(false.B)
 
-  // val LatchedRxLength = RegEnable(io.RxLength, 0.U(16.W), io.LoadRxStatus); io.LatchedRxLength   := LatchedRxLength
   val RxStatusInLatched = RegEnable(io.RxStatusIn, 0.U(9.W), io.LoadRxStatus); io.RxStatusInLatched := RxStatusInLatched
+
+  when( io.LoadRxStatus ) {
+    when( io.RxStatusIn.extract(4) ) { printf("Warning! DribbleNibble!\n"); }
+    when( io.RxStatusIn.extract(1) ) { printf("Warning! LatchedCrcError!\n"); }
+    when( io.RxStatusIn.extract(0) ) { printf("Warning! RxLateCollision!\n"); }    
+  }
+
 
   // val ShiftEnded_rck = RegInit(false.B); io.ShiftEnded_rck := ShiftEnded_rck
   val RxEnableWindow = RegInit(false.B)

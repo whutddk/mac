@@ -7,28 +7,10 @@ import MAC._
 
 
 
-// class Transmit_Req_Bundle extends Bundle{
-//   // val txLength       = UInt(16.W)
-//   val PerPacketCrcEn = Bool()
-// }
-
-class Transmit_Resp_Bundle extends Bundle{
-  val RetryLimit       = Bool()
-  val LateCollLatched  = Bool()
-  val DeferLatched     = Bool()
-  val CarrierSenseLost = Bool()
-
-  val isClear = Bool()
-}
-
-class Transmit_Bundle extends Bundle{
-  val req = Decoupled(new Mac_Stream_Bundle)
-  val resp = Flipped(Decoupled(new Transmit_Resp_Bundle))
-}
 
 class TxBuffIO extends Bundle{
-  val enq = Flipped(new Transmit_Bundle)
-  val deq = new Transmit_Bundle
+  val enq = Flipped(Decoupled(new Mac_Stream_Bundle))
+  val deq = Decoupled(new Mac_Stream_Bundle)
 }
 
 
@@ -42,13 +24,13 @@ abstract class TxBuffBase extends Module{
 
 
 trait TxBuffEnq{ this: TxBuffBase =>
-    io.enq.req <> buff.io.enq
+    io.enq <> buff.io.enq
 
 
-    when( io.enq.req.fire ){
-      when( io.enq.req.bits.isStart ) {
+    when( io.enq.fire ){
+      when( io.enq.bits.isStart ) {
         enqCnt := 0.U
-      } .elsewhen( io.enq.req.bits.isLast ){
+      } .elsewhen( io.enq.bits.isLast ){
 
       } .otherwise{
         enqCnt := enqCnt + 1.U        
@@ -59,12 +41,9 @@ trait TxBuffEnq{ this: TxBuffBase =>
 
 trait TxBuffDeq{ this: TxBuffBase =>
 
-  io.deq.resp <> io.enq.resp
-
-
-  io.deq.req.bits := buff.io.deq.bits
-  io.deq.req.valid := buff.io.deq.valid
-  buff.io.deq.ready := io.deq.req.ready
+  io.deq.bits := buff.io.deq.bits
+  io.deq.valid := buff.io.deq.valid
+  buff.io.deq.ready := io.deq.ready
 }
 
 

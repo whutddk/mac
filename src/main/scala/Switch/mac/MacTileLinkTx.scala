@@ -38,7 +38,6 @@ class MacTileLinkTx extends Module with RequireAsyncReset{
   val TxStartFrm = RegInit(false.B);  io.TxStartFrm := TxStartFrm
   val TxEndFrm   = RegInit(false.B);  io.TxEndFrm   := TxEndFrm
   val TxData     = RegInit(0.U(8.W)); io.TxData     := TxData
-  // val LastWord = RegInit(false.B)
   val ReadTxDataFromFifo_tck = RegInit(false.B); 
 
   // Generating delayed signals

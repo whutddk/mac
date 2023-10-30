@@ -30,8 +30,8 @@ class MII extends Bundle with MDIO{
 class MacIO extends Bundle{
   val mii = new MII
   val cfg = Flipped(new Mac_Config_Bundle)
-  val rxEnq = new Receive_Enq_Bundle
-  val txDeq = Flipped(new Transmit_Bundle)
+  val rxEnq = Decoupled(new Mac_Stream_Bundle)
+  val txDeq = Flipped(Decoupled(new Mac_Stream_Bundle))
 
   // val int_o = Output(Bool())
 
@@ -568,16 +568,12 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
  
 
   val req_ToAsync = Wire(new AsyncBundle(new Mac_Stream_Bundle))
-  val resp_ToAsync = Wire(new AsyncBundle(Bool()))
-  val fateRxRespPort = Wire( Flipped(Decoupled(Bool())) )
-  fateRxRespPort.ready := true.B
  
   wishbone.io.rxReq <> FromAsyncBundle( req_ToAsync )
-  resp_ToAsync <> ToAsyncBundle( wishbone.io.rxResp )
+
 
   withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset) {  
     req_ToAsync <> ToAsyncBundle( macTileLinkRx.io.rxReq )
-    fateRxRespPort <> FromAsyncBundle( resp_ToAsync )  
   }
 
     
@@ -612,9 +608,10 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
   macTileLinkRx.io.LoadRxStatus := LoadRxStatus
   macTileLinkRx.io.RxStatusIn   := Cat(false.B, false.B, false.B, false.B, DribbleNibble, false.B, false.B, LatchedCrcError, RxLateCollision)
 
-
   wishbone.io.rxEnq <> io.rxEnq
   wishbone.io.txDeq <> io.txDeq
+
+
 }
 
 

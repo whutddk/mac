@@ -8,7 +8,7 @@ import org.chipsalliance.cde.config._
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.tilelink._
 
-
+import MAC._
 
 
 abstract class DMAMstBase(val edgeOut: TLEdgeOut)(implicit p: Parameters) extends SwitchModule{
@@ -27,8 +27,8 @@ abstract class DMAMstBase(val edgeOut: TLEdgeOut)(implicit p: Parameters) extend
     val r_TxLen = Input(UInt(16.W))
     val r_RxLen = Output(UInt(16.W))
 
-    val rxEnq = Vec(chn, Flipped(new Receive_Enq_Bundle))
-    val txDeq = Vec(chn, new Transmit_Bundle)
+    val rxEnq = Vec(chn, Flipped(Decoupled(new Mac_Stream_Bundle)))
+    val txDeq = Vec(chn, Decoupled(new Mac_Stream_Bundle))
 
   }
 
@@ -59,9 +59,9 @@ trait DMAMstFSM{ this: DMAMstBase =>
 
   stateNxt := 
     Mux1H(Seq(
-      ( stateCur === stateIdle ) -> Mux( (io.triTx & io.r_TxLen > 32.U), stateTx, Mux( rxBuff.io.deq.header.fire, stateRx, stateIdle ) ),
-      ( stateCur === stateRx   ) -> Mux( rxBuff.io.deq.ctrl.fire, stateIdle, stateRx ),
-      ( stateCur === stateTx   ) -> Mux( txBuff.io.enq.resp.fire, stateIdle, stateTx ),
+      ( stateCur === stateIdle ) -> Mux( (io.triTx & io.r_TxLen > 32.U), stateTx, Mux( rxBuff.io.header.fire, stateRx, stateIdle ) ),
+      ( stateCur === stateRx   ) -> Mux( stateDMA === 0.U, stateIdle, stateRx ),
+      ( stateCur === stateTx   ) -> Mux( stateDMA === 0.U, stateIdle, stateTx ),
     ))
 
 
@@ -70,9 +70,9 @@ trait DMAMstFSM{ this: DMAMstBase =>
   } .elsewhen( io.dmaMst.A.fire ){
     stateDMA := 2.U
   } .elsewhen( io.dmaMst.D.fire & isLastD ){
-    when( stateCur === stateTx & dmaAddress < (io.r_TxPtr + io.r_TxLen) ){
+    when( stateCur === stateTx & dmaAddress === (io.r_TxPtr + io.r_TxLen) ){
       stateDMA := 0.U
-    } .elsewhen( stateCur === stateRx & rxBuff.io.deq.req.valid  ){
+    } .elsewhen( stateCur === stateRx & ~rxBuff.io.deq.valid  ){
       stateDMA := 0.U
     } .otherwise{
       stateDMA := 1.U
@@ -96,10 +96,10 @@ trait DMAMstTileLink{ this: DMAMstBase =>
     dmaAddress := dmaAddress + 1.U
   }
 
-  rxBuff.io.deq.req.ready := io.dmaMst.A.fire & (stateCur === stateRx)
-  assert( ~(rxBuff.io.deq.req.ready & ~rxBuff.io.deq.req.valid) )
+  rxBuff.io.deq.ready := io.dmaMst.A.fire & (stateCur === stateRx)
+  assert( ~(rxBuff.io.deq.ready & ~rxBuff.io.deq.valid) )
 
-  rxBuff.io.deq.header.ready := ~(io.triTx & io.r_TxLen > 32.U) & stateCur === stateIdle
+  rxBuff.io.header.ready := ~(io.triTx & io.r_TxLen > 32.U) & stateCur === stateIdle
 
   when( io.dmaMst.A.fire ){
     dmaAValid := false.B
@@ -118,7 +118,7 @@ trait DMAMstTileLink{ this: DMAMstBase =>
         fromSource = 0.U,
         toAddress = dmaAddress,
         lgSize = log2Ceil(8/8).U,
-        data = rxBuff.io.deq.req.bits.data,
+        data = rxBuff.io.deq.bits.data,
         mask = "b1".U,
       )._2
   }
@@ -131,7 +131,7 @@ trait DMAMstTileLink{ this: DMAMstBase =>
   io.dmaMst.D.ready := 
     Mux1H(Seq(
       ( stateCur === stateRx ) -> true.B,
-      ( stateCur === stateTx ) -> txBuff.io.enq.req.ready,
+      ( stateCur === stateTx ) -> txBuff.io.enq.ready,
     ))
 }
 
@@ -139,24 +139,22 @@ trait DMAMstBuff{ this: DMAMstBase =>
 
   val rxLength = RegInit(0.U)
 
-  when( rxBuff.io.deq.req.fire ){
-    when( rxBuff.io.deq.req.bits.isStart ){
+  when( rxBuff.io.deq.fire ){
+    when( rxBuff.io.deq.bits.isStart ){
       rxLength := 0.U
     } .otherwise{
       rxLength := rxLength + 1.U
     }
   }
 
-  io.triRx := rxBuff.io.deq.ctrl.fire
-  io.r_RxLen := RegEnable( rxLength, rxBuff.io.deq.ctrl.fire )
-  rxBuff.io.deq.ctrl.ready := stateCur === stateRx & io.dmaMst.D.fire & isLastD
+  io.triRx := rxBuff.io.deq.fire & rxBuff.io.deq.bits.isLast
+  io.r_RxLen := RegEnable( rxLength, io.triRx )
 
 
-  txBuff.io.enq.req.valid := io.dmaMst.D.valid & stateCur === stateTx
-  txBuff.io.enq.req.bits.data  := io.dmaMst.D.bits.data
-  txBuff.io.enq.req.bits.isStart := dmaAddress === io.r_TxPtr
-  txBuff.io.enq.req.bits.isLast  := dmaAddress === (io.r_TxPtr + io.r_TxLen)
-  txBuff.io.enq.resp.ready := true.B
+  txBuff.io.enq.valid := io.dmaMst.D.valid & stateCur === stateTx
+  txBuff.io.enq.bits.data  := io.dmaMst.D.bits.data
+  txBuff.io.enq.bits.isStart := RegEnable( dmaAddress === io.r_TxPtr, io.dmaMst.A.fire)
+  txBuff.io.enq.bits.isLast  := dmaAddress === (io.r_TxPtr + io.r_TxLen)
 }
 
 
