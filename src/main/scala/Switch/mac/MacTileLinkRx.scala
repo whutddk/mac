@@ -3,6 +3,8 @@ package MAC
 import chisel3._
 import chisel3.util._
 
+import freechips.rocketchip.util._
+
 
 class Mac_Stream_Bundle extends Bundle{
   val data = UInt(8.W)
@@ -14,77 +16,216 @@ class Mac_Stream_Bundle extends Bundle{
 
 class MacTileLinkRxIO extends Bundle{
 
-  val rxReq = Decoupled(new Mac_Stream_Bundle)
-
-  // val LatchedRxLength = Output(UInt(16.W))
-  val RxStatusInLatched = Output( UInt(9.W) )
-
-  // val RxLength = Input(UInt(16.W))
   val LoadRxStatus = Input(Bool())
-      val RxStatusIn = Input(UInt(9.W))
-
-
-  val Busy_IRQ_rck = Output(Bool())
-  val Busy_IRQ_syncb = Input(Bool())
 
   val RxData     = Input(UInt(8.W))      // Received data byte (from PHY)
   val RxValid    = Input(Bool())
-  val RxReady    = Input(Bool())
   val RxStartFrm = Input(Bool())
   val RxEndFrm   = Input(Bool())
+
+  val DribbleNibble = Input(Bool())
+  val LatchedCrcError = Input(Bool())
+  val RxLateCollision = Input(Bool())
+
+  val asyncReset = Input(AsyncReset())
+  val MRxClk     = Input(Bool())
+
+  val Busy_IRQ = Output(Bool())
+
+
+  val r_RxEn    = Input(Bool())         // Receive enable
+
+
+
+  val rxEnq = Decoupled(new Mac_Stream_Bundle)
+
+
+
 }
 
 
-class MacTileLinkRx extends Module with RequireAsyncReset{
+class MacTileLinkRx extends Module{
   val io = IO(new MacTileLinkRxIO)
 
+  val syncReqBundle  = Wire(Decoupled(new Mac_Stream_Bundle))
+  val asyncReqBundle = Wire(Decoupled(new Mac_Stream_Bundle))
+  val req_ToAsync    = Wire(new AsyncBundle(new Mac_Stream_Bundle))
 
-  val ShiftWillEnd = RegInit(false.B)
-
-  val RxStatusInLatched = RegEnable(io.RxStatusIn, 0.U(9.W), io.LoadRxStatus); io.RxStatusInLatched := RxStatusInLatched
-
-  when( io.LoadRxStatus ) {
-    when( io.RxStatusIn.extract(4) ) { printf("Warning! DribbleNibble!\n"); }
-    when( io.RxStatusIn.extract(1) ) { printf("Warning! LatchedCrcError!\n"); }
-    when( io.RxStatusIn.extract(0) ) { printf("Warning! RxLateCollision!\n"); }    
+  val rxReady = RegInit(false.B)
+  val rxReadyAsync = Wire(Bool())
+  withClockAndReset( io.MRxClk.asClock, io.asyncReset ) {
+    rxReadyAsync  := ShiftRegister( rxReady, 2, false.B, true.B )
   }
 
 
-  // val ShiftEnded_rck = RegInit(false.B); io.ShiftEnded_rck := ShiftEnded_rck
-  val RxEnableWindow = RegInit(false.B)
-  
-  val Busy_IRQ_rck = RegInit(false.B); io.Busy_IRQ_rck := Busy_IRQ_rck
+  withClockAndReset(io.MRxClk.asClock, io.asyncReset){
 
-
-  // Indicating start of the reception process
-  val SetWriteRxDataToFifo =
-    io.RxValid & io.RxReady & (io.RxStartFrm | RxEnableWindow )
-
-
-    // Generation of the end-of-frame signal
-    when(io.RxStartFrm){
-      RxEnableWindow := true.B
-    } .elsewhen(io.RxEndFrm ){
-      RxEnableWindow := false.B
+    when( io.LoadRxStatus ) {
+      when( io.DribbleNibble ) { printf("Warning! DribbleNibble!\n"); }
+      when( io.LatchedCrcError ) { printf("Warning! LatchedCrcError!\n"); }
+      when( io.RxLateCollision ) { printf("Warning! RxLateCollision!\n"); }    
     }
 
+    val RxEnableWindow = RegInit(false.B)
+    
 
 
-    when(io.RxValid & io.RxStartFrm & ~io.RxReady){
+
+    // Indicating start of the reception process
+    val SetWriteRxDataToFifo =
+      io.RxValid & rxReadyAsync & (io.RxStartFrm | RxEnableWindow )
+
+
+      // Generation of the end-of-frame signal
+      when(io.RxStartFrm){
+        RxEnableWindow := true.B
+      } .elsewhen(io.RxEndFrm ){
+        RxEnableWindow := false.B
+      }
+
+
+
+
+
+
+    val rxFifo = Module(new Queue(new Mac_Stream_Bundle, 4))
+    rxFifo.io.enq.valid := SetWriteRxDataToFifo
+    rxFifo.io.enq.bits.data   := io.RxData
+    rxFifo.io.enq.bits.isStart := io.RxStartFrm
+    rxFifo.io.enq.bits.isLast := io.RxEndFrm
+    assert( ~(rxFifo.io.enq.valid & ~rxFifo.io.enq.ready) )
+
+    asyncReqBundle <> rxFifo.io.deq
+
+
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+  syncReqBundle <> FromAsyncBundle( req_ToAsync )
+
+  withClockAndReset(io.MRxClk.asClock, io.asyncReset) {  
+    req_ToAsync <> ToAsyncBundle( asyncReqBundle )
+  }
+
+    
+    
+
+
+
+
+
+      
+
+  
+  // Busy Interrupt
+  val Busy_IRQ_rck = withClockAndReset(io.MRxClk.asClock, io.asyncReset) {RegInit(false.B)}
+  val Busy_IRQ_sync = ShiftRegister(Busy_IRQ_rck, 2, false.B, true.B)
+
+
+  io.Busy_IRQ := Busy_IRQ_sync & ~RegNext(Busy_IRQ_sync, false.B)
+
+
+  withClockAndReset( io.MRxClk.asClock, io.asyncReset ) {
+    val Busy_IRQ_syncb = ShiftRegister( Busy_IRQ_sync,  2, false.B, true.B )
+
+    when(io.RxValid & io.RxStartFrm & ~rxReadyAsync){
       Busy_IRQ_rck := true.B
-    } .elsewhen(io.Busy_IRQ_syncb){
+    } .elsewhen(Busy_IRQ_syncb){
       Busy_IRQ_rck := false.B
     }
 
+  }
 
-  val rxFifo = Module(new Queue(new Mac_Stream_Bundle, 4))
-  rxFifo.io.enq.valid := SetWriteRxDataToFifo
-  rxFifo.io.enq.bits.data   := io.RxData
-  rxFifo.io.enq.bits.isStart := io.RxStartFrm
-  rxFifo.io.enq.bits.isLast := io.RxEndFrm
-  assert( ~(rxFifo.io.enq.valid & ~rxFifo.io.enq.ready) )
 
-  io.rxReq <> rxFifo.io.deq
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+  when(syncReqBundle.bits.isLast & syncReqBundle.fire ){
+    rxReady := false.B
+  } .elsewhen( io.r_RxEn & (io.rxEnq.ready) ){
+    rxReady := true.B
+  }
+
+
+  io.rxEnq.bits  := syncReqBundle.bits
+  io.rxEnq.valid := syncReqBundle.valid
+  syncReqBundle.ready      := io.rxEnq.ready
+
+
+
+  assert( ~(io.rxEnq.valid & ~io.rxEnq.ready), "Assert Failed, rx overrun!" )
+
+
+
+
+
+
+
+
+
+
+
+
+
 }
 
 

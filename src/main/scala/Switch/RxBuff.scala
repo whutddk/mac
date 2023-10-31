@@ -24,7 +24,7 @@ class RxBuffBase extends Module{
   val isEnqPo = ~isEnqPi
 
   val isDeqPi = RegInit(true.B)
-  val isDeqPo = ~isEnqPi
+  val isDeqPo = ~isDeqPi
 
 
   val buff = for( i <- 0 until 2 ) yield { Module(new Queue( new Mac_Stream_Bundle, 2048 )) }

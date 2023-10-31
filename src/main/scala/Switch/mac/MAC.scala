@@ -5,7 +5,8 @@ import chisel3.util._
 
 import Switch._
 
-import freechips.rocketchip.util._
+
+
 
 class MII extends Bundle with MDIO{
   // Tx
@@ -433,22 +434,8 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
 
 
 
-  val wishbone = Module(new MacTileLink)
 
 
-  wishbone.io.RetryLimit       := RetryLimit
-  wishbone.io.LateCollLatched  := LateCollLatched
-  wishbone.io.DeferLatched     := DeferLatched
-  wishbone.io.CarrierSenseLost := CarrierSenseLost
-
-  PerPacketCrcEn := wishbone.io.PerPacketCrcEn
-
-  wishbone.io.r_TxEn     := r_TxEn
-  wishbone.io.r_RxEn     := r_RxEn
-  TxB_IRQ  := false.B
-  TxE_IRQ  := false.B
-  RxB_IRQ  := false.B
-  RxE_IRQ  := false.B
 
 
 
@@ -513,35 +500,28 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
 
 
 
-  val macTileLinkTx = withClockAndReset( io.mii.mtx_clk_pad_i.asClock, io.asyncReset ) (Module(new MacTileLinkTx))
-
-
-  val txReq_ToAsync = Wire(new AsyncBundle(new Mac_Stream_Bundle))
-  txReq_ToAsync <> ToAsyncBundle( wishbone.io.txReq )
-  withClockAndReset(io.mii.mtx_clk_pad_i.asClock, io.asyncReset) {  
-    macTileLinkTx.io.txReq <> FromAsyncBundle( txReq_ToAsync )  
-  }
-
-
-  withClockAndReset( io.mii.mtx_clk_pad_i.asClock, io.asyncReset ){
-    macTileLinkTx.io.BlockingTxStatusWrite_sync := ShiftRegister( wishbone.io.BlockingTxStatusWrite, 2, false.B, true.B)
-  }
-
+  val macTileLinkTx = Module(new MacTileLinkTx)
 
   RstDeferLatched := macTileLinkTx.io.RstDeferLatched
   TxStartFrm      := macTileLinkTx.io.TxStartFrm
   TxEndFrm        := macTileLinkTx.io.TxEndFrm
   TxData          := macTileLinkTx.io.TxData
-
-  
-  wishbone.io.TxUsedData      := TxUsedData
   macTileLinkTx.io.TxUsedData := TxUsedData
-
   macTileLinkTx.io.TxAbort    := TxAbort
   macTileLinkTx.io.TxDone     := TxDone
 
-  wishbone.io.TxAbortSync := ShiftRegister( TxAbort, 2, false.B, true.B )
-  wishbone.io.TxDoneSync  := ShiftRegister( TxDone,  2, false.B, true.B )
+  macTileLinkTx.io.RetryLimit       := RetryLimit
+  macTileLinkTx.io.LateCollLatched  := LateCollLatched
+  macTileLinkTx.io.DeferLatched     := DeferLatched
+  macTileLinkTx.io.CarrierSenseLost := CarrierSenseLost
+  PerPacketCrcEn := macTileLinkTx.io.PerPacketCrcEn
+
+  macTileLinkTx.io.r_TxEn    := r_TxEn
+
+  io.txDeq <> macTileLinkTx.io.txDeq
+
+  macTileLinkTx.io.MTxClk     := io.mii.mtx_clk_pad_i
+  macTileLinkTx.io.asyncReset := io.asyncReset
 
 
 
@@ -554,63 +534,30 @@ val rxethmac = withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset)( M
 
 
 
+  val macTileLinkRx = Module(new MacTileLinkRx)
+  macTileLinkRx.io.DribbleNibble   := DribbleNibble
+  macTileLinkRx.io.LatchedCrcError := LatchedCrcError
+  macTileLinkRx.io.RxLateCollision := RxLateCollision
+  macTileLinkRx.io.LoadRxStatus    := LoadRxStatus
 
-
-
-
-
-
-
-
-
-
-  val macTileLinkRx = withClockAndReset( io.mii.mrx_clk_pad_i.asClock, io.asyncReset ) ( Module(new MacTileLinkRx) )
- 
-
-  val req_ToAsync = Wire(new AsyncBundle(new Mac_Stream_Bundle))
- 
-  wishbone.io.rxReq <> FromAsyncBundle( req_ToAsync )
-
-
-  withClockAndReset(io.mii.mrx_clk_pad_i.asClock, io.asyncReset) {  
-    req_ToAsync <> ToAsyncBundle( macTileLinkRx.io.rxReq )
-  }
-
-    
-    
-
-
-
-
-  // wishbone.io.LatchedRxLength_rxclk   := macTileLinkRx.io.LatchedRxLength
-  wishbone.io.RxStatusInLatched_rxclk := macTileLinkRx.io.RxStatusInLatched
-      
-
-  
-  // Busy Interrupt
-  val Busy_IRQ_sync = ShiftRegister(macTileLinkRx.io.Busy_IRQ_rck, 2, false.B, true.B)
-  Busy_IRQ := Busy_IRQ_sync & ~RegNext(Busy_IRQ_sync, false.B)
-
-  withClockAndReset( io.mii.mrx_clk_pad_i.asClock, io.asyncReset ) {
-    macTileLinkRx.io.Busy_IRQ_syncb  := ShiftRegister( Busy_IRQ_sync,  2, false.B, true.B )
-
-    macTileLinkRx.io.RxReady  := ShiftRegister( wishbone.io.RxReady, 2, false.B, true.B )
-  }
-
-  macTileLinkRx.io.RxData   := RxData
-  macTileLinkRx.io.RxValid  := RxValid
-
+  macTileLinkRx.io.RxData     := RxData
+  macTileLinkRx.io.RxValid    := RxValid
   macTileLinkRx.io.RxStartFrm := RxStartFrm
-  macTileLinkRx.io.RxEndFrm := RxEndFrm
+  macTileLinkRx.io.RxEndFrm   := RxEndFrm
 
+  Busy_IRQ := macTileLinkRx.io.Busy_IRQ
 
-  // macTileLinkRx.io.RxLength     := RxByteCnt
-  macTileLinkRx.io.LoadRxStatus := LoadRxStatus
-  macTileLinkRx.io.RxStatusIn   := Cat(false.B, false.B, false.B, false.B, DribbleNibble, false.B, false.B, LatchedCrcError, RxLateCollision)
+  macTileLinkRx.io.r_RxEn := r_RxEn
 
-  wishbone.io.rxEnq <> io.rxEnq
-  wishbone.io.txDeq <> io.txDeq
+  macTileLinkRx.io.rxEnq <> io.rxEnq
 
+  macTileLinkRx.io.MRxClk := io.mii.mrx_clk_pad_i
+  macTileLinkRx.io.asyncReset := io.asyncReset
+
+  TxB_IRQ  := false.B
+  TxE_IRQ  := false.B
+  RxB_IRQ  := false.B
+  RxE_IRQ  := false.B
 
 }
 
