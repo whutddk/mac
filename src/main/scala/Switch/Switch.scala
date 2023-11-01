@@ -44,7 +44,7 @@ class SwitchImp(outer: Switch)(implicit p: Parameters) extends LazyModuleImp(out
   val ( dma_bus, dma_edge ) = outer.tlClientNode.out.head
 
   val mac = ( 0 until chn ).map{ i =>
-    Module(new Mac)
+    Module(new MacNode)
   }
 
   ( 0 until chn ).map{ i =>
@@ -56,11 +56,9 @@ class SwitchImp(outer: Switch)(implicit p: Parameters) extends LazyModuleImp(out
   outer.ethReg.module.io.asyncReset := io.asyncReset
   outer.ethReg.module.io.viewAsSupertype(new Mac_Config_Bundle) <> mac(0).io.cfg
 
-  val dmaMst = Module(new DMAMst(dma_edge))
 
-  dmaMst.io.rxEnq(0) <> mac(0).io.rxEnq
-  dmaMst.io.txDeq(0) <> mac(0).io.txDeq
 
+  val dmaMst = Module(new DmaNode(dma_edge))
 
   dmaMst.io.triTx             := outer.ethReg.module.io.triTx
   outer.ethReg.module.io.triRx := dmaMst.io.triRx
@@ -70,17 +68,6 @@ class SwitchImp(outer: Switch)(implicit p: Parameters) extends LazyModuleImp(out
   dmaMst.io.r_RxPtr           := outer.ethReg.module.io.r_RxPtr
   dmaMst.io.r_TxLen           := outer.ethReg.module.io.r_TxLen
   outer.ethReg.module.io.r_RxLen := dmaMst.io.r_RxLen
-
-
-
-
-
-
-
-
-
-
-
 
   dmaMst.io.dmaMst.D.bits  := dma_bus.d.bits
   dmaMst.io.dmaMst.D.valid := dma_bus.d.valid
@@ -94,7 +81,8 @@ class SwitchImp(outer: Switch)(implicit p: Parameters) extends LazyModuleImp(out
 
 
 
-
+  dmaMst.ex.tx <> mac(0).ex.rx
+  dmaMst.ex.rx <> mac(0).ex.tx
 
 
 

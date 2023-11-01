@@ -5,13 +5,10 @@ import chisel3.util._
 
 
 import org.chipsalliance.cde.config._
-import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.tilelink._
 
-import MAC._
 
-
-abstract class DMAMstBase(val edgeOut: TLEdgeOut)(implicit p: Parameters) extends SwitchModule{
+abstract class DMAMstBase(val edgeOut: TLEdgeOut)(implicit p: Parameters) extends SwitchNode{
   class MacTileLinkMasterIO extends Bundle{
     val A = Decoupled(new TLBundleA(edgeOut.bundle))
     val D = Flipped(Decoupled(new TLBundleD(edgeOut.bundle)))
@@ -27,8 +24,7 @@ abstract class DMAMstBase(val edgeOut: TLEdgeOut)(implicit p: Parameters) extend
     val r_TxLen = Input(UInt(16.W))
     val r_RxLen = Output(UInt(16.W))
 
-    val rxEnq = Vec(chn, Flipped(Decoupled(new Mac_Stream_Bundle)))
-    val txDeq = Vec(chn, Decoupled(new Mac_Stream_Bundle))
+
 
   }
 
@@ -36,11 +32,9 @@ abstract class DMAMstBase(val edgeOut: TLEdgeOut)(implicit p: Parameters) extend
   val (_, _, isLastD, transDCnt) = edgeOut.count(io.dmaMst.D)
 
   val rxBuff = Module(new RxBuff)
-  rxBuff.io.enq <> io.rxEnq(0)
-
-
   val txBuff = Module(new TxBuff)
-  txBuff.io.deq <> io.txDeq(0)
+  rxBuff.io.header.ready := true.B
+
 
   def stateIdle = 0.U
   def stateRx   = 1.U
@@ -59,7 +53,7 @@ trait DMAMstFSM{ this: DMAMstBase =>
 
   stateNxt := 
     Mux1H(Seq(
-      ( stateCur === stateIdle ) -> Mux( (io.triTx & io.r_TxLen > 32.U), stateTx, Mux( rxBuff.io.header.fire, stateRx, stateIdle ) ),
+      ( stateCur === stateIdle ) -> Mux( (io.triTx & io.r_TxLen > 32.U), stateTx, Mux( rxBuff.io.deq.valid, stateRx, stateIdle ) ),
       ( stateCur === stateRx   ) -> Mux( stateDMA === 0.U, stateIdle, stateRx ),
       ( stateCur === stateTx   ) -> Mux( stateDMA === 0.U, stateIdle, stateTx ),
     ))
@@ -99,7 +93,7 @@ trait DMAMstTileLink{ this: DMAMstBase =>
   rxBuff.io.deq.ready := io.dmaMst.A.fire & (stateCur === stateRx)
   assert( ~(rxBuff.io.deq.ready & ~rxBuff.io.deq.valid) )
 
-  rxBuff.io.header.ready := ~(io.triTx & io.r_TxLen > 32.U) & stateCur === stateIdle
+  // rxBuff.io.header.ready := ~(io.triTx & io.r_TxLen > 32.U) & stateCur === stateIdle
 
   when( io.dmaMst.A.fire ){
     dmaAValid := false.B
@@ -158,7 +152,7 @@ trait DMAMstBuff{ this: DMAMstBase =>
 }
 
 
-class DMAMst(edgeOut: TLEdgeOut)(implicit p: Parameters) extends DMAMstBase(edgeOut)
+abstract class DMAMst(edgeOut: TLEdgeOut)(implicit p: Parameters) extends DMAMstBase(edgeOut)
 with DMAMstFSM
 with DMAMstTileLink
 with DMAMstBuff
