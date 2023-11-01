@@ -31,8 +31,8 @@ abstract class DMAMstBase(val edgeOut: TLEdgeOut)(implicit p: Parameters) extend
   val io: SwitchMuxIO = IO(new SwitchMuxIO)
   val (_, _, isLastD, transDCnt) = edgeOut.count(io.dmaMst.D)
 
-  val rxBuff = Module(new RxBuff)
-  val txBuff = Module(new TxBuff)
+  val rxBuff = Module(new RxBuff(8))
+  val txBuff = Module(new TxBuff(0))
   rxBuff.io.header.ready := true.B
 
 

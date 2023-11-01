@@ -14,7 +14,7 @@ class TxBuffIO extends Bundle{
 }
 
 
-abstract class TxBuffBase extends Module{
+abstract class TxBuffBase(val threshold: Int = 8) extends Module{
   val io: TxBuffIO = IO(new TxBuffIO)
 
   val buff = Module(new Queue( new Mac_Stream_Bundle, 2048 ))
@@ -32,6 +32,8 @@ trait TxBuffEnq{ this: TxBuffBase =>
         enqCnt := 0.U
       } .elsewhen( io.enq.bits.isLast ){
 
+      } .elsewhen( enqCnt === threshold.U ){
+        enqCnt := enqCnt
       } .otherwise{
         enqCnt := enqCnt + 1.U        
       }
@@ -41,10 +43,26 @@ trait TxBuffEnq{ this: TxBuffBase =>
 
 trait TxBuffDeq{ this: TxBuffBase =>
 
+  val isReach = RegInit(false.B)
+
+  when( io.enq.fire ){
+    when( io.enq.bits.isStart ) {
+      isReach := false.B
+    } .elsewhen(
+        io.enq.bits.isLast ||
+        (if( threshold != 0 ) {enqCnt === threshold.U} else {false.B})
+      ){
+      isReach := true.B
+    }
+  }
+
+    
+    enqCnt === threshold.U
+
   io.deq.bits := buff.io.deq.bits
-  io.deq.valid := buff.io.deq.valid
-  buff.io.deq.ready := io.deq.ready
+  io.deq.valid := buff.io.deq.valid & isReach
+  buff.io.deq.ready := io.deq.ready & isReach
 }
 
 
-class TxBuff extends TxBuffBase with TxBuffEnq with TxBuffDeq
+class TxBuff(threshold: Int = 8) extends TxBuffBase(threshold) with TxBuffEnq with TxBuffDeq

@@ -17,7 +17,7 @@ class RxBuffIO extends Bundle{
 
 
 
-class RxBuffBase extends Module{
+class RxBuffBase(val threshold: Int = 32) extends Module{
   val io: RxBuffIO = IO(new RxBuffIO)
 
   val isEnqPi = RegInit(true.B)
@@ -32,8 +32,10 @@ class RxBuffBase extends Module{
 
   val header = for( i <- 0 until 2 ) yield { Reg(Vec( 20, UInt(8.W) )) }
   val hValid = for( i <- 0 until 2 ) yield { RegInit(false.B) }
+  val isReach = for( i <- 0 until 2 ) yield { RegInit(false.B) }
+  
+  val recCnt = RegInit(0.U(12.W))
 
-  val recCnt = RegInit(0.U(5.W))
 
 
 }
@@ -60,19 +62,35 @@ trait RxBuffEnq{ this: RxBuffBase =>
   when( io.enq.fire ){
     when( io.enq.bits.isStart ){
       recCnt := 0.U      
-    } .elsewhen( recCnt < 20.U ){
+    } .otherwise{
       recCnt := recCnt + 1.U
-      when( isEnqPi ){
-        header(0)(recCnt) := io.enq.bits.data
-      } .elsewhen( isEnqPo ){
-        header(1)(recCnt) := io.enq.bits.data
+    }
+  }
+
+  when( io.enq.fire ){
+    when( recCnt < 20.U ){
+      when( isEnqPi ){ header(0)(recCnt) := io.enq.bits.data } 
+      .elsewhen( isEnqPo ){ header(1)(recCnt) := io.enq.bits.data
       } .otherwise{
         assert(false.B, "Assert Failed, Rx Under Run")
       }
-    } .elsewhen( recCnt === 20.U ){
-      recCnt := 21.U
     }
   }
+
+  when( io.enq.fire ){
+    when( io.enq.bits.isStart ){
+      when( isEnqPi ){ isReach(0) := false.B }
+      when( isEnqPo ){ isReach(1) := false.B }
+    } .elsewhen(
+      io.enq.bits.isLast ||
+      (if( threshold != 0 ) {recCnt === threshold.U } else {false.B})
+      ){
+      when( isEnqPi ){ isReach(0) := true.B }
+      when( isEnqPo ){ isReach(1) := true.B }
+    }
+  }
+
+
 
 }
 
@@ -93,14 +111,20 @@ trait RxBuffDeq{ this: RxBuffBase =>
 
 
   when( isDeqPi ){
-    io.deq <> buff(0).io.deq
+    io.deq.valid := buff(0).io.deq.valid & isReach(0)
+    io.deq.bits  := buff(0).io.deq.bits
+    buff(0).io.deq.ready := io.deq.ready & isReach(0)
+
     buff(1).io.deq.ready := false.B
 
     io.header.valid := hValid(0)
     io.header.bits  := header(0)
   } .otherwise{
     assert( isDeqPo )
-    io.deq <> buff(1).io.deq
+    io.deq.valid := buff(1).io.deq.valid & isReach(1)
+    io.deq.bits  := buff(1).io.deq.bits
+    buff(1).io.deq.ready := io.deq.ready & isReach(1)
+
     buff(0).io.deq.ready := false.B
 
     io.header.valid := hValid(1)
@@ -112,7 +136,7 @@ trait RxBuffDeq{ this: RxBuffBase =>
 }
 
 
-class RxBuff extends RxBuffBase with RxBuffEnq with RxBuffDeq{
+class RxBuff(threshold: Int = 8) extends RxBuffBase(threshold) with RxBuffEnq with RxBuffDeq{
 
 }
 
