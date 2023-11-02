@@ -35,7 +35,7 @@ class MacNode(implicit p: Parameters) extends Mac{
   val rxBuff = Module(new RxBuff)
   val txBuff = Module(new TxBuff)
 
-  rxBuff.io.header.ready := true.B
+  rxBuff.headerIO.ready := true.B
 
   macTileLinkRx.io.rxEnq <> rxBuff.io.enq
   txBuff.io.deq <> macTileLinkTx.io.txDeq

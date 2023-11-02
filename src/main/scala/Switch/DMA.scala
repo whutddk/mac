@@ -33,7 +33,7 @@ abstract class DMAMstBase(val edgeOut: TLEdgeOut)(implicit p: Parameters) extend
 
   val rxBuff = Module(new RxBuff(8))
   val txBuff = Module(new TxBuff(0))
-  rxBuff.io.header.ready := true.B
+  rxBuff.headerIO.ready := true.B
 
 
   def stateIdle = 0.U

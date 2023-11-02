@@ -65,4 +65,4 @@ trait TxBuffDeq{ this: TxBuffBase =>
 }
 
 
-class TxBuff(threshold: Int = 8) extends TxBuffBase(threshold) with TxBuffEnq with TxBuffDeq
+
