@@ -8,7 +8,6 @@ class MacStatusIO extends Bundle{
 
   val MRxClk              = Input(Bool())
   val RxCrcError          = Input(Bool())
-  val MRxErr              = Input(Bool())
   val MRxDV               = Input(Bool())
   val RxStateSFD          = Input(Bool())
   val RxStateData         = Input(UInt(2.W))

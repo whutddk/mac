@@ -22,7 +22,6 @@ class MacTxIO extends Bundle{
 
   val MTxD               = Output(UInt(4.W))     // Transmit nibble (to PHY)
   val MTxEn              = Output(Bool())     // Transmit enable (to PHY)
-  val MTxErr             = Output(Bool())     // Transmit error (to PHY)
   val TxDone             = Output(Bool())     // Transmit packet done (to RISC)
   val TxAbort            = Output(Bool())     // Transmit packet abort (to RISC)
   val TxUsedData         = Output(Bool())     // Transmit packet used data (to RISC)
@@ -281,7 +280,6 @@ class MacTx extends MacTxBase with MacTxFSM with MacTxCounter with MacTxCRC {
   val TxAbort = RegInit(false.B); io.TxAbort := ~io.TxStartFrm & TxAbort
 
   val MTxEn = RegNext(StatePreamble | (StateData(0) | StateData(1)) | StatePAD | StateFCS | StateJam, false.B); io.MTxEn := MTxEn
-  io.MTxErr := false.B
 
   val WillTransmit = RegNext(StartPreamble | StatePreamble | (StateData(0) | StateData(1)) | StatePAD | StateFCS | StateJam, false.B); io.WillTransmit := WillTransmit// WillTransmit
 

@@ -15,13 +15,11 @@ class MII extends Bundle with MDIO{
   val mtx_clk_pad_i = Input(Bool())
   val mtxd_pad_o    = Output(UInt(4.W))
   val mtxen_pad_o   = Output(Bool())
-  val mtxerr_pad_o  = Output(Bool())
 
   // Rx
   val mrx_clk_pad_i = Input(Bool())
   val mrxd_pad_i    = Input(UInt(4.W))
   val mrxdv_pad_i   = Input(Bool())
-  val mrxerr_pad_i  = Input(Bool())
 
   // Common Tx and Rx
   val mcoll_pad_i = Input(Bool())
@@ -112,7 +110,6 @@ abstract class Mac(implicit p: Parameters) extends SwitchNode{
   val r_TxEn                     = Wire(Bool())
   val r_RxEn                     = Wire(Bool())
   val MRxDV_Lb                   = Wire(Bool())
-  val MRxErr_Lb                  = Wire(Bool())
   val MRxD_Lb                    = Wire(UInt(4.W))
   val Transmitting               = Wire(Bool())
   val DribbleNibble              = Wire(Bool())
@@ -232,9 +229,6 @@ abstract class Mac(implicit p: Parameters) extends SwitchNode{
   // Muxed MII receive data valid
   MRxDV_Lb := Mux(r_LoopBck, io.mii.mtxen_pad_o, io.mii.mrxdv_pad_i & RxEnSync)
 
-  // Muxed MII Receive Error
-  MRxErr_Lb := Mux(r_LoopBck, io.mii.mtxerr_pad_o, io.mii.mrxerr_pad_i & RxEnSync)
-
   // Muxed MII Receive Data
   MRxD_Lb := Mux(r_LoopBck, io.mii.mtxd_pad_o, io.mii.mrxd_pad_i)
 
@@ -256,7 +250,6 @@ abstract class Mac(implicit p: Parameters) extends SwitchNode{
 
   io.mii.mtxd_pad_o    := txethmac.io.MTxD
   io.mii.mtxen_pad_o   := txethmac.io.MTxEn
-  io.mii.mtxerr_pad_o := txethmac.io.MTxErr
   TxDone := txethmac.io.TxDone
   TxAbort := txethmac.io.TxAbort
   TxUsedData := txethmac.io.TxUsedData
@@ -354,7 +347,6 @@ abstract class Mac(implicit p: Parameters) extends SwitchNode{
   macstatus.io.asyncReset          := io.asyncReset
   macstatus.io.MRxClk              := io.mii.mrx_clk_pad_i
   macstatus.io.RxCrcError          := RxCrcError
-  macstatus.io.MRxErr              := MRxErr_Lb
   macstatus.io.MRxDV               := MRxDV_Lb
   macstatus.io.RxStateSFD          := RxStateSFD
   macstatus.io.RxStateData         := RxStateData
