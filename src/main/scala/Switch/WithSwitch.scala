@@ -14,9 +14,15 @@ trait WithSwitchMix { this: BaseSubsystem =>
 
     sbus.coupleFrom("switch_mst") { _ := TLBuffer() := TLWidthWidget(8 / 8) := switch.tlClientNode }
     // pbus.coupleTo("switch_cfg")   { switch0.tlMasterNode := TLFragmenter(pbus) := _ }
-    pbus.coupleTo("switch_cfg")   { switch.ethReg.configNode   := TLFragmenter(pbus) := _ }
 
-    ibus.fromSync := switch.ethReg.int_node
+    for( i <- 0 until 3 ){
+      pbus.coupleTo("switch_cfg")   { switch.macReg(i).configNode   := TLFragmenter(pbus) := _ }   
+      ibus.fromSync := switch.macReg(i).int_node   
+    }
+
+    pbus.coupleTo("switch_cfg")   { switch.dmaReg.configNode   := TLFragmenter(pbus) := _ }
+
+
 
 }
 

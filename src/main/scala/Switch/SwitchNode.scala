@@ -10,13 +10,11 @@ import freechips.rocketchip.tilelink._
 
 import MAC._
 
-class Rx_MuxInfo_Bundle extends Bundle{
 
-}
 
 class SwitchNodeIO extends Bundle{
   val rx = Decoupled(new Mac_Stream_Bundle)
-  val dest = Output(new Rx_MuxInfo_Bundle)
+  val mInfo = new Rx_MuxInfo_Bundle
 
   val tx = Flipped(Decoupled(new Mac_Stream_Bundle))
 
@@ -35,7 +33,7 @@ class MacNode(implicit p: Parameters) extends Mac{
   val rxBuff = Module(new RxBuff)
   val txBuff = Module(new TxBuff)
 
-  rxBuff.headerIO.ready := true.B
+
 
   macTileLinkRx.io.rxEnq <> rxBuff.io.enq
   txBuff.io.deq <> macTileLinkTx.io.txDeq
@@ -43,13 +41,22 @@ class MacNode(implicit p: Parameters) extends Mac{
   rxBuff.io.deq <> ex.rx
   ex.tx <> txBuff.io.enq
 
-  ex.dest := DontCare
+
+  ex.mInfo <> rxBuff.mInfo
 }
 
 
 
 class DmaNode(edgeOut: TLEdgeOut)(implicit p: Parameters) extends DMAMst(edgeOut){
+  def DmaMac = "habcdef".U(48.W)
+
   ex.tx <> rxBuff.io.enq
   txBuff.io.deq <> ex.rx
+
+  ex.mInfo.dest.valid := mInfoValid
+  ex.mInfo.dest.bits  := Cat( 1.U, trigTxNum )
+  ex.mInfo.source.valid := mInfoValid
+  ex.mInfo.source.bits  := DmaMac
+
 }
 

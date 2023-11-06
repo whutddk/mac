@@ -1,4 +1,4 @@
-package MAC
+package Switch
 
 import chisel3._
 import chisel3.util._
@@ -52,29 +52,26 @@ class Mac_Config_Bundle extends Bundle{
 }
 
 
-
-
 class MacRegIO extends Mac_Config_Bundle{
   val asyncReset = Input(AsyncReset())
 
-
-  val r_TxPtr = Output(UInt(32.W))
-  val r_RxPtr = Output(UInt(32.W))
-  val r_TxLen = Output(UInt(16.W))
-  val r_RxLen = Input(UInt(16.W))
-  val triTx = Output(Bool())
-  val triRx = Input(Bool())
 }
 
-class MacReg(implicit p: Parameters) extends LazyModule{
+
+
+class MacReg(chn: Int)(implicit p: Parameters) extends LazyModule{
+
+
+
+
 
   // DTS
-  val dtsdevice = new SimpleDevice("mac",Seq("mac_0"))
+  val dtsdevice = new SimpleDevice(s"mac($chn)",Seq(s"mac_($chn)"))
   val int_node = IntSourceNode(IntSourcePortSimple(num = 1, resources = dtsdevice.int))
 
 
   val configNode = TLRegisterNode(
-    address = Seq(AddressSet(0x30000000L, 0x000003ffL)),
+    address = Seq(AddressSet(0x30000000L + 0x100*chn, 0x000000ffL)),
     device = dtsdevice,
     concurrency = 1,
     beatBytes = 32/8,
@@ -83,7 +80,7 @@ class MacReg(implicit p: Parameters) extends LazyModule{
   lazy val module = new MacRegImp(this)
 }
 
-class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(outer){
+class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(outer) with HasSwitchParameters{
 
     val io: MacRegIO = IO(new MacRegIO)
     val (int, _) = outer.int_node.out(0)
@@ -141,17 +138,6 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
 
 
 
-    val txPtr = RegInit( "h80002000".U(32.W))
-    val rxPtr = RegInit( "h80002000".U(32.W))
-    val txLen = RegInit( 65535.U(16.W))
-    // val rxLen = RegInit( 65535.U(16.W))
-    val triRx = RegInit(false.B)
-
-    io.r_TxPtr := txPtr
-    io.r_RxPtr := rxPtr
-    io.r_TxLen := txLen
-    when( io.triRx ) { triRx := true.B }
-
 
 
     outer.configNode.regmap(
@@ -207,28 +193,13 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
           RegField(7, IPGR2, RegFieldDesc("IPGR2", "IPGR2", reset=Some(0x12)))
         )),
 
-      ( 6 << 2 ) ->
-        RegFieldGroup("PACKETLEN", Some("Packet Length Register"), Seq(
-          RegField.r(16, 0.U, RegFieldDesc("maxFL", "Maximum Frame Length", reset=Some(0x0600))),
-          RegField.r(16, 64.U, RegFieldDesc("minFL", "Minimum Frame Length", reset=Some(0x0040))),
-        )),
       ( 7 << 2 ) ->
         RegFieldGroup("COLLCONF", Some("Collision and Retry Configuration Register"), Seq(
           RegField(6, collValid, RegFieldDesc("collValid", "Collision Valid", reset=Some(0x3f))),
           RegField.r(10,0.U),
           RegField.r(4, 0.U, RegFieldDesc("maxRet", "Maximum Retry", reset=Some(0xf))),
         )),
-      ( 8 << 2 ) ->
-        RegFieldGroup("TX_BD_NUM", Some("Transmit BD Number Register"), Seq(
-          RegField.r(8, 0.U, RegFieldDesc("TX_BD_NUM", "TX_BD_NUM Un-used", reset=Some(0x40))),
-        )),
 
-      ( 9 << 2 ) ->
-        RegFieldGroup("CTRLMODER", Some("Control Module Mode Register"), Seq(
-          RegField.r(1, 1.U, RegFieldDesc("PassAll", "Pass All Receive Frames", reset=Some(0))),
-          RegField.r(1, 0.U , RegFieldDesc("RxFlow", "Receive Flow Control", reset=Some(0))),
-          RegField.r(1, 0.U , RegFieldDesc("TxFlow", "Transmit Flow Control", reset=Some(0))),
-        )),
 
       ( 10 << 2 ) ->
         RegFieldGroup("MIIMODER", Some("MII Mode Register"), Seq(
@@ -287,33 +258,6 @@ class MacRegImp(outer: MacReg)(implicit p: Parameters) extends LazyModuleImp(out
           RegField.bytes(HASH1)
         ),
         
-      ( 20 << 2 ) ->
-        RegFieldGroup("TXCTRL", Some("Tx Control Register"), Seq(
-          RegField.r(8, 0.U, RegFieldDesc("TxPauseTV", "Tx Pause Timer Value", reset=Some(0x0))), 
-          RegField.r(1, 0.U, RegFieldDesc("TxPauseRQ", "Tx Pause Request", reset=Some(0x0))),
-        )),
-
-      ( 30 << 2 ) ->
-        RegFieldGroup("DMATrigger", Some("Tx Control DMA"), Seq(
-          RegField.w(1, RegWriteFn((valid, data) => { io.triTx := (valid & (data === 1.U)) ; true.B} ), RegFieldDesc("bd", "bd", reset=Some(0x0))),
-          RegField(1, triRx, RegFieldDesc("bd", "bd", reset=Some(0x0))),
-        )),
-
-      ( 31 << 2 ) ->
-        RegFieldGroup("TxRxDMALength", Some("Tx  RxControl DMA"), Seq(
-          RegField(16, txLen, RegFieldDesc("txLen", "length of tx", reset=Some(65535))),
-          RegField.r(16, io.r_RxLen, RegFieldDesc("rxLen", "length of rx")),
-        )),
-
-      ( 32 << 2 ) ->
-        RegFieldGroup("TxDMAAddress", Some("Tx Control DMA"), Seq(
-          RegField(32, txPtr, RegFieldDesc("txPtr", "pointer of tx", reset=Some(0x80002000))),
-        )),
-
-      ( 33 << 2 ) ->
-        RegFieldGroup("RxDMAAddress", Some("Rx Control DMA"), Seq(
-          RegField(32, rxPtr, RegFieldDesc("rxPtr", "pointer of rx", reset=Some(0x80002000))),
-        )),
     )
 
 

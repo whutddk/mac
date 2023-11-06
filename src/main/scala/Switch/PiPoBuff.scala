@@ -99,49 +99,75 @@ class PiPoBuffBase[T<:Data]( dp: Int, val threshold: Int = 32) extends Module{
 
 
 
+class TxBuff(threshold: Int = 8) extends PiPoBuffBase(2048, threshold)
+
+
+
+
+class Rx_MuxInfo_Bundle extends Bundle{
+  val dest   = Valid(UInt((48+1).W))
+  val source = Valid(UInt((48+1).W))
+
+  def isBroadcast = dest.bits.extract(40)
+}
 
 class RxBuff(threshold: Int = 8) extends PiPoBuffBase(2048, threshold){
-  val headerIO = IO(Decoupled(Vec( 20, UInt(8.W) ) ))
+  val mInfo = IO(new Rx_MuxInfo_Bundle)
 
+  val destReg   = for( i <- 0 until 2 ) yield { Reg(Vec(6, UInt(8.W))) }
+  val destValid = for( i <- 0 until 2 ) yield { RegInit(false.B) }
 
-
-  val header = for( i <- 0 until 2 ) yield { Reg(Vec( 20, UInt(8.W) )) }
-  val hValid = for( i <- 0 until 2 ) yield { RegInit(false.B) }
-
+  val sourceReg = for( i <- 0 until 2 ) yield { Reg(Vec(6, UInt(8.W))) }
+  val sourceValid = for( i <- 0 until 2 ) yield { RegInit(false.B) }
 
   when( io.enq.fire ){
-    when( cnt < 20.U ){
-      when( isEnqPi ){ header(0)(cnt) := io.enq.bits.data } 
-      .elsewhen( isEnqPo ){ header(1)(cnt) := io.enq.bits.data
-      } .otherwise{
-        assert(false.B, "Assert Failed, Rx Under Run")
-      }
-    }
+    when( cnt < 6.U ){
+      when( isEnqPi ){ destReg(0)(cnt) := io.enq.bits.data } 
+      when( isEnqPo ){ destReg(1)(cnt) := io.enq.bits.data }
+    } .elsewhen( cnt < 12.U ){
+      when( isEnqPi ){ sourceReg(0)(cnt-6.U) := io.enq.bits.data } 
+      when( isEnqPo ){ sourceReg(1)(cnt-6.U) := io.enq.bits.data }
+    } 
   }
 
 
-  when( headerIO.fire ){
-    when( isDeqPi ) { hValid(0) := false.B }
-    when( isDeqPo ) { hValid(1) := false.B }
-  } .elsewhen( io.enq.fire & cnt === 20.U ){
-    when( isEnqPi ) { hValid(0) := true.B }
-    when( isEnqPo ) { hValid(1) := true.B }
+  when( io.deq.fire & io.deq.bits.isLast ){
+    when( isDeqPi ) { destValid(0) := false.B; sourceValid(0) := false.B }
+    when( isDeqPo ) { destValid(1) := false.B; sourceValid(1) := false.B }
+  } .elsewhen( io.enq.fire & cnt === 5.U ){
+    when( isEnqPi ) { destValid(0) := true.B }
+    when( isEnqPo ) { destValid(1) := true.B }
+  } .elsewhen( io.enq.fire & cnt === 11.U ){
+    when( isEnqPi ) { sourceValid(0) := true.B }
+    when( isEnqPo ) { sourceValid(1) := true.B }
   }
 
+  mInfo.dest.valid :=
+    Mux1H(Seq(
+      isDeqPi -> destValid(0),
+      isDeqPo -> destValid(1),
+    ))
 
-    headerIO.valid := 
-      Mux1H(Seq(
-        isDeqPi -> hValid(0),
-        isDeqPo -> hValid(1),
-      ))
-      
-    headerIO.bits  := 
-      Mux1H(Seq(
-        isDeqPi -> header(0),
-        isDeqPo -> header(1),
-      ))
+  mInfo.dest.bits :=
+    Mux1H(Seq(
+      isDeqPi -> Cat(destReg(0)),
+      isDeqPo -> Cat(destReg(1)),
+    ))
+
+  mInfo.source.valid :=
+    Mux1H(Seq(
+      isDeqPi -> sourceValid(0),
+      isDeqPo -> sourceValid(1),
+    ))
+
+  mInfo.source.bits :=
+    Mux1H(Seq(
+      isDeqPi -> Cat(sourceReg(0)),
+      isDeqPo -> Cat(sourceReg(1)),
+    ))
+
 
 }
 
-class TxBuff(threshold: Int = 8) extends PiPoBuffBase(2048, threshold)
+
 
