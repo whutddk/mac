@@ -66,7 +66,7 @@ class MacReg(chn: Int)(implicit p: Parameters) extends LazyModule{
 
 
   // DTS
-  val dtsdevice = new SimpleDevice(s"mac($chn)",Seq(s"mac_($chn)"))
+  val dtsdevice = new SimpleDevice(s"mac$chn",Seq(s"mac_$chn"))
   val int_node = IntSourceNode(IntSourcePortSimple(num = 1, resources = dtsdevice.int))
 
 

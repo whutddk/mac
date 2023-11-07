@@ -9,17 +9,22 @@ import org.chipsalliance.cde.config._
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.interrupts._
 
+
+class DMA_Register_Bundle extends Bundle{
+  val r_TxPtr = Output(UInt(32.W))
+  val r_RxPtr = Output(UInt(32.W))
+  val r_TxLen = Output(UInt(16.W))
+  val r_RxLen = Input (UInt(16.W))
+  val triTx   = Output( Bool())
+  val triRx   = Input ( Bool())
+}
+
+
 class DmaRegIO(implicit p: Parameters) extends SwitchBundle{
 
   val MacAddr = Output(UInt(48.W))
 
-
-  val r_TxPtr = Output( Vec(chn, UInt(32.W)) )
-  val r_RxPtr = Output( Vec(chn, UInt(32.W)) )
-  val r_TxLen = Output( Vec(chn, UInt(16.W)) )
-  val r_RxLen = Input ( Vec(chn, UInt(16.W)) )
-  val triTx   = Output( Vec( chn, Bool()) )
-  val triRx   = Input ( Vec( chn, Bool()) )
+  val sel = Vec( chn, new DMA_Register_Bundle )
 }
 
 class DmaReg(implicit p: Parameters) extends LazyModule with HasSwitchParameters{
@@ -58,59 +63,67 @@ class DmaRegImp(outer: DmaReg)(implicit p: Parameters) extends LazyModuleImp(out
     val triRx = for( i <- 0 until chn ) yield { RegInit(false.B) }
 
     for( i <- 0 until chn ) {
-      io.r_TxPtr(i) := txPtr(i)
-      io.r_RxPtr(i) := rxPtr(i)
-      io.r_TxLen(i) := txLen(i)      
+      io.sel(i).r_TxPtr := txPtr(i)
+      io.sel(i).r_RxPtr := rxPtr(i)
+      io.sel(i).r_TxLen := txLen(i)      
     }
 
-    for( i <- 0 until chn ) { when( io.triRx(i) ) { triRx(i) := true.B } }
+    for( i <- 0 until chn ) { when( io.sel(i).triRx ) { triRx(i) := true.B } }
 
 
-    outer.configNode.regmap(
 
 
-        ( 0 << 2 ) ->
-          RegFieldGroup("MAC_ADDR0", Some("MAC Address Register 0"), Seq(
-            RegField(32)
-          )),
+    val comMap = Seq(
+      ( 0 << 2 ) ->
+        RegFieldGroup("MAC_ADDR0", Some("MAC Address Register 0"), Seq(
+          RegField(32)
+        )),
 
-        ( 1 << 2 ) ->
-          RegFieldGroup("MAC_ADDR1", Some("MAC Address Register 1"), Seq(
-            RegField(32)
-          )),
+      ( 1 << 2 ) ->
+        RegFieldGroup("MAC_ADDR1", Some("MAC Address Register 1"), Seq(
+          RegField(32)
+        ))
+    ) 
+    
+    val trigMap = 
+      ((0 until chn).map{ i =>
+        ( (10*i + 10) << 2 ) ->
+          RegFieldGroup("DMATrigger", Some("Tx Control DMA"), Seq(
+            RegField.w(1, RegWriteFn((valid, data) => { io.sel(i).triTx := (valid & (data === 1.U)) ; true.B} ), RegFieldDesc("bd", s"bd$i", reset=Some(0x0))),
+            RegField(1, triRx(i), RegFieldDesc("bd", s"bd$i", reset=Some(0x0)))
+          ))
+      })
+
+    val lenMap = 
+      (0 until chn).map{ i =>
+        ( (10*i + 11) << 2 ) ->
+          RegFieldGroup("TxRxDMALength", Some("Tx  RxControl DMA"), Seq(
+            RegField(16, txLen(i), RegFieldDesc("txLen", "length of tx", reset=Some(65535))),
+            RegField.r(16, io.sel(i).r_RxLen, RegFieldDesc("rxLen", "length of rx")),
+          ))
+      }
+
+    val txAddrMap =
+      (0 until chn).map{ i =>
+        ( (10*i + 12) << 2 ) ->
+          RegFieldGroup("TxDMAAddress", Some("Tx Control DMA"), Seq(
+            RegField(32, txPtr(i), RegFieldDesc("txPtr", "pointer of tx", reset=Some(0x80002000))),
+          ))
+      }
+
+    val rxAddrMap =
+      (0 until chn).map{ i =>
+        ( (10*i + 13) << 2 ) ->
+          RegFieldGroup("RxDMAAddress", Some("Rx Control DMA"), Seq(
+            RegField(32, rxPtr(i), RegFieldDesc("rxPtr", "pointer of rx", reset=Some(0x80002000))),
+          ))
+      }
 
 
-      // (0 until chn).map{ i =>
-      //   ( (10*i + 10) << 2 ) ->
-      //     RegFieldGroup("DMATrigger", Some("Tx Control DMA"), Seq(
-      //       RegField.w(1, RegWriteFn((valid, data) => { io.triTx(i) := (valid & (data === 1.U)) ; true.B} ), RegFieldDesc("bd", s"bd$i", reset=Some(0x0))),
-      //       RegField(1, triRx(i), RegFieldDesc("bd", s"bd$i", reset=Some(0x0)))
-      //     ))
-      // }
+    val regMap = comMap ++ trigMap ++ lenMap ++ txAddrMap ++ rxAddrMap
+    outer.configNode.regmap(regMap: _*)
 
-      // (0 until chn).map{ i =>
-      //   ( (10*i + 11) << 2 ) ->
-      //     RegFieldGroup("TxRxDMALength", Some("Tx  RxControl DMA"), Seq(
-      //       RegField(16, txLen(i), RegFieldDesc("txLen", "length of tx", reset=Some(65535))),
-      //       RegField.r(16, io.r_RxLen(i), RegFieldDesc("rxLen", "length of rx")),
-      //     ))
-      // }
 
-      // (0 until chn).map{ i =>
-      //   ( (10*i + 12) << 2 ) ->
-      //     RegFieldGroup("TxDMAAddress", Some("Tx Control DMA"), Seq(
-      //       RegField(32, txPtr(i), RegFieldDesc("txPtr", "pointer of tx", reset=Some(0x80002000))),
-      //     ))
-      // }
-
-      // (0 until chn).map{ i =>
-      //   ( (10*i + 13) << 2 ) ->
-      //     RegFieldGroup("RxDMAAddress", Some("Rx Control DMA"), Seq(
-      //       RegField(32, rxPtr(i), RegFieldDesc("rxPtr", "pointer of rx", reset=Some(0x80002000))),
-      //     ))
-      // }
-
-    )
 
 
 

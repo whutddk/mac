@@ -60,14 +60,8 @@ class SwitchImp(outer: Switch)(implicit p: Parameters) extends LazyModuleImp(out
 
   val dmaMst = Module(new DmaNode(dma_edge))
 
-  dmaMst.io.triTx             := outer.dmaReg.module.io.triTx
-  outer.dmaReg.module.io.triRx := dmaMst.io.triRx
+  dmaMst.io.sel <> outer.dmaReg.module.io.sel
 
-
-  dmaMst.io.r_TxPtr           := outer.dmaReg.module.io.r_TxPtr
-  dmaMst.io.r_RxPtr           := outer.dmaReg.module.io.r_RxPtr
-  dmaMst.io.r_TxLen           := outer.dmaReg.module.io.r_TxLen
-  outer.dmaReg.module.io.r_RxLen := dmaMst.io.r_RxLen
 
   dmaMst.io.dmaMst.D.bits  := dma_bus.d.bits
   dmaMst.io.dmaMst.D.valid := dma_bus.d.valid
@@ -146,8 +140,8 @@ class SwitchImp(outer: Switch)(implicit p: Parameters) extends LazyModuleImp(out
 
 
   for( i <- 0 until chn+1 ){
-    tempTxPort(chn+1-1).valid := false.B
-    tempTxPort(chn+1-1).bits  := 0.U.asTypeOf(new Mac_Stream_Bundle)
+    tempTxPort(i).valid := false.B
+    tempTxPort(i).bits  := 0.U.asTypeOf(new Mac_Stream_Bundle)
   }
   robin.io.deq.rx.ready := false.B
 

@@ -17,13 +17,7 @@ abstract class DMAMstBase(val edgeOut: TLEdgeOut)(implicit p: Parameters) extend
   class SwitchMuxIO(implicit p: Parameters) extends SwitchBundle{
     val dmaMst = new MacTileLinkMasterIO
 
-    val triTx   = Input ( Vec( chn, Bool()) )
-    val triRx   = Output( Vec( chn, Bool()) )
-    val r_TxPtr = Input(UInt(32.W))
-    val r_RxPtr = Input(UInt(32.W))
-    val r_TxLen = Input(UInt(16.W))
-    val r_RxLen = Output(UInt(16.W))
-
+    val sel = Vec( chn, Flipped(new DMA_Register_Bundle) )
 
 
   }
@@ -47,13 +41,18 @@ abstract class DMAMstBase(val edgeOut: TLEdgeOut)(implicit p: Parameters) extend
   val dmaAValid = RegInit(false.B)
   val dmaABits  = Reg(new TLBundleA(edgeOut.bundle))
   val dmaAddress = Reg( UInt(32.W) )
+
+  val trigRxNum = Reg(UInt((log2Ceil(chn)).W))
+  val trigTxNum = Reg(UInt((log2Ceil(chn)).W))
+
+  val rxLength = RegInit(0.U)
 }
 
 trait DMAMstFSM{ this: DMAMstBase =>
 
   stateNxt := 
     Mux1H(Seq(
-      ( stateCur === stateIdle ) -> Mux( (io.triTx.foldLeft(false.B)(_|_) & io.r_TxLen > 32.U), stateTx, Mux( rxBuff.io.deq.valid, stateRx, stateIdle ) ),
+      ( stateCur === stateIdle ) -> Mux( (0 until chn).map{i => (io.sel(i).triTx & io.sel(i).r_TxLen > 32.U)}.foldLeft(false.B)(_|_) , stateTx, Mux( rxBuff.mInfo.source.valid, stateRx, stateIdle ) ),
       ( stateCur === stateRx   ) -> Mux( stateDMA === 0.U, stateIdle, stateRx ),
       ( stateCur === stateTx   ) -> Mux( stateDMA === 0.U, stateIdle, stateTx ),
     ))
@@ -64,7 +63,7 @@ trait DMAMstFSM{ this: DMAMstBase =>
   } .elsewhen( io.dmaMst.A.fire ){
     stateDMA := 2.U
   } .elsewhen( io.dmaMst.D.fire & isLastD ){
-    when( stateCur === stateTx & dmaAddress === (io.r_TxPtr + io.r_TxLen) ){
+    when( stateCur === stateTx & dmaAddress === (io.sel(trigTxNum).r_TxPtr + io.sel(trigTxNum).r_TxLen) ){
       stateDMA := 0.U
     } .elsewhen( stateCur === stateRx & ~rxBuff.io.deq.valid  ){
       stateDMA := 0.U
@@ -80,13 +79,28 @@ trait DMAMstTileLink{ this: DMAMstBase =>
 
 
 
+  val mInfoValid = stateCur === stateTx
 
+  when( rxBuff.mInfo.source.valid & stateCur === stateIdle & stateNxt === stateRx  ){
+    assert( rxBuff.mInfo.source.bits(48) === 1.U )
+    trigRxNum := rxBuff.mInfo.source.bits
+    dmaAddress := io.sel(rxBuff.mInfo.source.bits( log2Ceil(chn)-1, 0 )).r_RxPtr
+  }
 
-  when( stateCur === stateIdle & stateNxt === stateTx ){
-    dmaAddress := io.r_TxPtr
-  } .elsewhen( stateCur === stateIdle & stateNxt === stateRx ){
-    dmaAddress := io.r_RxPtr
-  } .elsewhen( io.dmaMst.A.fire ){
+  for( i <- 0 until chn ){
+    io.sel(i).triRx   := rxBuff.io.deq.fire & rxBuff.io.deq.bits.isLast & trigRxNum === i.U
+    io.sel(i).r_RxLen := RegEnable( rxLength + 1.U, io.sel(i).triRx )
+  }
+
+  for( i <- 0 until chn ){
+    when( io.sel(i).triTx & io.sel(i).r_TxLen > 32.U & stateCur === stateIdle ){
+      trigTxNum := i.U
+      dmaAddress := io.sel(i).r_TxPtr
+      assert( stateNxt === stateTx )
+    }
+  }
+
+  when( io.dmaMst.A.fire ){
     dmaAddress := dmaAddress + 1.U
   }
 
@@ -129,7 +143,7 @@ trait DMAMstTileLink{ this: DMAMstBase =>
 
 trait DMAMstBuff{ this: DMAMstBase =>
 
-  val rxLength = RegInit(0.U)
+
 
   when( rxBuff.io.deq.fire ){
     when( rxBuff.io.deq.bits.isStart ){
@@ -139,32 +153,15 @@ trait DMAMstBuff{ this: DMAMstBase =>
     }
   }
 
-  val trigRxNum = Reg(UInt((log2Ceil(chn)).W))
-  when( rxBuff.mInfo.source.valid ){
-    assert( rxBuff.mInfo.source.bits(48) === 1.U )
-    trigRxNum := rxBuff.mInfo.source.bits
-  }
 
-  for( i <- 0 until chn ){
-    io.triRx(i) := rxBuff.io.deq.fire & rxBuff.io.deq.bits.isLast & trigRxNum === i.U
-  }
-
-  io.r_RxLen := RegEnable( rxLength, io.triRx.foldLeft(false.B)(_|_) )
 
 
   txBuff.io.enq.valid := io.dmaMst.D.valid & stateCur === stateTx
   txBuff.io.enq.bits.data  := io.dmaMst.D.bits.data
-  txBuff.io.enq.bits.isStart := RegEnable( dmaAddress === io.r_TxPtr, io.dmaMst.A.fire)
-  txBuff.io.enq.bits.isLast  := dmaAddress === (io.r_TxPtr + io.r_TxLen)
+  txBuff.io.enq.bits.isStart := RegEnable( dmaAddress === io.sel(trigTxNum).r_TxPtr, io.dmaMst.A.fire)
+  txBuff.io.enq.bits.isLast  := dmaAddress === (io.sel(trigTxNum).r_TxPtr + io.sel(trigTxNum).r_TxLen)
 
-  val trigTxNum = Reg(UInt((log2Ceil(chn)).W))
-  val mInfoValid = stateCur === stateTx
 
-  for( i <- 0 until chn ){
-    when( io.triTx(i) & io.r_TxLen(i) > 32.U & stateCur === stateIdle ){
-      trigTxNum := i.U
-    }
-  }
 
 }
 
