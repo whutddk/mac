@@ -152,8 +152,10 @@ class SwitchImp(outer: Switch)(implicit p: Parameters) extends LazyModuleImp(out
       robin.io.deq.rx.ready := tempTxPort(destChn).ready
     } .otherwise{
       for( i <- 0 until chn+1 ){
+        when( i.U =/= robin.io.sel ){
         tempTxPort(i).valid := robin.io.deq.rx.valid & allTxReady
-        tempTxPort(i).bits  := robin.io.deq.rx.bits
+        tempTxPort(i).bits  := robin.io.deq.rx.bits          
+        }
       }
       robin.io.deq.rx.ready := allTxReady
     }

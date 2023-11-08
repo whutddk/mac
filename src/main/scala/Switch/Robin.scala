@@ -12,15 +12,17 @@ import freechips.rocketchip.tilelink._
 
 import MAC._
 
-class Robin_Bundle extends Bundle{
+class Robin_Bundle(implicit p: Parameters) extends SwitchBundle{
   val rx = Decoupled(new Mac_Stream_Bundle)
   val mInfo = new Rx_MuxInfo_Bundle
+
 }
 
 class Robin(implicit p: Parameters) extends SwitchModule{
   class RobinIO extends Bundle{
     val enq = Vec( chn+1, Flipped(new Robin_Bundle) )
-    val deq = new Robin_Bundle    
+    val deq = new Robin_Bundle
+    val sel = Output(UInt( (log2Ceil(chn+1)).W ))
   }
 
   val io: RobinIO = IO(new RobinIO)
@@ -30,6 +32,7 @@ class Robin(implicit p: Parameters) extends SwitchModule{
 
   val isLock = RegInit(false.B)
   val lockChn = Reg(UInt((log2Ceil(chn+1)).W))
+  io.sel := lockChn
 
   val lfsr = ~LFSR( log2Ceil(chn+1), ~isLock)
 
