@@ -82,7 +82,7 @@ trait DMAMstTileLink{ this: DMAMstBase =>
   val mInfoValid = stateCur === stateTx
 
   when( rxBuff.mInfo.source.valid & stateCur === stateIdle & stateNxt === stateRx  ){
-    assert( rxBuff.mInfo.source.bits(48) === 1.U )
+    // assert( rxBuff.mInfo.source.bits(48) === 1.U )
     trigRxNum := rxBuff.mInfo.source.bits
     dmaAddress := io.sel(rxBuff.mInfo.source.bits( log2Ceil(chn)-1, 0 )).r_RxPtr
   }

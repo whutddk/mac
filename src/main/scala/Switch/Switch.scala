@@ -105,8 +105,8 @@ class SwitchImp(outer: Switch)(implicit p: Parameters) extends LazyModuleImp(out
   when( robin.io.deq.rx.fire & robin.io.deq.rx.bits.isLast ){
     assert( isMuxBusy )
     isMuxBusy := false.B
-  } .elsewhen( robin.io.deq.mInfo.dest.valid ){
-    assert( ~isMuxBusy )
+  } .elsewhen( robin.io.deq.mInfo.dest.valid & ~isMuxBusy ){
+
     isMuxBusy := true.B
 
 

@@ -130,7 +130,7 @@ trait MacTxFSM { this: MacTxBase =>
     StatePreamble := true.B
   }
 
-  when(StartFCS | StartJam){
+  when(StartFCS | StartJam | StartDefer){
     StatePAD := false.B
   }.elsewhen(StartPAD){
     StatePAD := true.B
@@ -287,7 +287,13 @@ class MacTx extends MacTxBase with MacTxFSM with MacTxCounter with MacTxCRC {
 
   io.ResetCollision := ~(StatePreamble | (StateData(0) | StateData(1)) | StatePAD | StateFCS)
   val ExcessiveDeferOccured = io.TxStartFrm & StateDefer & ExcessiveDefer & ~StopExcessiveDeferOccured
-  io.StartTxDone := ~io.Collision & (StateFCS & NibCntEq7 | StateData(1) & io.TxEndFrm & NibbleMinFl & ~io.CrcEn)
+
+  io.StartTxDone :=
+    ~io.Collision &
+      ( (StateFCS & NibCntEq7) |
+        (StateData(1) & io.TxEndFrm & NibbleMinFl & ~io.CrcEn) |
+        (StatePAD                   & NibbleMinFl & ~io.CrcEn) )
+
   io.LateCollision := StartJam & ~ColWindow
   io.MaxCollisionOccured := StartJam & ColWindow;
   StateSFD := StatePreamble & NibCntEq15;

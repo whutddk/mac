@@ -54,8 +54,10 @@ class PiPoBuffBase[T<:Data]( dp: Int, val threshold: Int = 32) extends Module{
 
 
   when( io.enq.fire ){
-    when( io.enq.bits.isStart ){
+    when( io.enq.bits.isLast ){
       cnt := 0.U      
+    } .elsewhen( io.enq.bits.isStart ){
+      cnt := 1.U      
     } .otherwise{
       cnt := cnt + 1.U
     }

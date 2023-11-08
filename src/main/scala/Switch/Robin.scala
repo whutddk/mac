@@ -29,14 +29,16 @@ class Robin(implicit p: Parameters) extends SwitchModule{
 
 
   val isLock = RegInit(false.B)
+  val lockChn = Reg(UInt((log2Ceil(chn+1)).W))
 
-  val lfsr = LFSR(chn+1, ~isLock)
+  val lfsr = ~LFSR( log2Ceil(chn+1), ~isLock)
 
   for( i <- 0 until chn+1 ) {
     when( i.U === lfsr ){
       when( io.enq(i).mInfo.dest.valid ){
         assert( ~isLock )
-        isLock := true.B
+        isLock  := true.B
+        lockChn := lfsr
       }
     }
   }
@@ -58,7 +60,7 @@ class Robin(implicit p: Parameters) extends SwitchModule{
     io.deq.mInfo.source.valid := false.B
     io.deq.mInfo.source.bits  := 0.U
   } .otherwise{
-    io.deq <> io.enq(lfsr)
+    io.deq <> io.enq(lockChn)
   }
 
 
