@@ -48,15 +48,15 @@ class MacNode(implicit p: Parameters) extends Mac{
 
 
 class DmaNode(edgeOut: TLEdgeOut)(implicit p: Parameters) extends DMAMst(edgeOut){
-  def DmaMac = "habcdef".U(48.W)
+  // def DmaMac = "habcdef".U(48.W)
 
   ex.tx <> rxBuff.io.enq
   txBuff.io.deq <> ex.rx
 
   ex.mInfo.dest.valid := mInfoValid
-  ex.mInfo.dest.bits  := Cat( 1.U, trigTxNum )
+  ex.mInfo.dest.bits  := DontCare
   ex.mInfo.source.valid := mInfoValid
-  ex.mInfo.source.bits  := DmaMac
+  ex.mInfo.source.bits  := DontCare
 
 }
 

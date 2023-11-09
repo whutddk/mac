@@ -24,7 +24,7 @@ class DmaRegIO(implicit p: Parameters) extends SwitchBundle{
 
   val MacAddr = Output(UInt(48.W))
 
-  val sel = Vec( chn, new DMA_Register_Bundle )
+  val cfg = Vec( chn, new DMA_Register_Bundle )
 }
 
 class DmaReg(implicit p: Parameters) extends LazyModule with HasSwitchParameters{
@@ -63,12 +63,12 @@ class DmaRegImp(outer: DmaReg)(implicit p: Parameters) extends LazyModuleImp(out
     val triRx = for( i <- 0 until chn ) yield { RegInit(false.B) }
 
     for( i <- 0 until chn ) {
-      io.sel(i).r_TxPtr := txPtr(i)
-      io.sel(i).r_RxPtr := rxPtr(i)
-      io.sel(i).r_TxLen := txLen(i)      
+      io.cfg(i).r_TxPtr := txPtr(i)
+      io.cfg(i).r_RxPtr := rxPtr(i)
+      io.cfg(i).r_TxLen := txLen(i)      
     }
 
-    for( i <- 0 until chn ) { when( io.sel(i).triRx ) { triRx(i) := true.B } }
+    for( i <- 0 until chn ) { when( io.cfg(i).triRx ) { triRx(i) := true.B } }
 
 
 
@@ -89,7 +89,7 @@ class DmaRegImp(outer: DmaReg)(implicit p: Parameters) extends LazyModuleImp(out
       ((0 until chn).map{ i =>
         ( (10*i + 10) << 2 ) ->
           RegFieldGroup("DMATrigger", Some("Tx Control DMA"), Seq(
-            RegField.w(1, RegWriteFn((valid, data) => { io.sel(i).triTx := (valid & (data === 1.U)) ; true.B} ), RegFieldDesc("bd", s"bd$i", reset=Some(0x0))),
+            RegField.w(1, RegWriteFn((valid, data) => { io.cfg(i).triTx := (valid & (data === 1.U)) ; true.B} ), RegFieldDesc("bd", s"bd$i", reset=Some(0x0))),
             RegField(1, triRx(i), RegFieldDesc("bd", s"bd$i", reset=Some(0x0)))
           ))
       })
@@ -99,7 +99,7 @@ class DmaRegImp(outer: DmaReg)(implicit p: Parameters) extends LazyModuleImp(out
         ( (10*i + 11) << 2 ) ->
           RegFieldGroup("TxRxDMALength", Some("Tx  RxControl DMA"), Seq(
             RegField(16, txLen(i), RegFieldDesc("txLen", "length of tx", reset=Some(65535))),
-            RegField.r(16, io.sel(i).r_RxLen, RegFieldDesc("rxLen", "length of rx")),
+            RegField.r(16, io.cfg(i).r_RxLen, RegFieldDesc("rxLen", "length of rx")),
           ))
       }
 

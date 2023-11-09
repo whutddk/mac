@@ -60,7 +60,7 @@ class SwitchImp(outer: Switch)(implicit p: Parameters) extends LazyModuleImp(out
 
   val dmaMst = Module(new DmaNode(dma_edge))
 
-  dmaMst.io.sel <> outer.dmaReg.module.io.sel
+  dmaMst.io.cfg <> outer.dmaReg.module.io.cfg
 
 
   dmaMst.io.dmaMst.D.bits  := dma_bus.d.bits
@@ -100,6 +100,7 @@ class SwitchImp(outer: Switch)(implicit p: Parameters) extends LazyModuleImp(out
   val isHit = Reg(Bool())
   val destChn = Reg(UInt((log2Ceil(chn+1)).W))
   val isMuxBusy = RegInit(false.B)
+  val dmaSelIn = Reg(UInt((log2Ceil(chn)).W)); dmaMst.io.selIn := dmaSelIn
 
 
   when( robin.io.deq.rx.fire & robin.io.deq.rx.bits.isLast ){
@@ -108,20 +109,28 @@ class SwitchImp(outer: Switch)(implicit p: Parameters) extends LazyModuleImp(out
   } .elsewhen( robin.io.deq.mInfo.dest.valid & ~isMuxBusy ){
 
     isMuxBusy := true.B
-
-
     isHit   := false.B
-    for( i <- 0 until chn+1 ){
-      when( 
-        robin.io.deq.mInfo.dest.bits === destTable(i)(0) ||
-        robin.io.deq.mInfo.dest.bits === destTable(i)(1) ||
-        robin.io.deq.mInfo.dest.bits === destTable(i)(2) ||
-        robin.io.deq.mInfo.dest.bits === destTable(i)(3)
-      ){
+    dmaSelIn := robin.io.sel
+
+    when( robin.io.sel === (chn+1-1).U ){ //DMA
         isHit   := true.B
-        destChn := i.U
-      }
+        destChn := dmaMst.io.selOut
+    } .otherwise{
+      for( i <- 0 until chn+1 ){
+        when( 
+          robin.io.deq.mInfo.dest.bits === destTable(i)(0) ||
+          robin.io.deq.mInfo.dest.bits === destTable(i)(1) ||
+          robin.io.deq.mInfo.dest.bits === destTable(i)(2) ||
+          robin.io.deq.mInfo.dest.bits === destTable(i)(3)
+        ){
+          isHit   := true.B
+          destChn := i.U
+        } 
+      }      
     }
+
+
+
 
   }
 
