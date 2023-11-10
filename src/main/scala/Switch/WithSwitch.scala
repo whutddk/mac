@@ -16,11 +16,11 @@ trait WithSwitchMix { this: BaseSubsystem =>
     // pbus.coupleTo("switch_cfg")   { switch0.tlMasterNode := TLFragmenter(pbus) := _ }
 
     for( i <- 0 until 3 ){
-      pbus.coupleTo("switch_cfg")   { switch.macReg(i).configNode   := TLFragmenter(pbus) := _ }
+      pbus.coupleTo(s"mac_cfg$i")   { switch.macReg(i).configNode   := TLFragmenter(pbus) := _ }
       ibus.fromSync := switch.macReg(i).int_node   
     }
 
-    pbus.coupleTo("switch_cfg")   { switch.dmaReg.configNode   := TLFragmenter(pbus) := _ }
+    pbus.coupleTo("dma_cfg")   { switch.dmaReg.configNode   := TLFragmenter(pbus) := _ }
 
 
 

@@ -38,6 +38,8 @@ class MacTileLinkTxIO extends Bundle{
   
   val txDeq = Flipped(Decoupled(new Mac_Stream_Bundle))
 
+  val isTxIdle = Input(Bool())
+
 }
 
 
@@ -71,7 +73,7 @@ class MacTileLinkTx extends Module{
       Flop := ~Flop
     }
     
-    when( asyncReqBundle.valid & asyncReqBundle.bits.isStart ){
+    when( asyncReqBundle.valid & asyncReqBundle.bits.isStart & ~TxStartFrm & io.isTxIdle ){
       TxStartFrm := true.B
     } .elsewhen(TxUsedData_q | io.TxAbort & (~TxAbort_q) ){
       TxStartFrm := false.B
@@ -89,7 +91,7 @@ class MacTileLinkTx extends Module{
 
 
     asyncReqBundle.ready := 
-        asyncReqBundle.valid & asyncReqBundle.bits.isStart & ~TxStartFrm |
+        asyncReqBundle.valid & asyncReqBundle.bits.isStart & ~TxStartFrm & io.isTxIdle |
         io.TxUsedData & Flop & ~TxEndFrm |
         TxStartFrm & io.TxUsedData & Flop
 

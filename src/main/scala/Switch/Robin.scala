@@ -34,7 +34,7 @@ class Robin(implicit p: Parameters) extends SwitchModule{
   val lockChn = Reg(UInt((log2Ceil(chn+1)).W))
   io.sel := lockChn
 
-  val lfsr = ~LFSR( log2Ceil(chn+1), ~isLock)
+  val lfsr = ~LFSR( (log2Ceil(chn+1)+1), ~isLock)
 
   for( i <- 0 until chn+1 ) {
     when( i.U === lfsr ){

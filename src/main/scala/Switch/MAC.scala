@@ -419,7 +419,7 @@ abstract class Mac(implicit p: Parameters) extends SwitchNode{
 
   macTileLinkTx.io.r_TxEn    := r_TxEn
 
-
+  macTileLinkTx.io.isTxIdle := txethmac.io.isTxIdle
 
   macTileLinkTx.io.MTxClk     := io.mii.mtx_clk_pad_i
   macTileLinkTx.io.asyncReset := io.asyncReset

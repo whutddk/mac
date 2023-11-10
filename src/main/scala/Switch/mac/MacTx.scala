@@ -33,7 +33,9 @@ class MacTxIO extends Bundle{
   val LateCollision      = Output(Bool())
   val DeferIndication    = Output(Bool())
   val StatePreamble      = Output(Bool())
-  val StateData          = Output(UInt(2.W))    
+  val StateData          = Output(UInt(2.W))
+
+  val isTxIdle = Output(Bool())
 }
 
 abstract class MacTxBase extends Module with RequireAsyncReset{
@@ -78,6 +80,7 @@ abstract class MacTxBase extends Module with RequireAsyncReset{
   val NibCntEq7  = NibCnt === 7.U
   val NibCntEq15 = NibCnt === 15.U
 
+  io.isTxIdle := StateIdle
 }
 
 
