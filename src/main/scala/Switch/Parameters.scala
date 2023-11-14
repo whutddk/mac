@@ -33,3 +33,9 @@ trait HasSwitchParameters {
 class SwitchCfg extends Config((_, _, _) => {
   case SwitchParamsKey => SwitchSetting()
 })
+
+class EfConfig extends Config((site, here, up) => {
+  case SwitchParamsKey => SwitchSetting(
+    chn = 2,
+  )
+})
