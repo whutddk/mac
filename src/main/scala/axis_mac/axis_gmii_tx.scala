@@ -52,14 +52,14 @@ class GmiiTx_AxisRx extends Module{
 
 
   stateNext := Mux1H(Seq(
-    (stateCurr === STATE_IDLE)     -> ( Mux( s_axis_tvalid, STATE_PREAMBLE, STATE_IDLE )),
-    (stateCurr === STATE_PREAMBLE) -> ( Mux( frame_ptr_reg == 16'd7, STATE_PAYLOAD, STATE_PREAMBLE )),
-    (stateCurr === STATE_PAYLOAD)  -> ( Mux( s_axis_tvalid, Mux( s_axis_tlast, Mux( s_axis_tuser, STATE_IFG, STATE_LAST ), STATE_PAYLOAD ),STATE_WAIT_END ) ),
-    (stateCurr === STATE_LAST)     -> ( Mux( ENABLE_PADDING && frame_ptr_reg < MIN_FRAME_LENGTH-5, STATE_PAD, STATE_FCS )),
-    (stateCurr === STATE_PAD)      -> ( Mux( (frame_ptr_reg < MIN_FRAME_LENGTH-5), STATE_PAD, STATE_FCS )),
-    (stateCurr === STATE_FCS)      -> ( Mux( frame_ptr_reg < 3, STATE_FCS, STATE_IFG )),
-    (stateCurr === STATE_WAIT)     -> ( Mux( s_axis_tvalid & s_axis_tlast, STATE_IFG, STATE_WAIT ) ),
-    (stateCurr === STATE_IFG)      -> ( Mux( ifg_reg < ifg_delay-1, STATE_IFG, STATE_IDLE )),
+    (stateCurr === STATE_IDLE)     -> ( Mux( io.axis.valid, STATE_PREAMBLE, STATE_IDLE )),
+    (stateCurr === STATE_PREAMBLE) -> ( Mux( frame_ptr === 7.U, STATE_PAYLOAD, STATE_PREAMBLE )),
+    (stateCurr === STATE_PAYLOAD)  -> ( Mux( io.axis.valid, Mux( IO.axis.tlast, Mux( s_axis_tuser, STATE_IFG, STATE_LAST ), STATE_PAYLOAD ),STATE_WAIT_END ) ),
+    (stateCurr === STATE_LAST)     -> ( Mux( ENABLE_PADDING && frame_ptr < MIN_FRAME_LENGTH-5, STATE_PAD, STATE_FCS )),
+    (stateCurr === STATE_PAD)      -> ( Mux( (frame_ptr < MIN_FRAME_LENGTH-5), STATE_PAD, STATE_FCS )),
+    (stateCurr === STATE_FCS)      -> ( Mux( frame_ptr < 3, STATE_FCS, STATE_IFG )),
+    (stateCurr === STATE_WAIT)     -> ( Mux( io.axis.valid & io.axis.tlast, STATE_IFG, STATE_WAIT ) ),
+    (stateCurr === STATE_IFG)      -> ( Mux( ifg < io.ifg_delay-1, STATE_IFG, STATE_IDLE )),
   ))
 
 
@@ -67,58 +67,127 @@ class GmiiTx_AxisRx extends Module{
 
 
 
+val s_tdata = Reg(UInt(8.W))
+val frame_ptr = RegInit(0.U(16.W))
+val s_axis_tready = RegInit(false.B); io.axis.ready := s_axis_tready
 
 
 
 
 
+  when( io.clkEn & ~(io.miiSel & mii_odd_reg) ){
+    when( stateCurr === STATE_IDLE ){
+      assert( frame_ptr === 0.U )
+      when( io.axis.valid ){
+        frame_ptr := 1.U
+        s_axis_tready := false.B
+      }
+    } .elsewhen( stateCurr ===  STATE_PREAMBLE ){
+      frame_ptr := frame_ptr + 1.U
+      when( frame_ptr === 6.U ){
+        assert( io.axis.valid === true.B )
+        s_axis_tready := true.B
+        s_tdata := s_axis_tdata
+      } .elsewhen( frame_ptr === 7.U ){
+        frame_ptr := 0.U
+        s_axis_tready := true.B
+        s_tdata := s_axis_tdata
+      }
+    } .elsewhen( stateCurr === STATE_PAYLOAD ){
+      
+      s_tdata := s_axis_tdata
+
+      when( io.axis.valid ){
+        s_axis_tready := true.B
+        frame_ptr := frame_ptr + 1.U
+        when( io.axis.tlast ){
+          s_axis_tready := false.B    
+          when( s_axis_tuser ){
+            frame_ptr := 0.U
+          }                    
+        }
+      } .otherwise{
+        s_axis_tready := true.B
+        frame_ptr := 0.U
+      }
+    } .elsewhen( stateCurr === STATE_LAST ){
+      frame_ptr := frame_ptr + 1.U
+      when(ENABLE_PADDING && frame_ptr < MIN_FRAME_LENGTH-5){
+        s_tdata := 0.U
+      } .otherwise{
+        frame_ptr := 0.U
+      }
+    } .elsewhen( stateCurr === STATE_PAD ){
+      assert( frame_ptr <= MIN_FRAME_LENGTH-5 )
+
+      frame_ptr := frame_ptr + 1.U
+      s_tdata := 0.U
+
+      when( frame_ptr === MIN_FRAME_LENGTH-5 ){
+        frame_ptr := 0.U
+      }
+    } .elsewhen( stateCurr === STATE_FCS ){
+      assert( frame_ptr <= 3.U )
+      frame_ptr := frame_ptr + 1.U
+      when( frame_ptr === 3.U ){
+        frame_ptr := 0.U
+      }
+    } .elsewhen( stateCurr === STATE_WAIT ){
+      frame_ptr := frame_ptr + 1.U
+      s_axis_tready := true.B
+      when( io.axis.valid & io.axis.tlast ){
+        s_axis_tready := false.B
+      }
+    } .elsewhen( stateCurr === STATE_IFG ){
+      frame_ptr := frame_ptr + 1.U
+    }
+  }
 
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
+val reset_crc  = io.clkEn & ~(io.miiSel & mii_odd_reg) & ( stateCurr === STATE_IDLE | stateCurr === STATE_PREAMBLE | stateCurr === STATE_WAIT | stateCurr === STATE_IFG )
+val update_crc = io.clkEn & ~(io.miiSel & mii_odd_reg) & ( stateCurr === STATE_PAYLOAD | stateCurr === STATE_LAST | stateCurr === STATE_PAD )
 
 
   val crcOut = crcUnit.io.crc
-  val crcCnt = RegInit(0.U(2.W))
 
 
-  crcUnit.io.isEnable := 
+
+  crcUnit.io.isEnable := update_crc
   crcUnit.io.dataIn := s_tdata_reg
-  crcUnit.reset := 
+  crcUnit.reset := reset.asBool | reset_crc
 
-        if (reset_crc) begin
-            crc_state <= 32'hFFFFFFFF;
-        end else if (update_crc) begin
 
-        end
 
-rgmii_lfsr #(
-    .LFSR_WIDTH(32),
-    .LFSR_POLY(32'h4c11db7),
-    .LFSR_CONFIG("GALOIS"),
-    .LFSR_FEED_FORWARD(0),
-    .REVERSE(1),
-    .DATA_WIDTH(8),
-    .STYLE("AUTO")
-)
-eth_crc_8 (
-    .data_in(),
-    .state_in(crc_state),
-    .data_out(),
-    .state_out(crc_next)
-);
+val fcs = RegEnable( crcOut, "hFFFFFFFF".U(32.W), io.clkEn & ~(io.miiSel & mii_odd_reg) & stateCurr === STATE_FCS & frame_ptr === 3.U )
+val ifg = Reg(UInt(8.W))
+when( io.clkEn & ~(io.miiSel & mii_odd_reg) ){
+  when( stateCurr === STATE_WAIT ){
+    ifg := 0.U
+  } .elsewhen( stateCurr === STATE_IFG ){
+    ifg := ifg + 1.U
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -126,303 +195,91 @@ eth_crc_8 (
 
 
 
-localparam [7:0]
-    ETH_PRE = 8'h55,
-    ETH_SFD = 8'hD5;
+val ETH_PRE = "h55".U
+val ETH_SFD = "hD5".U
+
+
+
+val mii_odd = Reg(Bool())
+val mii_msn = Reg(UInt(4.W))
+
+
+
+
+
+
+
+val gmii_txd = Reg(UInt(8.W));     io.gmii.txd := gmii_txd
+val gmii_tx_en = RegInit(false.B); io.gmii.tx_en := gmii_tx_en
+val gmii_tx_er = RegInit(false.B); io.gmii.tx_er := gmii_tx_er
+
+
+when( io.clkEn ){
+  when(mii_select){
+     mii_msn = gmii_txd_next[7:4];
+    gmii_txd := Cat(0.U(4.W), gmii_txd(3,0))
+    when( mii_odd_reg ){
+      gmii_txd := Cat( 0.U(4.W), mii_msn )
+    } 
+  }.otherwise{
+    when( stateCurr === STATE_IDLE ){
+      whne( io.axis.valid ){
+        gmii_txd := ETH_PRE
+      }
+    } .elsewhen( stateCurr === STATE_PREAMBLE ){
+      gmii_txd := Mux( frame_ptr === 7.U, ETH_SFD, ETH_PRE)
+    } .elsewhen( stateCurr === STATE_PAYLOAD | stateCurr === STATE_LAST ){
+      gmii_txd := s_tdata;
+    } .elsewhen( stateCurr === STATE_PAD ){
+      gmii_txd := 0.U
+    } .elsewhen( stateCurr === STATE_FCS ){
+      gmii_txd := Mux1H(Seq(
+        (frame_ptr === 0.U) -> ~crcOut( 7,0),
+        (frame_ptr === 1.U) -> ~crcOut(15,8),
+        (frame_ptr === 2.U) -> ~crcOut(23,16),
+        (frame_ptr === 3.U) -> ~crcOut(31,24),
+      ))
+    }
+  }
+}
+
+
+when( io.clkEn){
+  when(io.miiSel && mii_odd){
+    mii_odd := false.B
+  } .otherwise{
+    when( stateCurr === STATE_IDLE ){
+      mii_odd := io.axis.valid
+    } .otherwise{
+      mii_odd := true.B
+    }
+  }
+}
+
+when( io.clkEn & ~(io.miiSel & mii_odd_reg) ){
+  when( stateCurr === STATE_IDLE ){
+    gmii_tx_en := io.axis.valid
+  } .otherwise{
+    gmii_tx_en := stateCurr === STATE_PREAMBLE | stateCurr === STATE_PAYLOAD | stateCurr === STATE_LAST | stateCurr === STATE_PAD | stateCurr === STATE_FCS
+  }
+} .otherwise{
+  gmii_tx_en := false.B
+}
+
+when( io.clkEn & ~(io.miiSel & mii_odd_reg) & stateCurr === STATE_PAYLOAD ){
+  when( io.axis.valid ) {
+    when( io.axis.tlast & io.axis.tuser ){
+      gmii_tx_er := true.B
+    } .otherwise{
+      gmii_tx_er := false.B
+    }
+  } .otherwise{
+    gmii_tx_er := true.B
+  }
+} .otherwise{
+    gmii_tx_er := false.B
+}
 
-localparam [2:0]
-    STATE_IDLE = 3'd0,
-    STATE_PREAMBLE = 3'd1,
-    STATE_PAYLOAD = 3'd2,
-    STATE_LAST = 3'd3,
-    STATE_PAD = 3'd4,
-    STATE_FCS = 3'd5,
-    STATE_WAIT_END = 3'd6,
-    STATE_IFG = 3'd7;
 
-reg [2:0] state_reg, state_next;
 
-// datapath control signals
-reg reset_crc;
-reg update_crc;
-
-reg [7:0] s_tdata_reg, s_tdata_next, ifg_reg, ifg_next;
-
-reg mii_odd_reg, mii_odd_next;
-reg [3:0] mii_msn_reg, mii_msn_next;
-
-reg [15:0] frame_ptr_reg, frame_ptr_next;
-
-reg [7:0] gmii_txd_reg, gmii_txd_next;
-reg gmii_tx_en_reg, gmii_tx_en_next;
-reg gmii_tx_er_reg, gmii_tx_er_next;
-
-reg s_axis_tready_reg, s_axis_tready_next;
-reg [31:0] crc_state, fcs_next;   
-
-
-
-assign s_axis_tready = s_axis_tready_reg;
-
-assign gmii_txd = gmii_txd_reg;
-assign gmii_tx_en = gmii_tx_en_reg;
-assign gmii_tx_er = gmii_tx_er_reg;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-always @* begin
-    reset_crc = 1'b0;
-    update_crc = 1'b0;
-
-    mii_odd_next = mii_odd_reg;
-    mii_msn_next = mii_msn_reg;
-
-    frame_ptr_next = frame_ptr_reg;
-    fcs_next = fcs_reg;
-    ifg_next = ifg_reg;
-
-    s_axis_tready_next = 1'b0;
-
-    s_tdata_next = s_tdata_reg;
-
-    gmii_txd_next = 8'd0;
-    gmii_tx_en_next = 1'b0;
-    gmii_tx_er_next = 1'b0;
-
-    if (!clk_enable) begin
-        // clock disabled - hold state and outputs
-        gmii_txd_next = gmii_txd_reg;
-        gmii_tx_en_next = gmii_tx_en_reg;
-        gmii_tx_er_next = gmii_tx_er_reg;
-
-    end else if (mii_select && mii_odd_reg) begin
-        // MII odd cycle - hold state, output MSN
-        mii_odd_next = 1'b0;
-        gmii_txd_next = {4'd0, mii_msn_reg};
-        gmii_tx_en_next = gmii_tx_en_reg;
-        gmii_tx_er_next = gmii_tx_er_reg;
-
-    end else begin
-        case (state_reg)
-            STATE_IDLE: begin
-                // idle state - wait for packet
-                reset_crc = 1'b1;
-                mii_odd_next = 1'b0;
-
-                if (s_axis_tvalid) begin
-                    mii_odd_next = 1'b1;
-                    frame_ptr_next = 16'd1;
-                    gmii_txd_next = ETH_PRE;
-                    gmii_tx_en_next = 1'b1;
-
-                end else begin
-
-                end
-            end
-            STATE_PREAMBLE: begin
-                // send preamble
-                reset_crc = 1'b1;
-
-                mii_odd_next = 1'b1;
-                frame_ptr_next = frame_ptr_reg + 16'd1;
-
-                gmii_txd_next = ETH_PRE;
-                gmii_tx_en_next = 1'b1;
-
-                if (frame_ptr_reg == 16'd6) begin
-                    s_axis_tready_next = 1'b1;
-                    s_tdata_next = s_axis_tdata;
-
-                end else if (frame_ptr_reg == 16'd7) begin
-                    // end of preamble; start payload
-                    frame_ptr_next = 16'd0;
-                    if (s_axis_tready_reg) begin
-                        s_axis_tready_next = 1'b1;
-                        s_tdata_next = s_axis_tdata;
-                    end
-                    gmii_txd_next = ETH_SFD;
-
-                end
-            end
-            STATE_PAYLOAD: begin
-                // send payload
-
-                update_crc = 1'b1;
-                s_axis_tready_next = 1'b1;
-
-                mii_odd_next = 1'b1;
-                frame_ptr_next = frame_ptr_reg + 16'd1;
-
-                gmii_txd_next = s_tdata_reg;
-                gmii_tx_en_next = 1'b1;
-
-                s_tdata_next = s_axis_tdata;
-
-                if (s_axis_tvalid) begin
-                    if (s_axis_tlast) begin
-                        s_axis_tready_next = !s_axis_tready_reg;
-                        if (s_axis_tuser) begin
-                            gmii_tx_er_next = 1'b1;
-                            frame_ptr_next = 1'b0;
-                        end
-                    end
-                end else begin
-                    // tvalid deassert, fail frame
-                    gmii_tx_er_next = 1'b1;
-                    frame_ptr_next = 16'd0;
-                end
-            end
-            STATE_LAST: begin
-                // last payload word
-
-                update_crc = 1'b1;
-
-                mii_odd_next = 1'b1;
-                frame_ptr_next = frame_ptr_reg + 16'd1;
-
-                gmii_txd_next = s_tdata_reg;
-                gmii_tx_en_next = 1'b1;
-
-                if (ENABLE_PADDING && frame_ptr_reg < MIN_FRAME_LENGTH-5) begin
-                    s_tdata_next = 8'd0;
-                end else begin
-                    frame_ptr_next = 16'd0;
-                end
-            end
-            STATE_PAD: begin
-                // send padding
-
-                update_crc = 1'b1;
-                mii_odd_next = 1'b1;
-                frame_ptr_next = frame_ptr_reg + 16'd1;
-
-                gmii_txd_next = 8'd0;
-                gmii_tx_en_next = 1'b1;
-
-                s_tdata_next = 8'd0;
-
-                if (frame_ptr_reg < MIN_FRAME_LENGTH-5) begin
-                end else begin
-                    frame_ptr_next = 16'd0;
-                end
-            end
-            STATE_FCS: begin
-                // send FCS
-
-                mii_odd_next = 1'b1;
-                frame_ptr_next = frame_ptr_reg + 16'd1;
-
-                case (frame_ptr_reg)
-                    2'd0: gmii_txd_next = ~crc_state[7:0];
-                    2'd1: gmii_txd_next = ~crc_state[15:8];
-                    2'd2: gmii_txd_next = ~crc_state[23:16];
-                    2'd3: gmii_txd_next = ~crc_state[31:24];
-                    default:;
-                endcase
-                gmii_tx_en_next = 1'b1;
-
-                if (frame_ptr_reg < 3) begin
-                end else begin
-                    frame_ptr_next = 16'd0;
-                    fcs_next = crc_state;
-                end
-            end
-            STATE_WAIT_END: begin
-                // wait for end of frame
-
-                reset_crc = 1'b1;
-
-                mii_odd_next = 1'b1;
-                frame_ptr_next = frame_ptr_reg + 16'd1;
-                s_axis_tready_next = 1'b1;
-
-                if (s_axis_tvalid & s_axis_tlast) begin
-                  s_axis_tready_next = 1'b0;
-                  ifg_next = 8'b0;
-                end
-            end
-            STATE_IFG: begin
-                // send IFG
-
-                reset_crc = 1'b1;
-
-                mii_odd_next = 1'b1;
-                frame_ptr_next = frame_ptr_reg + 16'd1;
-
-                if (ifg_reg < ifg_delay-1) begin
-                    ifg_next = ifg_reg + 1;
-                end
-            end
-        endcase
-
-        if (mii_select) begin
-            mii_msn_next = gmii_txd_next[7:4];
-            gmii_txd_next[7:4] = 4'd0;
-        end
-    end
-end
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-always @(posedge clk) begin
-    if (rst) begin
-
-        frame_ptr_reg <= 16'd0;
-
-        s_axis_tready_reg <= 1'b0;
-
-        gmii_tx_en_reg <= 1'b0;
-        gmii_tx_er_reg <= 1'b0;
-
-
-        fcs_reg <= 32'hFFFFFFFF;
-    end else begin
-
-
-        frame_ptr_reg <= frame_ptr_next;
-
-        s_axis_tready_reg <= s_axis_tready_next;
-
-        gmii_tx_en_reg <= gmii_tx_en_next;
-        gmii_tx_er_reg <= gmii_tx_er_next;
-
-        fcs_reg <= fcs_next;
-        ifg_reg <= ifg_next;
-        // datapath
-
-    end
-
-    mii_odd_reg <= mii_odd_next;
-    mii_msn_reg <= mii_msn_next;
-
-    s_tdata_reg <= s_tdata_next;
-
-    gmii_txd_reg <= gmii_txd_next;
-end
-
-endmodule
 
