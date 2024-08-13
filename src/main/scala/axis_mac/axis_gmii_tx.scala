@@ -176,25 +176,6 @@ when( io.clkEn & ~(io.miiSel & mii_odd_reg) ){
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-}
-
-
-
 val ETH_PRE = "h55".U
 val ETH_SFD = "hD5".U
 
@@ -279,6 +260,25 @@ when( io.clkEn & ~(io.miiSel & mii_odd_reg) & stateCurr === STATE_PAYLOAD ){
 } .otherwise{
     gmii_tx_er := false.B
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+}
+
 
 
 
