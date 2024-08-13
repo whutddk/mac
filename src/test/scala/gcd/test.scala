@@ -1,7 +1,6 @@
 package test
 
 import MAC._
-import BACK._
 import Switch._
 
 import chisel3._
@@ -15,15 +14,20 @@ import org.chipsalliance.cde.config._
 object testModule extends App {
 
 
-  val cfg = new MacCfg
+  // val cfg = new MacCfg
 
-  (new chisel3.stage.ChiselStage).execute( Array("--show-registrations", "--full-stacktrace", "--target-dir", "generated/Main", "-e", "verilog") ++ args, Seq(
-      ChiselGeneratorAnnotation(() => {
-    val soc = LazyModule(new MacTest()(cfg))
-    soc.module
-  })
-  ))
+  // (new chisel3.stage.ChiselStage).execute( Array("--show-registrations", "--full-stacktrace", "--target-dir", "generated/Main", "-e", "verilog") ++ args, Seq(
+  //     ChiselGeneratorAnnotation(() => {
+  //   val soc = LazyModule(new MacTest()(cfg))
+  //   soc.module
+  // })
+  // ))
 
+
+
+  (new chisel3.stage.ChiselStage).execute( Array("--target-dir", "generated/ethernet/", "-E", "verilog" ) ++ args, Seq(
+      ChiselGeneratorAnnotation(() => { new GmiiTx_AxisRx })
+    ))
 
 // import Wrapeer._
 

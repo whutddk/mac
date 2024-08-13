@@ -82,5 +82,8 @@ fst:
 
 
 
-
+ethernet:
+	rm -f ./generated/ethernet/*
+	cd ./rocket-chip/ && rm -f rocketchip.jar
+	sbt "test:runMain test.testModule"
 

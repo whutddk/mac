@@ -21,8 +21,8 @@ class GmiiRx_AxisTx_IO extends Bundle{
   val gmii = Input(new GMII_RX_Bundle)
   val axis = Output(new AXIS_TX_Bundle)
 
-  val clkEn = Input(Bool()),
-  val miiSel = Input(Bool()),
+  val clkEn = Input(Bool())
+  val miiSel = Input(Bool())
 
   val error_bad_frame = Output(Bool())
   val error_bad_fcs = Output(Bool())
@@ -59,8 +59,8 @@ class GmiiRx_AxisTx extends Module{
   stateNext := 
     Mux1H(Seq(
       (stateCurr === STATE_IDLE)    -> ( Mux( gmii_rx_dv(4) & ~gmii_rx_er(4) & gmii_rxd(4) === ETH_SFD, STATE_PAYLOAD, STATE_IDLE )), //IDLE
-      (stateCurr === STATE_PAYLOAD) -> ( Mux( gmii_rx_dv(4) &  gmii_rx_er(4), STATE_WAIT, Mux( ~gmii_rx_dv, STATE_CRC, STATE_PAYLOAD ) )), // PAYLOAD
-      (stateCurr === STATE_CRC)     -> ( Mux( &crcCnt, STATE_IDLE, STATE_CRC )), //CRC
+      (stateCurr === STATE_PAYLOAD) -> ( Mux( gmii_rx_dv(4) &  gmii_rx_er(4), STATE_WAIT, Mux( ~io.gmii.rx_dv, STATE_CRC, STATE_PAYLOAD ) )), // PAYLOAD
+      (stateCurr === STATE_CRC)     -> ( Mux( crcCnt.andR, STATE_IDLE, STATE_CRC )), //CRC
       (stateCurr === STATE_WAIT)    -> ( Mux( ~io.gmii.rx_dv, STATE_IDLE, STATE_WAIT  )), //WAIT_LAST
     ))
 
@@ -68,46 +68,103 @@ class GmiiRx_AxisTx extends Module{
 
 
 
+  val gmii_rxd = for( i <- 0 until 5 ) yield { Reg(UInt(8.W)) }
+  val gmii_rx_er = for( i <- 0 until 5 ) yield { Reg(Bool()) }
+  val gmii_rx_dv = for( i <- 0 until 5 ) yield{ RegInit(false.B) }
 
 
-
-
-
-
-
-
-  val gmii_rxd = for( i <- 0 until 5 ) yield { Wire(UInt(8.W)) }
-  gmii_rxd(0) := RegEnable( Mux( io.miiSel, Cat(io.gmii.rxd(3,0), gmii_rxd(0)(7,4)), io.gmii.rxd ), io.clkEn )
-  for( i <- 1 until 5 ) {
-    gmii_rxd(i) := RegEnable( gmii_rxd(i-1), io.clkEn & ( (io.miiSel & mii_odd) | ~io.miiSel ) )
+  when( io.clkEn ){
+    when( io.miiSel ){
+      gmii_rxd(0)(7,0) := Cat(io.gmii.rxd(3,0), gmii_rxd(0)(7,4))
+    } .otherwise{
+      gmii_rxd(0) := io.gmii.rxd
+    }
   }
 
-  val gmii_rx_er = for( i <- 0 until 5 ) yield { Wire(Bool()) }
-  gmii_rx_er(0) := RegEnable( io.gmii.rx_er | (io.miiSel & mii_odd & gmii_rx_er(0)), io.clkEn )
   for( i <- 1 until 5 ) {
-    gmii_rx_er(i) := RegEnable( gmii_rx_er(i-1), io.clkEn & ( (io.miiSel & mii_odd) | ~io.miiSel ) )
+    when( io.clkEn ){
+      when( io.miiSel ){
+        when( mii_odd ){
+          gmii_rxd(i) := gmii_rxd(i-1)
+        }
+      } .otherwise{
+        gmii_rxd(i) := gmii_rxd(i-1)
+      }
+    }
   }
 
 
-  val gmii_rx_dv = for( i <- 0 until 5 ) yield{ Wire(Bool()) }
-  gmii_rx_dv(0) := RegEnable( io.gmii.rx_dv & ( (io.miiSel & mii_odd & gmii_rx_dv(0)) | ~(io.miiSel & mii_odd) ) , false.B, io.clkEn )
+
+
+
+
+  when( io.clkEn ){
+    when( io.miiSel ){
+      when( mii_odd ){
+        gmii_rx_er(0) := io.gmii.rx_er | gmii_rx_er(0)
+      } .otherwise{
+        gmii_rx_er(0) := io.gmii.rx_er
+      }
+    } .otherwise{
+      gmii_rx_er(0) := io.gmii.rx_er
+    }
+  }
+
+  for( i <- 1 until 5 ) {
+    when( io.clkEn ){
+      when( io.miiSel ){
+        when( mii_odd ){
+          gmii_rx_er(i) := gmii_rx_er(i-1)
+        }
+      } .otherwise{
+        gmii_rx_er(0) := io.gmii.rx_er(i-1)
+      }
+    }
+  }
+
+
+  when( io.clkEn ){
+    when( io.miiSel ){
+      when( mii_odd ){
+        gmii_rx_dv(0) := io.gmii.rx_dv & gmii_rx_dv(0)
+      } .otherwise{
+        gmii_rx_dv(0) := io.gmii.rx_dv
+      }
+    } .otherwise{
+      gmii_rx_dv(0) := io.gmii.rx_dv
+    }
+  }
+
   for( i <- 1 until 5 ){
-    gmii_rx_dv(i) := RegEnable( gmii_rx_dv(i-1) & io.gmii.rx_dv, false.B, io.clkEn & ((io.miiSel & mii_odd) | ~io.miiSel) )
+    when( io.clkEn ){
+      when( io.miiSel ){
+        when( mii_odd ){
+          gmii_rx_dv(i) := gmii_rx_dv(i-1) & io.gmii.rx_dv
+        }
+      } .otherwise{
+        gmii_rx_dv(i) := gmii_rx_dv(i-1) & io.gmii.rx_dv
+      }
+    }
   }
 
 
 
-  when( clk_enable & mii_select ){
-    when( io.gmii.rx_dv && Cat(io.gmii.rxd(3,0), gmii_rxd(0)(7,4)) === ETH_SFD ) {
+
+
+
+
+
+
+
+  when( io.clkEn & io.miiSel ){
+    when( mii_locked ){
+      mii_locked <= io.gmii.rx_dv
+      mii_odd := ~mii_odd
+    } .elsewhen( io.gmii.rx_dv && Cat(io.gmii.rxd(3,0), gmii_rxd(0)(7,4)) === ETH_SFD ) {
+      mii_locked := true.B
       mii_odd := true.B
     } .otherwise{
       mii_odd := ~mii_odd
-    }
-
-    when( mii_locked ){
-      mii_locked <= io.gmii.rx_dv;
-    } .elsewhen( io.gmii.rx_dv && {io.gmii.rxd[3:0], gmii_rxd(0)[7:4]} == ETH_SFD ){
-      mii_locked := true.B
     }
   }
 
@@ -121,7 +178,7 @@ class GmiiRx_AxisTx extends Module{
 
 
   val m_axis_tdata = RegNext( gmii_rxd(4) ); io.axis.tdata := m_axis_tdata
-  val m_axis_tlast = RegNext( (stateCurr === STATE_PAYLOAD & gmii_rx_dv(4) & gmii_rx_er(4)) | ( stateCurr === STATE_CRC & &crcCnt ) ); io.axis.tlast := m_axis_tlast
+  val m_axis_tlast = RegNext( (stateCurr === STATE_PAYLOAD & gmii_rx_dv(4) & gmii_rx_er(4)) | ( stateCurr === STATE_CRC & crcCnt.andR ) ); io.axis.tlast := m_axis_tlast
   val m_axis_tuser = RegNext(
     stateCurr === STATE_PAYLOAD & (
       (gmii_rx_dv(4) && gmii_rx_er(4)) |
@@ -134,6 +191,19 @@ class GmiiRx_AxisTx extends Module{
   ); io.axis.tuser := m_axis_tuser
 
   val m_axis_tvalid = RegNext(io.clkEn & ~(io.miiSel & ~mii_odd) & (stateCurr === STATE_PAYLOAD | stateCurr === STATE_CRC), false.B); io.axis.tvalid := m_axis_tvalid
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     
   val error_bad_frame = m_axis_tvalid & m_axis_tuser; io.error_bad_frame := error_bad_frame
@@ -149,7 +219,7 @@ class GmiiRx_AxisTx extends Module{
     when( stateCurr === STATE_PAYLOAD & gmii_rx_dv(4) & gmii_rx_er(4) ){
       fcs := "hdeadbeef".U
     } .elsewhen( stateCurr === STATE_CRC ){
-      fcs := Mux( &crcCnt, crcOut, 0.U )
+      fcs := Mux( crcCnt.andR, crcOut, 0.U )
     }
   }
 
