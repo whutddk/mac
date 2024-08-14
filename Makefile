@@ -1,5 +1,5 @@
 
-.PHONY: compile
+.PHONY: compile tb ethernet vcd
 
 compile:
 	rm -rf ./generated/
@@ -87,3 +87,16 @@ ethernet:
 	cd ./rocket-chip/ && rm -f rocketchip.jar
 	sbt "test:runMain test.testModule"
 
+
+tb:
+	cp ./generated/ethernet/GmiiTx_AxisRx.v ./tb
+	iverilog -Wall \
+	-o ./build/wave.iverilog  \
+	-y ./tb  \
+	-I ./tb  \
+	-D RANDOMIZE_REG_INIT \
+	./tb/axis_gmii_tx_tb.v 
+	vvp  -N ./build/wave.iverilog -lxt2
+
+vcd:
+	gtkwave ./build/wave.vcd &

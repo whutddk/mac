@@ -111,18 +111,18 @@ class GmiiTx_AxisRx extends Module{
     } .elsewhen( stateCurr === STATE_PAYLOAD ){
       
       s_tdata := io.axis.bits.tdata
-
+      s_axis_tready := true.B
       when( io.axis.valid ){
-        s_axis_tready := true.B
+        
         frame_ptr := frame_ptr + 1.U
         when( io.axis.bits.tlast ){
-          s_axis_tready := false.B    
+          // s_axis_tready := false.B    
           when( io.axis.bits.tuser ){
             frame_ptr := 0.U
           }                    
         }
       } .otherwise{
-        s_axis_tready := true.B
+        // s_axis_tready := true.B
         frame_ptr := 0.U
       }
     } .elsewhen( stateCurr === STATE_LAST ){
@@ -154,8 +154,10 @@ class GmiiTx_AxisRx extends Module{
         s_axis_tready := false.B
       }
     } .elsewhen( stateCurr === STATE_IFG ){
-      frame_ptr := frame_ptr + 1.U
+      frame_ptr := Mux( ifg < io.ifg_delay-1.U, frame_ptr + 1.U, 0.U ) 
     }
+  } .otherwise{
+    s_axis_tready := false.B
   }
 
 
@@ -179,9 +181,13 @@ val update_crc = io.clkEn & ~(io.miiSel & mii_odd) & ( stateCurr === STATE_PAYLO
 
 when( io.clkEn & ~(io.miiSel & mii_odd) ){
   when( stateCurr === STATE_WAIT ){
-    ifg := 0.U
+    when( io.axis.valid & io.axis.bits.tlast ){
+      ifg := 0.U
+    }
   } .elsewhen( stateCurr === STATE_IFG ){
-    ifg := ifg + 1.U
+    when( ifg < io.ifg_delay - 1.U ){
+      ifg := ifg + 1.U      
+    }
   }
 }
 
@@ -198,18 +204,20 @@ when( io.clkEn & ~(io.miiSel & mii_odd) ){
 
 
 
-val gmii_txd = Reg(UInt(8.W));     io.gmii.txd := gmii_txd
+val gmii_txd = Reg(UInt(8.W));     io.gmii.txd := Mux(io.miiSel, gmii_txd & "h0F".U(8.W), gmii_txd)
 val gmii_tx_en = RegInit(false.B); io.gmii.tx_en := gmii_tx_en
 val gmii_tx_er = RegInit(false.B); io.gmii.tx_er := gmii_tx_er
 
 
 when( io.clkEn ){
-  when( io.miiSel ){
-    mii_msn := gmii_txd(7,4)
-    gmii_txd := gmii_txd & "h0F".U(8.W)
-    when( mii_odd ){
-      gmii_txd := mii_msn & "h0F".U(8.W)
-    } 
+  when( io.miiSel & mii_odd ){
+    
+    gmii_txd := gmii_txd >> 4
+    
+                // when(io.miiSel ){
+                //   mii_msn := gmii_txd(7,4)
+                //   gmii_txd := gmii_txd & "h0F".U(8.W)
+                // } 
   }.otherwise{
     when( stateCurr === STATE_IDLE ){
       when( io.axis.valid ){
@@ -252,7 +260,7 @@ when( io.clkEn & ~(io.miiSel & mii_odd) ){
     gmii_tx_en := stateCurr === STATE_PREAMBLE | stateCurr === STATE_PAYLOAD | stateCurr === STATE_LAST | stateCurr === STATE_PAD | stateCurr === STATE_FCS
   }
 } .otherwise{
-  gmii_tx_en := false.B
+  // gmii_tx_en := false.B
 }
 
 when( io.clkEn & ~(io.miiSel & mii_odd) & stateCurr === STATE_PAYLOAD ){
