@@ -165,15 +165,19 @@ class GmiiTx_AxisRx extends Module{
 
 
 val reset_crc  = io.clkEn & ~(io.miiSel & mii_odd) & ( stateCurr === STATE_IDLE | stateCurr === STATE_PREAMBLE | stateCurr === STATE_WAIT | stateCurr === STATE_IFG )
-val update_crc = io.clkEn & ~(io.miiSel & mii_odd) & ( stateCurr === STATE_PAYLOAD | stateCurr === STATE_PAD )
 
 
 
 
 
 
-  crcUnit.io.isEnable := update_crc
-  crcUnit.io.dataIn   := io.axis.bits.tdata
+  crcUnit.io.isEnable := io.clkEn & ~(io.miiSel & mii_odd) & ( stateCurr === STATE_PAYLOAD | stateCurr === STATE_PAD )
+  crcUnit.io.dataIn   := Mux1H(Seq(
+    ( stateCurr === STATE_PAYLOAD ) -> io.axis.bits.tdata,
+    ( stateCurr === STATE_PAD )     -> 0.U,
+  ))
+
+  
   crcUnit.reset := reset.asBool | reset_crc
 
 
