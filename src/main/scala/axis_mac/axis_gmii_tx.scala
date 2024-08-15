@@ -41,7 +41,7 @@ class GmiiTx_AxisRx extends Module{
   def STATE_IDLE  = 0.U
   def STATE_PREAMBLE = 1.U
   def STATE_PAYLOAD = 2.U
-  def STATE_LAST = 3.U
+  // def STATE_LAST = 3.U
   def STATE_PAD = 4.U
   def STATE_FCS = 5.U
   def STATE_WAIT = 6.U
@@ -71,8 +71,7 @@ class GmiiTx_AxisRx extends Module{
   stateNext := Mux1H(Seq(
     (stateCurr === STATE_IDLE)     -> ( Mux( io.axis.valid, STATE_PREAMBLE, STATE_IDLE )),
     (stateCurr === STATE_PREAMBLE) -> ( Mux( frame_ptr === 7.U, STATE_PAYLOAD, STATE_PREAMBLE )),
-    (stateCurr === STATE_PAYLOAD)  -> ( Mux( io.axis.valid, Mux( io.axis.bits.tlast, Mux( io.axis.bits.tuser, STATE_IFG, STATE_LAST ), STATE_PAYLOAD ),STATE_WAIT ) ),
-    (stateCurr === STATE_LAST)     -> ( Mux( ENABLE_PADDING & frame_ptr < MIN_FRAME_LENGTH-5.U, STATE_PAD, STATE_FCS )),
+    (stateCurr === STATE_PAYLOAD)  -> ( Mux( io.axis.valid, Mux( io.axis.bits.tlast, Mux( io.axis.bits.tuser, STATE_IFG, Mux( ENABLE_PADDING & frame_ptr < MIN_FRAME_LENGTH-5.U, STATE_PAD, STATE_FCS ) ), STATE_PAYLOAD ), STATE_WAIT ) ),
     (stateCurr === STATE_PAD)      -> ( Mux( (frame_ptr < MIN_FRAME_LENGTH-5.U), STATE_PAD, STATE_FCS )),
     (stateCurr === STATE_FCS)      -> ( Mux( frame_ptr < 3.U, STATE_FCS, STATE_IFG )),
     (stateCurr === STATE_WAIT)     -> ( Mux( io.axis.valid & io.axis.bits.tlast, STATE_IFG, STATE_WAIT ) ),
@@ -96,25 +95,52 @@ class GmiiTx_AxisRx extends Module{
       } .elsewhen( frame_ptr === 7.U ){
         frame_ptr := 0.U
       }
-    } .elsewhen( stateCurr === STATE_PAYLOAD ){
+    } 
+    
+    
+    
+    
+    
+    
+    
+    .elsewhen( stateCurr === STATE_PAYLOAD ){
       when( io.axis.valid ){
         
         frame_ptr := frame_ptr + 1.U
         when( io.axis.bits.tlast ){
           when( io.axis.bits.tuser ){
             frame_ptr := 0.U
+          } .otherwise{
+            frame_ptr := frame_ptr + 1.U
+            when(ENABLE_PADDING && frame_ptr < MIN_FRAME_LENGTH-5.U){
+            } .otherwise{
+              frame_ptr := 0.U
+            }
           }
         }
       } .otherwise{
         frame_ptr := 0.U
       }
-    } .elsewhen( stateCurr === STATE_LAST ){
-      frame_ptr := frame_ptr + 1.U
-      when(ENABLE_PADDING && frame_ptr < MIN_FRAME_LENGTH-5.U){
-      } .otherwise{
-        frame_ptr := 0.U
-      }
-    } .elsewhen( stateCurr === STATE_PAD ){
+    }
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    .elsewhen( stateCurr === STATE_PAD ){
       assert( frame_ptr <= MIN_FRAME_LENGTH-5.U )
 
       frame_ptr := frame_ptr + 1.U
@@ -139,7 +165,7 @@ class GmiiTx_AxisRx extends Module{
 
 
 val reset_crc  = io.clkEn & ~(io.miiSel & mii_odd) & ( stateCurr === STATE_IDLE | stateCurr === STATE_PREAMBLE | stateCurr === STATE_WAIT | stateCurr === STATE_IFG )
-val update_crc = io.clkEn & ~(io.miiSel & mii_odd) & ( stateCurr === STATE_PAYLOAD | stateCurr === STATE_LAST | stateCurr === STATE_PAD )
+val update_crc = io.clkEn & ~(io.miiSel & mii_odd) & ( stateCurr === STATE_PAYLOAD | stateCurr === STATE_PAD )
 
 
 
@@ -193,7 +219,7 @@ when( io.clkEn ){
       }
     } .elsewhen( stateCurr === STATE_PREAMBLE ){
       gmii_txd := Mux( frame_ptr === 7.U, ETH_SFD, ETH_PRE)
-    } .elsewhen( stateCurr === STATE_PAYLOAD | stateCurr === STATE_LAST ){
+    } .elsewhen( stateCurr === STATE_PAYLOAD ){
       gmii_txd := io.axis.bits.tdata
     } .elsewhen( stateCurr === STATE_PAD ){
       gmii_txd := 0.U
@@ -225,7 +251,7 @@ when( io.clkEn & ~(io.miiSel & mii_odd) ){
   when( stateCurr === STATE_IDLE ){
     gmii_tx_en := io.axis.valid
   } .otherwise{
-    gmii_tx_en := stateCurr === STATE_PREAMBLE | stateCurr === STATE_PAYLOAD | stateCurr === STATE_LAST | stateCurr === STATE_PAD | stateCurr === STATE_FCS
+    gmii_tx_en := stateCurr === STATE_PREAMBLE | stateCurr === STATE_PAYLOAD | stateCurr === STATE_PAD | stateCurr === STATE_FCS
   }
 } .otherwise{
   // gmii_tx_en := false.B
