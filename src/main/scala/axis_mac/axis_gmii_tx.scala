@@ -59,9 +59,10 @@ class GmiiTx_AxisRx extends Module{
   val stateNext = Wire(UInt(3.W))
   val stateCurr = RegEnable( stateNext, 0.U, io.clkEn & ~(io.miiSel && mii_odd) )
 
-  val s_tdata = Reg(UInt(8.W))
+  // val s_tdata = Reg(UInt(8.W))
+  val s_tdata = io.axis.bits.tdata
   val frame_ptr = RegInit(0.U(16.W))
-  val s_axis_tready = RegInit(false.B); io.axis.ready := s_axis_tready
+  val s_axis_tready = WireDefault(false.B); io.axis.ready := s_axis_tready
 
   val crcOut = crcUnit.io.crc
   val fcs = RegEnable( crcOut, "hFFFFFFFF".U(32.W), io.clkEn & ~(io.miiSel & mii_odd) & stateCurr === STATE_FCS & frame_ptr === 3.U )
@@ -81,7 +82,9 @@ class GmiiTx_AxisRx extends Module{
 
 
 
-
+// when( io.axis.fire ){
+//   s_tdata := io.axis.bits.tdata
+// }
 
 
 
@@ -101,16 +104,16 @@ class GmiiTx_AxisRx extends Module{
       frame_ptr := frame_ptr + 1.U
       when( frame_ptr === 6.U ){
         assert( io.axis.valid === true.B )
-        s_axis_tready := true.B
-        s_tdata := io.axis.bits.tdata
+        // s_axis_tready := true.B
+        // s_tdata := io.axis.bits.tdata
       } .elsewhen( frame_ptr === 7.U ){
         frame_ptr := 0.U
-        s_axis_tready := true.B
-        s_tdata := io.axis.bits.tdata
+        // s_axis_tready := true.B
+        // s_tdata := io.axis.bits.tdata
       }
     } .elsewhen( stateCurr === STATE_PAYLOAD ){
       
-      s_tdata := io.axis.bits.tdata
+      // s_tdata := io.axis.bits.tdata
       s_axis_tready := true.B
       when( io.axis.valid ){
         
@@ -128,7 +131,7 @@ class GmiiTx_AxisRx extends Module{
     } .elsewhen( stateCurr === STATE_LAST ){
       frame_ptr := frame_ptr + 1.U
       when(ENABLE_PADDING && frame_ptr < MIN_FRAME_LENGTH-5.U){
-        s_tdata := 0.U
+        // s_tdata := 0.U
       } .otherwise{
         frame_ptr := 0.U
       }
@@ -136,7 +139,7 @@ class GmiiTx_AxisRx extends Module{
       assert( frame_ptr <= MIN_FRAME_LENGTH-5.U )
 
       frame_ptr := frame_ptr + 1.U
-      s_tdata := 0.U
+      // s_tdata := 0.U
 
       when( frame_ptr === MIN_FRAME_LENGTH-5.U ){
         frame_ptr := 0.U
