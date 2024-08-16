@@ -45,6 +45,9 @@ class GmiiRx_AxisTx extends Module{
   val STATE_CRC = 2.U
   val STATE_WAIT = 3.U
 
+  val mii_odd = RegInit(false.B)
+  val mii_locked = RegInit(false.B)
+
   val stateNext = Wire(UInt(2.W))
   val stateCurr = RegEnable( stateNext, 0.U, io.clkEn & ~(io.miiSel & ~mii_odd) )
 
@@ -52,8 +55,9 @@ class GmiiRx_AxisTx extends Module{
   val crcOut = crcUnit.io.crc
   val crcCnt = RegInit(0.U(2.W))
 
-  val mii_odd = RegInit(false.B)
-  val mii_locked = RegInit(false.B)
+  val gmii_rxd = for( i <- 0 until 5 ) yield { Reg(UInt(8.W)) }
+  val gmii_rx_er = for( i <- 0 until 5 ) yield { Reg(Bool()) }
+  val gmii_rx_dv = for( i <- 0 until 5 ) yield{ RegInit(false.B) }
 
 
   stateNext := 
@@ -68,14 +72,12 @@ class GmiiRx_AxisTx extends Module{
 
 
 
-  val gmii_rxd = for( i <- 0 until 5 ) yield { Reg(UInt(8.W)) }
-  val gmii_rx_er = for( i <- 0 until 5 ) yield { Reg(Bool()) }
-  val gmii_rx_dv = for( i <- 0 until 5 ) yield{ RegInit(false.B) }
+
 
 
   when( io.clkEn ){
     when( io.miiSel ){
-      gmii_rxd(0)(7,0) := Cat(io.gmii.rxd(3,0), gmii_rxd(0)(7,4))
+      gmii_rxd(0) := Cat(io.gmii.rxd(3,0), gmii_rxd(0)(7,4))
     } .otherwise{
       gmii_rxd(0) := io.gmii.rxd
     }
@@ -117,7 +119,7 @@ class GmiiRx_AxisTx extends Module{
           gmii_rx_er(i) := gmii_rx_er(i-1)
         }
       } .otherwise{
-        gmii_rx_er(0) := io.gmii.rx_er(i-1)
+        gmii_rx_er(i) := gmii_rx_er(i-1)
       }
     }
   }
