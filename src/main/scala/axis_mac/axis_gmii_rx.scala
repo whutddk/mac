@@ -10,16 +10,16 @@ class GMII_RX_Bundle extends Bundle{
   val rx_er = Bool()
 }
 
-class AXIS_TX_Bundle extends Bundle{
-  val tdata = UInt(8.W)
-  val tvalid = Bool()
-  val tlast = Bool()
-  val tuser = Bool()
-}
+// class AXIS_TX_Bundle extends Bundle{
+//   val tdata = UInt(8.W)
+//   val tvalid = Bool()
+//   val tlast = Bool()
+//   val tuser = Bool()
+// }
 
 class GmiiRx_AxisTx_IO extends Bundle{
   val gmii = Input(new GMII_RX_Bundle)
-  val axis = Output(new AXIS_TX_Bundle)
+  val axis = Decoupled(new AXIS_Bundle)
 
   val clkEn = Input(Bool())
   val miiSel = Input(Bool())
@@ -179,8 +179,8 @@ class GmiiRx_AxisTx extends Module{
 
 
 
-  val m_axis_tdata = RegNext( gmii_rxd(4) ); io.axis.tdata := m_axis_tdata
-  val m_axis_tlast = RegNext( (stateCurr === STATE_PAYLOAD & gmii_rx_dv(4) & gmii_rx_er(4)) | ( stateCurr === STATE_CRC & crcCnt.andR ) ); io.axis.tlast := m_axis_tlast
+  val m_axis_tdata = RegNext( gmii_rxd(4) ); io.axis.bits.tdata := m_axis_tdata
+  val m_axis_tlast = RegNext( (stateCurr === STATE_PAYLOAD & gmii_rx_dv(4) & gmii_rx_er(4)) | ( stateCurr === STATE_CRC & crcCnt.andR ) ); io.axis.bits.tlast := m_axis_tlast
   val m_axis_tuser = RegNext(
     stateCurr === STATE_PAYLOAD & (
       (gmii_rx_dv(4) && gmii_rx_er(4)) |
@@ -190,11 +190,11 @@ class GmiiRx_AxisTx extends Module{
         ) 
       )
     )
-  ); io.axis.tuser := m_axis_tuser
+  ); io.axis.bits.tuser := m_axis_tuser
 
-  val m_axis_tvalid = RegNext(io.clkEn & ~(io.miiSel & ~mii_odd) & (stateCurr === STATE_PAYLOAD | stateCurr === STATE_CRC), false.B); io.axis.tvalid := m_axis_tvalid
+  val m_axis_tvalid = RegNext(io.clkEn & ~(io.miiSel & ~mii_odd) & (stateCurr === STATE_PAYLOAD | stateCurr === STATE_CRC), false.B); io.axis.valid := m_axis_tvalid
 
-
+  assert( ~(io.axis.valid & ~io.axis.ready) )
 
 
 

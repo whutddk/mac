@@ -89,13 +89,13 @@ ethernet:
 
 
 tb:
-	cp ./generated/ethernet/GmiiTx_AxisRx.v ./tb
+	cp ./generated/ethernet/Core.v ./tb
 	iverilog -Wall \
 	-o ./build/wave.iverilog  \
 	-y ./tb  \
 	-I ./tb  \
 	-D RANDOMIZE_REG_INIT \
-	./tb/axis_gmii_tx_tb.v 
+	./tb/axis_gmii_rx_tb.v 
 	vvp  -N ./build/wave.iverilog -lxt2
 
 vcd:

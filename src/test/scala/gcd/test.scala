@@ -33,7 +33,13 @@ object testModule extends App {
       ChiselGeneratorAnnotation(() => { new GmiiRx_AxisTx })
     ))
 
-    
+  (new chisel3.stage.ChiselStage).execute( Array("--target-dir", "generated/ethernet/", "-E", "verilog" ) ++ args, Seq(
+    ChiselGeneratorAnnotation(() => { new Core })
+  ))  
+
+
+
+
 // import Wrapeer._
 
 //   val cfg = new EfConfig
