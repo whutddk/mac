@@ -156,7 +156,7 @@ class GmiiRx_AxisTx extends Module{
 
   when( io.clkEn & io.miiSel ){
     when( mii_locked ){
-      mii_locked <= io.gmii.rx_dv
+      mii_locked := io.gmii.rx_dv
       mii_odd := ~mii_odd
     } .elsewhen( io.gmii.rx_dv && Cat(io.gmii.rxd(3,0), gmii_rxd(0)(7,4)) === ETH_SFD ) {
       mii_locked := true.B
@@ -219,7 +219,7 @@ class GmiiRx_AxisTx extends Module{
   }
 
 
-  
+
   when( io.clkEn & ~(io.miiSel & ~mii_odd) ){
     when( stateCurr === STATE_IDLE ){
       crcCmp := 0.U
