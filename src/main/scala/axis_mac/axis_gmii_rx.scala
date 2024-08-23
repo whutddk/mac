@@ -10,12 +10,6 @@ class GMII_RX_Bundle extends Bundle{
   val rx_er = Bool()
 }
 
-// class AXIS_TX_Bundle extends Bundle{
-//   val tdata = UInt(8.W)
-//   val tvalid = Bool()
-//   val tlast = Bool()
-//   val tuser = Bool()
-// }
 
 class GmiiRx_AxisTx_IO extends Bundle{
   val gmii = Input(new GMII_RX_Bundle)
@@ -54,6 +48,8 @@ class GmiiRx_AxisTx extends Module{
   val crcUnit = Module(new crc32_8)
   val crcOut = crcUnit.io.crc
   val crcCnt = RegInit(0.U(2.W))
+  val crcCmp = Reg(UInt(32.W))
+  val isCrcFail = ~crcCmp =/= crcOut
 
   val gmii_rxd = for( i <- 0 until 5 ) yield { Reg(UInt(8.W)) }
   val gmii_rx_er = for( i <- 0 until 5 ) yield { Reg(Bool()) }
@@ -182,15 +178,12 @@ class GmiiRx_AxisTx extends Module{
   val m_axis_tdata = RegNext( gmii_rxd(4) ); io.axis.bits.tdata := m_axis_tdata
   val m_axis_tlast = RegNext( (stateCurr === STATE_PAYLOAD & gmii_rx_dv(4) & gmii_rx_er(4)) | ( stateCurr === STATE_CRC & crcCnt.andR ) ); io.axis.bits.tlast := m_axis_tlast
   val m_axis_tuser = RegNext(
-    stateCurr === STATE_PAYLOAD & (
-      (gmii_rx_dv(4) && gmii_rx_er(4)) |
-      ( ~io.gmii.rx_dv & (
-        (gmii_rx_er(0) | gmii_rx_er(1) | gmii_rx_er(2) | gmii_rx_er(3)) |
-        Cat(gmii_rxd(0), gmii_rxd(1), gmii_rxd(2), gmii_rxd(3)) =/= ~crcOut
-        ) 
-      )
-    )
-  ); io.axis.bits.tuser := m_axis_tuser
+    (stateCurr === STATE_PAYLOAD & (
+      (gmii_rx_dv(4) & gmii_rx_er(4)) |
+      ( ~io.gmii.rx_dv & (gmii_rx_er(0) | gmii_rx_er(1) | gmii_rx_er(2) | gmii_rx_er(3)) )
+    ))
+  );
+  io.axis.bits.tuser :=  m_axis_tuser | (stateCurr === STATE_IDLE & isCrcFail)
 
   val m_axis_tvalid = RegNext(io.clkEn & ~(io.miiSel & ~mii_odd) & (stateCurr === STATE_PAYLOAD | stateCurr === STATE_CRC), false.B); io.axis.valid := m_axis_tvalid
 
@@ -226,12 +219,19 @@ class GmiiRx_AxisTx extends Module{
   }
 
 
+  
+  when( io.clkEn & ~(io.miiSel & ~mii_odd) ){
+    when( stateCurr === STATE_IDLE ){
+      crcCmp := 0.U
+    } .elsewhen( stateCurr ===  STATE_CRC ) {
+      crcCmp := Cat( gmii_rxd(4), crcCmp(31,8) )
+    }
+  }
 
 
 
 
-
-  crcUnit.io.isEnable := io.clkEn & ~( io.miiSel & ~mii_odd) & (stateCurr === STATE_PAYLOAD | stateCurr === STATE_CRC) //payload or crc
+  crcUnit.io.isEnable := io.clkEn & ~( io.miiSel & ~mii_odd) & (stateCurr === STATE_PAYLOAD ) //payload or crc
   crcUnit.io.dataIn := gmii_rxd(4)
   
   crcUnit.reset := reset.asBool | (io.clkEn & ~( io.miiSel & ~mii_odd) & stateCurr === STATE_IDLE) //idle
