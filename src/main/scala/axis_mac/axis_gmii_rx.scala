@@ -175,17 +175,20 @@ class GmiiRx_AxisTx extends Module{
 
 
 
-  val m_axis_tdata = RegNext( gmii_rxd(4) ); io.axis.bits.tdata := m_axis_tdata
-  val m_axis_tlast = RegNext( (stateCurr === STATE_PAYLOAD & gmii_rx_dv(4) & gmii_rx_er(4)) | ( stateCurr === STATE_CRC & crcCnt.andR ) ); io.axis.bits.tlast := m_axis_tlast
-  val m_axis_tuser = RegNext(
+  io.axis.bits.tdata := gmii_rxd(4)
+
+  io.axis.bits.tlast :=
+    (stateCurr === STATE_PAYLOAD & gmii_rx_dv(4) & gmii_rx_er(4)) |
+    ( stateCurr === STATE_CRC & crcCnt.andR )
+
+  io.axis.bits.tuser :=  
     (stateCurr === STATE_PAYLOAD & (
       (gmii_rx_dv(4) & gmii_rx_er(4)) |
       ( ~io.gmii.rx_dv & (gmii_rx_er(0) | gmii_rx_er(1) | gmii_rx_er(2) | gmii_rx_er(3)) )
-    ))
-  );
-  io.axis.bits.tuser :=  m_axis_tuser | (stateCurr === STATE_IDLE & isCrcFail)
+    )) |
+    (stateCurr === STATE_IDLE & isCrcFail)
 
-  val m_axis_tvalid = RegNext(io.clkEn & ~(io.miiSel & ~mii_odd) & (stateCurr === STATE_PAYLOAD | stateCurr === STATE_CRC), false.B); io.axis.valid := m_axis_tvalid
+  io.axis.valid := io.clkEn & ~(io.miiSel & ~mii_odd) & (stateCurr === STATE_PAYLOAD | stateCurr === STATE_CRC)
 
   assert( ~(io.axis.valid & ~io.axis.ready) )
 
@@ -201,11 +204,11 @@ class GmiiRx_AxisTx extends Module{
 
 
     
-  val error_bad_frame = m_axis_tvalid & m_axis_tuser; io.error_bad_frame := error_bad_frame
-  val error_bad_fcs = m_axis_tvalid &
-    RegNext( stateCurr === STATE_PAYLOAD & (
+  val error_bad_frame = io.axis.valid & io.axis.bits.tuser; io.error_bad_frame := error_bad_frame
+  val error_bad_fcs = io.axis.valid &
+    ( stateCurr === STATE_PAYLOAD & (
       ~(gmii_rx_dv(4) & gmii_rx_er(4)) & io.gmii.rx_dv & ( ~(gmii_rx_er(0) & ~gmii_rx_er(1) & ~gmii_rx_er(2) & ~gmii_rx_er(3)) & Cat(gmii_rxd(0), gmii_rxd(1), gmii_rxd(2), gmii_rxd(3)) =/= ~crcOut ) 
-    ), false.B); io.error_bad_fcs := error_bad_fcs
+    )); io.error_bad_fcs := error_bad_fcs
 
 
   val fcs = RegInit( "hFFFFFFFF".U(32.W) )
