@@ -37,7 +37,9 @@ object testModule extends App {
     ChiselGeneratorAnnotation(() => { new Core })
   ))  
 
-
+  (new chisel3.stage.ChiselStage).execute( Array("--target-dir", "generated/ethernet/", "-E", "verilog" ) ++ args, Seq(
+    ChiselGeneratorAnnotation(() => { new MDIOCtrl })
+  ))  
 
 
 // import Wrapeer._
