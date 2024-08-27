@@ -25,9 +25,15 @@ class MDIOCtrl_IO_Bundle extends Bundle with MDIO{
 abstract class MDIOCtrlBase extends Module{
   val io = IO( new MDIOCtrl_IO_Bundle )
 
+  assert( io.div =/= 0.U, "Assert Failed! Over-speed at MDIO!\n" )
+
   val isBusy = RegInit(false.B)
   val mdc = Reg(Bool())
   val mdcPos: Bool
+  val mdcNeg: Bool
+
+  val shiftReg = Reg(UInt( (32).W ))
+  val shiftCnt = Reg(UInt(8.W))
 
   io.req.ready := ~isBusy
 
@@ -44,18 +50,18 @@ trait MDIOMdcCtrl{ this: MDIOCtrlBase =>
   } .elsewhen( divCnt === io.div ){
     divCnt := 0.U
     mdc := ~mdc
-  } .otherwise{
+  } .elsewhen( ( isBusy & shiftCnt < 64.U ) | mdc === true.B ){
     divCnt := divCnt + 1.U
   }
 
-  val mdcPos = mdc & divCnt === 0.U
-  io.mdc := mdc & isBusy
+  val mdcPos = ~RegNext(mdc) & mdc 
+  val mdcNeg = RegNext(mdc) & ~mdc
+  io.mdc := mdc
 
 }
 
 trait MDIOTransCtrl{ this: MDIOCtrlBase =>
-  val shiftReg = Reg(UInt( (32).W ))
-  val shiftCnt = Reg(UInt(8.W))
+
 
   val st = WireDefault("b01".U(2.W))
   val isWR = RegEnable( io.req.bits.isWR, io.req.fire )
@@ -93,7 +99,7 @@ with MDIOTransCtrl{
 
   when( io.resp.fire ){
     respValid := false.B
-  } .elsewhen( shiftCnt === 64.U ){
+  } .elsewhen( shiftCnt === 64.U & mdcNeg ){
     respValid := true.B
   }
 

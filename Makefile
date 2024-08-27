@@ -89,13 +89,13 @@ ethernet:
 
 
 tb:
-	cp ./generated/ethernet/Core.v ./tb
+	cp ./generated/ethernet/MDIOCtrl.v ./tb
 	iverilog -Wall \
 	-o ./build/wave.iverilog  \
 	-y ./tb  \
 	-I ./tb  \
 	-D RANDOMIZE_REG_INIT \
-	./tb/axis_gmii_rx_tb.v 
+	./tb/mdioCtrl_tb.v 
 	vvp  -N ./build/wave.iverilog -lxt2
 
 vcd:

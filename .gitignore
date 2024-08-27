@@ -347,3 +347,4 @@ project/.bloop/riscv-mac-swich-build.json
 src/main/scala/mac/MacTilelink.scala
 doc/
 tb/Core.v
+tb/MDIOCtrl.v
