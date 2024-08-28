@@ -41,6 +41,14 @@ object testModule extends App {
     ChiselGeneratorAnnotation(() => { new MDIOCtrl })
   ))  
 
+  val cfg = new MacCfg
+
+  (new chisel3.stage.ChiselStage).execute( Array("--show-registrations", "--full-stacktrace", "--target-dir", "generated/ethernet/", "-E", "verilog") ++ args, Seq(
+      ChiselGeneratorAnnotation(() => {
+    val soc = LazyModule(new MacTile()(cfg))
+    soc.module
+  })
+  ))
 
 // import Wrapeer._
 

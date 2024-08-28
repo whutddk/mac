@@ -4,10 +4,6 @@ import chisel3._
 import chisel3.util._
 
 
-class crc32_4 extends Module{
-
-}
-
 // module eth_crc (Clk, Reset, Data, Enable, Initialize, Crc, CrcError);
 
 
@@ -73,31 +69,6 @@ class crc32_4 extends Module{
 // assign CrcError = Crc[31:0] != 32'hc704dd7b;  // CRC not equal to magic number
 
 // endmodule
-
-
-
-
-
-
-
-
-
-
-
-  // input [3:0] Data;
-  // input Enable;
-  // input Initialize;
-
-  // output [31:0] Crc;
-
-
-
-
-
-
-
-
-
 
 
 //-----------------------------------------------------------------------------
