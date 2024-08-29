@@ -30,6 +30,7 @@ class MacTileIO(implicit p: Parameters) extends MacBundle{
 
     val clkEn = Input(Bool())
     val miiSel = Input(Bool())
+    val ifg_delay = Input(UInt(8.W))
     val interrupt = Output(Bool())
 }
 
@@ -44,19 +45,34 @@ class MacTile(implicit p: Parameters) extends LazyModule with HasMacParameters{
   )))
 
 
+  val memSlaveNode = TLManagerNode(Seq(
+    TLSlavePortParameters.v1(
+      Seq(TLSlaveParameters.v1(
+        address = AddressSet(0x00000000L, 0xffffffffL).subtract(AddressSet(0x0L, 0x7fffffffL)),
+        regionType = RegionType.GET_EFFECTS,
+        executable = false,
+        supportsGet = TransferSizes(1, 256/8),
+        supportsPutFull = TransferSizes(1, 256/8),
+        supportsPutPartial = TransferSizes(1, 256/8),
+      )),
+      beatBytes = 256/8,
+    )
+  ))
+
+  memSlaveNode := tlClientNode
 
 
 //   val macReg = for( i <- 0 until chn ) yield { LazyModule(new MacReg(i)) }
 //   val dmaReg = LazyModule(new DmaReg)
 
-  lazy val module = new SwitchImp(this)
+  lazy val module = new MacTileImp(this)
   
   val tlSlv = InModuleBody {
-    tlClientIONode.makeIOs()
+    memSlaveNode.makeIOs()
   }
 }
 
-class MacTileImp(outer: Switch)(implicit p: Parameters) extends LazyModuleImp(outer) with HasMacParameters{
+class MacTileImp(outer: MacTile)(implicit p: Parameters) extends LazyModuleImp(outer) with HasMacParameters{
   val io = IO(new MacTileIO)
   val ( dma_bus, dma_edge ) = outer.tlClientNode.out.head
 
@@ -72,6 +88,7 @@ class MacTileImp(outer: Switch)(implicit p: Parameters) extends LazyModuleImp(ou
 
   mac.io.clkEn  := io.clkEn
   mac.io.miiSel := io.miiSel
+  mac.io.ifg_delay := io.ifg_delay
   io.interrupt  := mac.io.interrupt
 
 

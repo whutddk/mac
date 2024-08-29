@@ -16,8 +16,8 @@ case object MacParamsKey extends Field[MacSetting]
 case class MacSetting(
   // isTileLink: Boolean = true
 ){
-  require( chn > 0 , "Error, at least one mac chn!\n" )
-  require( chn <= 16, "Error, register address between only 0x000~0x1000, 0x100 for each!\n" )
+  // require( chn > 0 , "Error, at least one mac chn!\n" )
+  // require( chn <= 16, "Error, register address between only 0x000~0x1000, 0x100 for each!\n" )
 }
 
 trait HasMacParameters {
