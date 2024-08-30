@@ -11,6 +11,7 @@ import freechips.rocketchip.tilelink._
 
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.tilelink._
+import freechips.rocketchip.amba.axi4._
 import freechips.rocketchip.interrupts._
 
 
@@ -19,7 +20,7 @@ import freechips.rocketchip.interrupts._
 class MacTileIO(implicit p: Parameters) extends MacBundle{
     val srcAddress = Input( UInt(32.W) )
     val txLen = Input(UInt(8.W))
-    val destAddress = Output( UInt(32.W) )
+    val destAddress = Input( UInt(32.W) )
     val code = Output(UInt(8.W))
     val trigger = Input(Bool())
 
@@ -45,21 +46,48 @@ class MacTile(implicit p: Parameters) extends LazyModule with HasMacParameters{
   )))
 
 
-  val memSlaveNode = TLManagerNode(Seq(
-    TLSlavePortParameters.v1(
-      Seq(TLSlaveParameters.v1(
-        address = AddressSet(0x00000000L, 0xffffffffL).subtract(AddressSet(0x0L, 0x7fffffffL)),
-        regionType = RegionType.GET_EFFECTS,
-        executable = false,
-        supportsGet = TransferSizes(1, 256/8),
-        supportsPutFull = TransferSizes(1, 256/8),
-        supportsPutPartial = TransferSizes(1, 256/8),
-      )),
-      beatBytes = 256/8,
+  // val memSlaveNode = TLManagerNode(Seq(
+  //   TLSlavePortParameters.v1(
+  //     Seq(TLSlaveParameters.v1(
+  //       address = AddressSet(0x00000000L, 0xffffffffL).subtract(AddressSet(0x0L, 0x7fffffffL)),
+  //       regionType = RegionType.GET_EFFECTS,
+  //       executable = false,
+  //       supportsGet = TransferSizes(1, 256/8),
+  //       supportsPutFull = TransferSizes(1, 256/8),
+  //       supportsPutPartial = TransferSizes(1, 256/8),
+  //     )),
+  //     beatBytes = 64/8,
+  //   )
+  // ))
+  //  memSlaveNode := tlClientNode
+
+
+  val memRange = AddressSet(0x00000000L, 0xffffffffL).subtract(AddressSet(0x0L, 0x7fffffffL))
+  val memAXI4SlaveNode = AXI4SlaveNode(Seq(
+    AXI4SlavePortParameters(
+      slaves = Seq(
+        AXI4SlaveParameters(
+          address = memRange,
+          regionType = RegionType.UNCACHED,
+          executable = true,
+          supportsRead = TransferSizes(1, 64/8),
+          supportsWrite = TransferSizes(1, 64/8)
+        )
+      ),
+      beatBytes = 64 / 8
     )
   ))
 
-  memSlaveNode := tlClientNode
+
+    memAXI4SlaveNode := 
+    AXI4UserYanker() := 
+    AXI4IdIndexer(4) :=
+    AXI4Deinterleaver(64/8) :=
+    TLToAXI4() :=
+    // TLWidthWidget(64 / 8) := 
+    tlClientNode
+
+ 
 
 
 //   val macReg = for( i <- 0 until chn ) yield { LazyModule(new MacReg(i)) }
@@ -67,8 +95,9 @@ class MacTile(implicit p: Parameters) extends LazyModule with HasMacParameters{
 
   lazy val module = new MacTileImp(this)
   
-  val tlSlv = InModuleBody {
-    memSlaveNode.makeIOs()
+  val axiSlv = InModuleBody {
+    // memSlaveNode.makeIOs()
+    memAXI4SlaveNode.makeIOs()
   }
 }
 

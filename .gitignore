@@ -348,3 +348,5 @@ src/main/scala/mac/MacTilelink.scala
 doc/
 tb/Core.v
 tb/MDIOCtrl.v
+tb/MacTile.v
+tb/plusarg_reader.v

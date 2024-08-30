@@ -73,6 +73,18 @@ abstract class DMA2MacBase(edge: TLEdgeOut)(implicit p: Parameters) extends MacM
 
   val isTxFifoEmpty = ~txFifo.io.deq.valid
 
+
+  def STATE_IDLE = 0.U
+  def STATE_TXREQ = 1.U
+  def STATE_TXRSP = 2.U
+  def STATE_RXREQ = 3.U
+  def STATE_RXRSP = 4.U
+
+
+  val stateNext = Wire(UInt(3.W))
+  val stateCurr = RegNext(stateNext, 0.U(3.W))
+
+
 }
 
 trait DMA2MacRxBuff{ this: DMA2MacBase =>
@@ -210,13 +222,13 @@ trait DMA2MacTxBuff{ this: DMA2MacBase =>
 
   when( ~isTxBusy & txFifo.io.deq.fire ){
     isTxEnd := false.B
-  } .elsewhen( isTxBusy & isTxFifoEmpty ){
+  } .elsewhen( isTxBusy & stateCurr === STATE_IDLE ){
     isTxEnd := true.B
   }
 
   when( ~isTxBusy & txFifo.io.deq.fire ){
     isTxErr := false.B
-  } .elsewhen( (txFifo.io.enq.valid & ~txFifo.io.enq.ready) | (mac.io.axis.rx.valid & ~mac.io.axis.rx.ready) ){
+  } .elsewhen( (txFifo.io.enq.valid & ~txFifo.io.enq.ready) | (~mac.io.axis.rx.valid & mac.io.axis.rx.ready) ){
     isTxErr := true.B
   }
 
@@ -231,22 +243,14 @@ trait DMA2MacTxBuff{ this: DMA2MacBase =>
 }
 
 trait DMA2MacTile{ this: DMA2MacBase =>
-  // val txPtr = Reg(UInt(32.W))
+  val txPtr = Reg(UInt(32.W))
   val rxPtr = Reg(UInt(32.W))
 
-  val (_, _, is_trans_done, transCnt) = dmaEdge.count(io.tile.D)
+  // val (_, _, is_trans_done, transCnt) = dmaEdge.count(io.tile.D)
 
   val txPending = RegInit(false.B)
 
-  def STATE_IDLE = 0.U
-  def STATE_TXREQ = 1.U
-  def STATE_TXRSP = 2.U
-  def STATE_RXREQ = 3.U
-  def STATE_RXRSP = 4.U
 
-
-  val stateNext = Wire(UInt(3.W))
-  val stateCurr = RegNext(stateNext, 0.U(3.W))
 
 
   when( stateCurr === STATE_TXRSP & stateNext === STATE_IDLE ){
@@ -259,7 +263,7 @@ trait DMA2MacTile{ this: DMA2MacBase =>
     Mux1H(Seq(
       (stateCurr === STATE_IDLE)    -> Mux( rxFifo.io.deq.valid, STATE_RXREQ, Mux( txPending, STATE_TXREQ, STATE_IDLE ) ),
       (stateCurr === STATE_TXREQ  ) -> Mux( io.tile.A.fire, STATE_TXRSP, STATE_TXREQ ),
-      (stateCurr === STATE_TXRSP  ) -> Mux( io.tile.D.fire & is_trans_done, STATE_IDLE, STATE_TXRSP ),
+      (stateCurr === STATE_TXRSP  ) -> Mux( io.tile.D.fire , Mux( (txPtr >> (log2Ceil(dw/8))) === io.txLen , STATE_IDLE, STATE_TXREQ), STATE_TXRSP ),
       (stateCurr === STATE_RXREQ  ) -> Mux( io.tile.A.fire, STATE_RXRSP, STATE_RXREQ ),
       (stateCurr === STATE_RXRSP  ) -> Mux( io.tile.D.fire, Mux( isRxEnd & isRxFifoEmpty, STATE_IDLE, STATE_RXREQ), STATE_RXRSP ),
 
@@ -287,23 +291,30 @@ trait DMA2MacTile{ this: DMA2MacBase =>
       ( stateCurr === STATE_TXREQ ) -> 
         dmaEdge.Get(
             fromSource = 0.U,
-            toAddress = io.srcAddress,
-            lgSize = io.txLen
+            toAddress = io.srcAddress + (txPtr << log2Ceil(dw/8)),
+            lgSize = log2Ceil(dw/8).U
         )._2,
       ( stateCurr === STATE_RXREQ ) -> 
         dmaEdge.Put(
             fromSource = 0.U,
-            toAddress = io.destAddress + rxPtr,
+            toAddress = io.destAddress + (rxPtr << log2Ceil(dw/8)),
             lgSize = log2Ceil(dw/8).U,
             data = rxFifo.io.deq.bits,
             mask = Fill( dw/8, 1.U(1.W) )
         )._2,
     ))
 
+  when( stateCurr === STATE_IDLE & stateNext === STATE_TXREQ ){
+    txPtr := 0.U
+  } .elsewhen( stateCurr === STATE_RXREQ & io.tile.A.fire ){
+    txPtr := txPtr + 1.U
+  }
+
+
   when( stateCurr === STATE_IDLE & stateNext === STATE_RXREQ ){
     rxPtr := 0.U
   } .elsewhen( stateCurr === STATE_RXREQ & io.tile.A.fire ){
-    rxPtr := rxPtr + (log2Ceil(dw/8)).U
+    rxPtr := rxPtr + 1.U
   }
 
   val code = Reg(UInt(8.W)); io.code := code

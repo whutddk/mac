@@ -89,13 +89,14 @@ ethernet:
 
 
 tb:
-	cp ./generated/ethernet/MDIOCtrl.v ./tb
+	cp ./generated/ethernet/MacTile.v ./tb
+	cp ./generated/ethernet/plusarg_reader.v ./tb
 	iverilog -Wall \
 	-o ./build/wave.iverilog  \
 	-y ./tb  \
 	-I ./tb  \
 	-D RANDOMIZE_REG_INIT \
-	./tb/mdioCtrl_tb.v 
+	./tb/macTile_tb.v 
 	vvp  -N ./build/wave.iverilog -lxt2
 
 vcd:
