@@ -176,6 +176,7 @@ class GmiiRx_AxisTx extends Module{
 
 
   io.axis.bits.tdata := gmii_rxd(4)
+  val unRecPkg = RegInit(false.B)
 
   io.axis.bits.tlast :=
     (stateCurr === STATE_PAYLOAD & gmii_rx_dv(4) & gmii_rx_er(4)) |
@@ -186,11 +187,20 @@ class GmiiRx_AxisTx extends Module{
       (gmii_rx_dv(4) & gmii_rx_er(4)) |
       ( ~io.gmii.rx_dv & (gmii_rx_er(0) | gmii_rx_er(1) | gmii_rx_er(2) | gmii_rx_er(3)) )
     )) |
-    (stateCurr === STATE_IDLE & isCrcFail)
+    (stateCurr === STATE_IDLE & isCrcFail) |
+    unRecPkg
 
   io.axis.valid := io.clkEn & ~(io.miiSel & ~mii_odd) & (stateCurr === STATE_PAYLOAD | stateCurr === STATE_CRC)
 
   assert( ~(io.axis.valid & ~io.axis.ready) )
+
+
+  when( io.axis.fire & io.axis.bits.tlast ){
+    unRecPkg := false.B
+  } .elsewhen( io.axis.valid & ~io.axis.ready ){
+    unRecPkg := true.B
+    printf("Warning! Un-Receive Package!\n")
+  }
 
 
 
