@@ -94,13 +94,12 @@ trait DMA2MacRxBuff{ this: DMA2MacBase =>
 
   mac.io.axis.tx.ready := ~(isRxBusy & isRxEnd)
 
-  when( mac.io.axis.tx.fire ){
-    when( ~isRxBusy ){
-      isRxBusy := true.B
-    } .elsewhen( isRxEnd & isRxFifoEmpty ){
-      isRxBusy := false.B
-    }
+  when( mac.io.axis.tx.fire & ~isRxBusy ){
+    isRxBusy := true.B
+  } .elsewhen( isRxEnd & isRxFifoEmpty ){
+    isRxBusy := false.B
   }
+
 
   when( mac.io.axis.tx.fire ){
     when( ~isRxBusy ){
@@ -132,25 +131,7 @@ trait DMA2MacRxBuff{ this: DMA2MacBase =>
       )
 
 
-
-
-
-      // ( latchCnt === i.U ) -> (
-      //   (
-      //     Cat( dataLatch.reverse ) &
-      //     Cat( Fill( 8*(dw/8-i), 0.U(1.W) ), Fill( 8*i, 1.U(1.W) ) )
-      //   ) |
-      //   mac.io.axis.tx.bits.tdata << ( i << 3 )
-      // )
-
     })
-
-    // Mux1H(Seq(
-    //   ( latchCnt === 0.U ) -> Cat( 0.U(24.W), rxMac.io.axis.bits.tdata ),
-    //   ( latchCnt === 1.U ) -> Cat( 0.U(16.W), rxMac.io.axis.bits.tdata, dataLatch(0) ),
-    //   ( latchCnt === 2.U ) -> Cat( 0.U(8.W),  rxMac.io.axis.bits.tdata, dataLatch(1), dataLatch(0) ),
-    //   ( latchCnt === 3.U ) -> Cat( rxMac.io.axis.bits.tdata, dataLatch(2), dataLatch(1), dataLatch(0) ),
-    // ))
 
 
 
@@ -211,12 +192,12 @@ trait DMA2MacTxBuff{ this: DMA2MacBase =>
   txFifo.io.deq.ready := ~isTxBusy | emitCnt.andR
   mac.io.axis.rx.valid := isTxBusy
   mac.io.axis.rx.bits.tdata := dataEmit >> (emitCnt << 3)
-  mac.io.axis.rx.bits.tlast := isTxBusy & isTxEnd & emitCnt.andR & ~txFifo.io.deq.valid
+  mac.io.axis.rx.bits.tlast := isTxBusy & isTxEnd & emitCnt.andR & isTxFifoEmpty
   mac.io.axis.rx.bits.tuser := isTxErr
 
   when( ~isTxBusy & txFifo.io.deq.fire ){
     isTxBusy := true.B
-  } .elsewhen( mac.io.axis.rx.fire & isTxEnd & emitCnt.andR & ~txFifo.io.deq.valid ){
+  } .elsewhen( mac.io.axis.rx.fire & isTxEnd & emitCnt.andR & isTxFifoEmpty ){
     isTxBusy := false.B
   }
 
@@ -261,7 +242,7 @@ trait DMA2MacTile{ this: DMA2MacBase =>
 
   stateNext := 
     Mux1H(Seq(
-      (stateCurr === STATE_IDLE)    -> Mux( rxFifo.io.deq.valid & ~isRxBusy, STATE_RXREQ, Mux( txPending & ~isTxBusy, STATE_TXREQ, STATE_IDLE ) ),
+      (stateCurr === STATE_IDLE)    -> Mux( rxFifo.io.deq.valid, STATE_RXREQ, Mux( txPending & ~isTxBusy, STATE_TXREQ, STATE_IDLE ) ),
       (stateCurr === STATE_TXREQ  ) -> Mux( io.tile.A.fire, STATE_TXRSP, STATE_TXREQ ),
       (stateCurr === STATE_TXRSP  ) -> Mux( io.tile.D.fire , Mux( txPtr === io.txLen , STATE_IDLE, STATE_TXREQ), STATE_TXRSP ),
       (stateCurr === STATE_RXREQ  ) -> Mux( io.tile.A.fire, STATE_RXRSP, STATE_RXREQ ),

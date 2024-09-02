@@ -133,6 +133,12 @@ module macTile_tb();
         # 40 
         trigger = 0;
 
+
+        #10000
+        trigger = 1;
+        # 40 
+        trigger = 0;
+
     end
 
 
