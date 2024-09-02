@@ -350,3 +350,4 @@ tb/Core.v
 tb/MDIOCtrl.v
 tb/MacTile.v
 tb/plusarg_reader.v
+tb/GmiiTx_AxisRx.v

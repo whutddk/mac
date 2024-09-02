@@ -94,7 +94,7 @@ module macTile_tb();
         .axiSlv_0_r_bits_last(1'b1),
 
         .io_srcAddress(32'h81000000),
-        .io_txLen(8'h32),
+        .io_txLen(8'd32),
         .io_destAddress(32'h82000000),
 
         .io_code(code),
@@ -179,20 +179,20 @@ module macTile_tb();
             axiSlv_0_ar_ready    <= #3 1'b0;
             axiSlv_0_r_valid     <= #3 1'b0;
             axiSlv_0_r_bits_id   <= #3 0;
-            axiSlv_0_r_bits_data <= #3 0;
+            axiSlv_0_r_bits_data <= #3 64'hfedcba9876543210;
         end else begin
             if( axiSlv_0_ar_valid & axiSlv_0_ar_ready ) begin
 
                 axiSlv_0_ar_ready    <= #3 1'b0;
                 axiSlv_0_r_bits_id   <= #3 axiSlv_0_ar_bits_id;
-                axiSlv_0_r_bits_data <= #3 0;
+                // axiSlv_0_r_bits_data <= #3 64'hfedcba9876543210;
             end else if( axiSlv_0_ar_valid & ~axiSlv_0_ar_ready ) begin
                 axiSlv_0_ar_ready    <= #3 1'b1;
             end
 
             if( axiSlv_0_r_valid & axiSlv_0_r_ready ) begin
                 axiSlv_0_r_valid <= #3 1'b0;
-                axiSlv_0_r_bits_data <= #3 axiSlv_0_r_bits_data + 1;
+                axiSlv_0_r_bits_data <= #3 {axiSlv_0_r_bits_data[3:0], axiSlv_0_r_bits_data[63:4]};
             end else if( axiSlv_0_ar_valid & axiSlv_0_ar_ready ) begin
                 axiSlv_0_r_valid     <= #3 1'b1;
             end

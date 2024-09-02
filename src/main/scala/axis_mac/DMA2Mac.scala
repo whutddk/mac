@@ -210,13 +210,13 @@ trait DMA2MacTxBuff{ this: DMA2MacBase =>
 
   txFifo.io.deq.ready := ~isTxBusy | emitCnt.andR
   mac.io.axis.rx.valid := isTxBusy
-  mac.io.axis.rx.bits.tdata := dataEmit >> (emitCnt >> 3)
-  mac.io.axis.rx.bits.tlast := isTxBusy & isTxEnd & emitCnt.andR
+  mac.io.axis.rx.bits.tdata := dataEmit >> (emitCnt << 3)
+  mac.io.axis.rx.bits.tlast := isTxBusy & isTxEnd & emitCnt.andR & ~txFifo.io.deq.valid
   mac.io.axis.rx.bits.tuser := isTxErr
 
   when( ~isTxBusy & txFifo.io.deq.fire ){
     isTxBusy := true.B
-  } .elsewhen( mac.io.axis.rx.fire & isTxEnd & emitCnt.andR ){
+  } .elsewhen( mac.io.axis.rx.fire & isTxEnd & emitCnt.andR & ~txFifo.io.deq.valid ){
     isTxBusy := false.B
   }
 
@@ -261,9 +261,9 @@ trait DMA2MacTile{ this: DMA2MacBase =>
 
   stateNext := 
     Mux1H(Seq(
-      (stateCurr === STATE_IDLE)    -> Mux( rxFifo.io.deq.valid, STATE_RXREQ, Mux( txPending, STATE_TXREQ, STATE_IDLE ) ),
+      (stateCurr === STATE_IDLE)    -> Mux( rxFifo.io.deq.valid & ~isRxBusy, STATE_RXREQ, Mux( txPending & ~isTxBusy, STATE_TXREQ, STATE_IDLE ) ),
       (stateCurr === STATE_TXREQ  ) -> Mux( io.tile.A.fire, STATE_TXRSP, STATE_TXREQ ),
-      (stateCurr === STATE_TXRSP  ) -> Mux( io.tile.D.fire , Mux( (txPtr >> (log2Ceil(dw/8))) === io.txLen , STATE_IDLE, STATE_TXREQ), STATE_TXRSP ),
+      (stateCurr === STATE_TXRSP  ) -> Mux( io.tile.D.fire , Mux( txPtr === io.txLen , STATE_IDLE, STATE_TXREQ), STATE_TXRSP ),
       (stateCurr === STATE_RXREQ  ) -> Mux( io.tile.A.fire, STATE_RXRSP, STATE_RXREQ ),
       (stateCurr === STATE_RXRSP  ) -> Mux( io.tile.D.fire, Mux( isRxEnd & isRxFifoEmpty, STATE_IDLE, STATE_RXREQ), STATE_RXRSP ),
 
@@ -306,7 +306,7 @@ trait DMA2MacTile{ this: DMA2MacBase =>
 
   when( stateCurr === STATE_IDLE & stateNext === STATE_TXREQ ){
     txPtr := 0.U
-  } .elsewhen( stateCurr === STATE_RXREQ & io.tile.A.fire ){
+  } .elsewhen( stateCurr === STATE_TXREQ & io.tile.A.fire ){
     txPtr := txPtr + 1.U
   }
 
