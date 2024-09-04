@@ -26,6 +26,9 @@ class GmiiTx_AxisRx_IO extends Bundle{
 
   val ifg_delay = Input(UInt(8.W))
 
+  val isPaddingEnable = Input(Bool())
+  val minFrameLength  = Input( UInt(8.W) )
+
 }
 
 
