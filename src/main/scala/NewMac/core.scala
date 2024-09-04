@@ -22,6 +22,9 @@ class CoreIO_Bundle extends Bundle{
 
   val error_bad_frame = Output(Bool())
   val error_bad_fcs = Output(Bool())
+
+  val isPaddingEnable = Input(Bool())
+  val minFrameLength  = Input( UInt(8.W) )
 }
 
 
@@ -50,5 +53,9 @@ class Core extends Module{
 
   io.error_bad_frame := gmiiRx_AxisTx.io.error_bad_frame
   io.error_bad_fcs   := gmiiRx_AxisTx.io.error_bad_fcs
+
+
+  gmiiTx_AxisRx.io.isPaddingEnable := io.isPaddingEnable
+  gmiiTx_AxisRx.io.minFrameLength  := io.minFrameLength
 }
 

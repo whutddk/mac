@@ -27,7 +27,8 @@ abstract class DMA2MacBase(edge: TLEdgeOut)(implicit p: Parameters) extends NewM
       val D = Flipped(new DecoupledIO(new TLBundleD(dmaEdge.bundle)))
     }
 
-
+    val isPaddingEnable = Input(Bool())
+    val minFrameLength  = Input( UInt(8.W) )
 
     val gmii = new Bundle{
       val tx = Output(new GMII_TX_Bundle)
@@ -338,5 +339,9 @@ with DMA2MacTile{
 
   io.error_bad_frame := mac.io.error_bad_frame
   io.error_bad_fcs := mac.io.error_bad_fcs
+
+
+  mac.io.isPaddingEnable := io.isPaddingEnable
+  mac.io.minFrameLength  := io.minFrameLength
 }
 

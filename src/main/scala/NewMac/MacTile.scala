@@ -17,7 +17,7 @@ import freechips.rocketchip.interrupts._
 
 
 
-class MacTileIO(implicit p: Parameters) extends MacBundle{
+class MacTileIO(implicit p: Parameters) extends Bundle{
     val srcAddress = Input( UInt(32.W) )
     val txLen = Input(UInt(8.W))
     val destAddress = Input( UInt(32.W) )
@@ -36,7 +36,7 @@ class MacTileIO(implicit p: Parameters) extends MacBundle{
 }
 
 
-class MacTile(implicit p: Parameters) extends LazyModule with HasMacParameters{
+class MacTile(implicit p: Parameters) extends LazyModule with HasNewMacParameters{
 
   val tlClientNode = TLClientNode(Seq(TLMasterPortParameters.v1(
     Seq(TLMasterParameters.v1(
@@ -101,7 +101,7 @@ class MacTile(implicit p: Parameters) extends LazyModule with HasMacParameters{
   }
 }
 
-class MacTileImp(outer: MacTile)(implicit p: Parameters) extends LazyModuleImp(outer) with HasMacParameters{
+class MacTileImp(outer: MacTile)(implicit p: Parameters) extends LazyModuleImp(outer) with HasNewMacParameters{
   val io = IO(new MacTileIO)
   val ( dma_bus, dma_edge ) = outer.tlClientNode.out.head
 

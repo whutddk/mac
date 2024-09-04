@@ -33,9 +33,13 @@ trait WithNewMacMix { this: BaseSubsystem =>
 trait WithNewMacMixModuleImp extends LazyModuleImp {
   val outer: WithNewMacMix
 
-  val io = IO(new new Bundle{
-    val tx = Output(new GMII_TX_Bundle)
-    val rx = Input(new GMII_RX_Bundle)
+  val io = IO(new Bundle{
+    val mdio = new MDIO
+    val gmii = new Bundle{
+      val tx = Output(new GMII_TX_Bundle)
+      val rx = Input(new GMII_RX_Bundle)      
+    }
+
   })
 
 
@@ -53,16 +57,20 @@ trait WithNewMacMixModuleImp extends LazyModuleImp {
   val ( dma_bus, dma_edge ) = outer.tlClientNode.out.head
 
   val mac = Module(new DMA2Mac(dma_edge))
+  val mdioCtrl = Module( new MDIOCtrl )
 
 
 
   mac.io.srcAddress  := outer.macReg.module.io.srcAddress
   mac.io.txLen       := outer.macReg.module.io.txLen
   mac.io.destAddress := outer.macReg.module.io.destAddress
-  outermacReg.module.io.code := mac.io.code
-  mac.io.trigger     := outermacReg.module.io.trigger
-  mac.io.ifg_delay := outermacReg.module.io.ifg_delay
-  outermacReg.module.io.interrupt  := mac.io.interrupt
+  outer.macReg.module.io.code := mac.io.code
+  mac.io.trigger     := outer.macReg.module.io.trigger
+  mac.io.ifg_delay := outer.macReg.module.io.ifg_delay
+  outer.macReg.module.io.interrupt  := mac.io.interrupt
+
+  mac.io.isPaddingEnable := outer.macReg.module.io.isPaddingEnable
+  mac.io.minFrameLength  := outer.macReg.module.io.minFrameLength
 
   mac.io.clkEn  := true.B
   mac.io.miiSel := false.B
@@ -75,9 +83,13 @@ trait WithNewMacMixModuleImp extends LazyModuleImp {
   mac.io.tile.A.ready := dma_bus.a.ready
 
 
-  io.tx <> mac.io.gmii.tx
-  io.rx <> mac.io.gmii.rx
+  io.gmii <> mac.io.gmii
+  io.mdio <> mdioCtrl.io.mdio
 
+  mdioCtrl.io.req <> outer.macReg.module.io.mdioReq
+  mdioCtrl.io.resp <> outer.macReg.module.io.mdioResp
+  mdioCtrl.io.div := outer.macReg.module.io.div
+  mdioCtrl.io.noPre := outer.macReg.module.io.noPre
 
 }
 

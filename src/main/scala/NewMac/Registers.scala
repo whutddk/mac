@@ -11,6 +11,9 @@ import freechips.rocketchip.interrupts._
 
 
 
+
+
+
 class RegistersIO extends Bundle{
   val isPaddingEnable = Output(Bool())
   val minFrameLength  = Output( UInt(8.W) )
@@ -22,6 +25,20 @@ class RegistersIO extends Bundle{
   val ifg_delay = Output(UInt(8.W))
 
   val interrupt = Input(Bool())
+
+  val mdioReq = Decoupled(new Bundle{
+    val fiad = UInt(5.W)
+    val rgad = UInt(5.W)
+    val data = UInt(16.W)
+    val isWR = Bool()
+  })
+
+  val mdioResp = Flipped(Decoupled(new Bundle{
+    val data = UInt(16.W)
+  }))
+
+  val div   = Output(UInt(8.W))
+  val noPre = Output(Bool())
 }
 
 
@@ -47,7 +64,7 @@ class Registers()(implicit p: Parameters) extends LazyModule{
   lazy val module = new RegistersImp(this)
 }
 
-class RegistersImp(outer: Registers)(implicit p: Parameters) extends LazyModuleImp(outer) with HasSwitchParameters{
+class RegistersImp(outer: Registers)(implicit p: Parameters) extends LazyModuleImp(outer) with HasNewMacParameters{
 
     val io: RegistersIO = IO(new RegistersIO)
     val (int, _) = outer.int_node.out(0)
@@ -59,9 +76,15 @@ class RegistersImp(outer: Registers)(implicit p: Parameters) extends LazyModuleI
     val txLen       = RegInit( 32.U(8.W)); io.txLen := txLen
     val destAddress = RegInit( "h82000000".U(32.W) ); io.destAddress := destAddress
     // val code        = RegInit( 0.U(8.W))
-    val trigger     = Wire(Bool()) 
 
-    
+    val isMDIOreq = WireDefault(false.B)
+    val fiad = RegInit(0.U(5.W))
+    val rgad = RegInit(0.U(5.W))
+    val wrData = RegInit(0.U(16.W))
+    val rdData = RegInit(0.U(16.W))
+    val isWR = RegInit(false.B)
+    val div   = RegInit(10.U(8.W)); io.div := div
+    val noPre = RegInit(false.B); io.noPre := noPre   
 
     outer.configNode.regmap(
       ( 0 << 3 ) -> 
@@ -105,6 +128,48 @@ class RegistersImp(outer: Registers)(implicit p: Parameters) extends LazyModuleI
           RegField(1, 0.U,  RegWriteFn((valid, data) => { when ((valid & data) === 1.U) { io.trigger := true.B }; true.B }),  RegFieldDesc("trigger", "trigger", reset=Some(0))),
         )),
         
+
+
+      ( 8 << 3 ) ->
+        RegFieldGroup("isMDIOreq", Some("isMDIOreq"), Seq(
+          RegField(1, 0.U,  RegWriteFn((valid, data) => { when ((valid & data) === 1.U) { isMDIOreq := true.B }; true.B }) ),
+      )),
+
+      ( 9 << 3 ) ->
+        RegFieldGroup("fiad", Some("fiad"), Seq(
+          RegField( 5, fiad ),
+      )),
+
+      ( 10 << 3 ) ->
+        RegFieldGroup("rgad", Some("rgad"), Seq(
+          RegField( 5, rgad ),
+      )),
+
+      ( 11 << 3 ) ->
+        RegFieldGroup("wrData", Some("wrData"), Seq(
+          RegField( 16, wrData ),
+      )),
+
+      ( 12 << 3 ) ->
+        RegFieldGroup("isWR", Some("isWR"), Seq(
+          RegField( 1, isWR ),
+      )),
+
+      ( 13 << 3 ) ->
+        RegFieldGroup("rdData", Some("rdData"), Seq(
+          RegField.r( 16, rdData ),
+      )),
+
+      ( 14 << 3 ) ->
+        RegFieldGroup("div", Some("div"), Seq(
+          RegField( 8, div ),
+      )),
+
+      ( 15 << 3 ) ->
+        RegFieldGroup("noPre", Some("noPre"), Seq(
+          RegField( 1, noPre ),
+      )),
+
     )
 
 
@@ -113,19 +178,25 @@ class RegistersImp(outer: Registers)(implicit p: Parameters) extends LazyModuleI
 
 
 
+  val mdioReqValid = RegInit(false.B); 
 
+  when( io.mdioReq.fire ){
+    mdioReqValid := false.B
+  } .elsewhen( ~io.mdioReq.valid & isMDIOreq ){
+    mdioReqValid := true.B
+  }
 
+  io.mdioReq.valid := mdioReqValid
+  io.mdioReq.bits.fiad := fiad
+  io.mdioReq.bits.rgad := rgad
+  io.mdioReq.bits.data := wrData
+  io.mdioReq.bits.isWR := isWR
 
+  io.mdioResp.ready := true.B
 
-
-
-
-
-
-
-
-
-
+  when( io.mdioResp.fire ){
+    rdData := io.mdioResp.bits.data
+  }
 
 
 

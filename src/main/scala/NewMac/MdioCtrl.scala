@@ -4,7 +4,15 @@ import chisel3._
 import chisel3.util._
 
 
-class MDIOCtrl_IO_Bundle extends Bundle with MDIO{
+class MDIO extends Bundle{
+  val mdi   = Input( Bool()) // MII Management Data In
+  val mdc   = Output(Bool()) // MII Management Data Clock
+  val mdo   = Output(Bool()) // MII Management Data Output
+  val mdoEn = Output(Bool()) // MII Management Data Output Enable
+}
+
+class MDIOCtrl_IO_Bundle extends Bundle{
+  val mdio = new MDIO
 
   val req = Flipped(Decoupled(new Bundle{
     val fiad = UInt(5.W)
@@ -56,7 +64,7 @@ trait MDIOMdcCtrl{ this: MDIOCtrlBase =>
 
   val mdcPos = ~RegNext(mdc) & mdc 
   val mdcNeg = RegNext(mdc) & ~mdc
-  io.mdc := mdc
+  io.mdio.mdc := mdc
 
 }
 
@@ -73,12 +81,12 @@ trait MDIOTransCtrl{ this: MDIOCtrlBase =>
   } .elsewhen( mdcPos & shiftCnt < 64.U ){
     shiftCnt := shiftCnt + 1.U
     when( shiftCnt >= 32.U ){
-      shiftReg := Cat( shiftReg(30,0), io.mdi )
+      shiftReg := Cat( shiftReg(30,0), io.mdio.mdi )
     }
   }
 
-  io.mdo   := Mux( shiftCnt < 32.U, true.B, shiftReg.extract(31).asBool )
-  io.mdoEn := isBusy & ( shiftCnt < 46.U | isWR )
+  io.mdio.mdo   := Mux( shiftCnt < 32.U, true.B, shiftReg.extract(31).asBool )
+  io.mdio.mdoEn := isBusy & ( shiftCnt < 46.U | isWR )
       
 
 

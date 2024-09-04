@@ -23,13 +23,13 @@ case class NewMacSetting(
 trait HasNewMacParameters {
   implicit val p: Parameters
 
-  val macSetting = p(MacParamsKey)
+  val newMacSetting = p(NewMacParamsKey)
 
   // def chn = switchSetting.chn
 
 }
 
 class NewMacCfg extends Config((site, here, up) => {
-  case NewMacParamsKey => MacSetting()
+  case NewMacParamsKey => NewMacSetting()
 })
 
