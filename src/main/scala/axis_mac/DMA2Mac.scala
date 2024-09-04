@@ -1,4 +1,4 @@
-package MAC
+package NewMac
 
 import chisel3._
 import chisel3.util._
@@ -10,7 +10,7 @@ import freechips.rocketchip.tilelink._
 
 
 
-abstract class DMA2MacBase(edge: TLEdgeOut)(implicit p: Parameters) extends MacModule{
+abstract class DMA2MacBase(edge: TLEdgeOut)(implicit p: Parameters) extends NewMacModule{
   def dw = 64
   val dmaEdge: TLEdgeOut = edge
 
@@ -41,7 +41,7 @@ abstract class DMA2MacBase(edge: TLEdgeOut)(implicit p: Parameters) extends MacM
 
     val error_bad_frame = Output(Bool())
     val error_bad_fcs = Output(Bool())
-
+    
     val interrupt = Output(Bool())
 
 

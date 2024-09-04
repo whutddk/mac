@@ -1,4 +1,4 @@
-package MAC
+package NewMac
 
 import chisel3._
 import chisel3.util._

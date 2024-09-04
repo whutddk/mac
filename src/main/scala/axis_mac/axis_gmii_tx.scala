@@ -1,4 +1,4 @@
-package MAC
+package NewMac
 
 import chisel3._
 import chisel3.util._
@@ -50,8 +50,8 @@ class GmiiTx_AxisRx extends Module{
   val ETH_PRE = "h55".U
   val ETH_SFD = "hD5".U
 
-  def ENABLE_PADDING = true.B
-  def MIN_FRAME_LENGTH = 64.U
+  def ENABLE_PADDING = io.isPaddingEnable   //true
+  def MIN_FRAME_LENGTH = io.minFrameLength  //64
 
   val mii_odd = Reg(Bool())
   val mii_msn = Reg(UInt(4.W))

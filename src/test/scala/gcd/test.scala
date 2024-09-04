@@ -2,6 +2,7 @@ package test
 
 import MAC._
 import Switch._
+import NewMac._
 
 import chisel3._
 import chisel3.stage._
