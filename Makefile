@@ -6,9 +6,9 @@ compile:
 	rm -rf ./rocket-chip/vsim/generated-src/
 	mkdir -p ./generated/
 	cd ./rocket-chip/ && rm -f rocketchip.jar
-	cd ./rocket-chip/vsim && make verilog CONFIG=freechips.rocketchip.system.UserFPGAConfig
-	cp ./rocket-chip/vsim/generated-src/freechips.rocketchip.system.UserFPGAConfig.v ./generated/UserFPGAConfig.v
-	cp ./rocket-chip/vsim/generated-src/freechips.rocketchip.system.UserFPGAConfig.behav_srams.v ./generated/behav_srams.v
+	cd ./rocket-chip/vsim && make verilog CONFIG=freechips.rocketchip.system.UserNewMacConfig
+	cp ./rocket-chip/vsim/generated-src/freechips.rocketchip.system.UserNewMacConfig.v ./generated/UserNewMacConfig.v
+	cp ./rocket-chip/vsim/generated-src/freechips.rocketchip.system.UserNewMacConfig.behav_srams.v ./generated/behav_srams.v
 # 	sbt "test:runMain test.testModule"
 
 
