@@ -44,7 +44,7 @@ double sc_time_stamp () {
 
 uint8_t flag_waveEnable = 0;
 uint8_t flag_limitEnable = 0;
-
+static void init_and_clock();
 
 
 int prase_arg(int argc, char **argv) {
@@ -134,7 +134,7 @@ int main(int argc, char **argv, char **env) {
 
 		Verilated::timeInc(1);
 
-
+		init_and_clock();
 
 		top->eval();
 
@@ -159,4 +159,18 @@ int main(int argc, char **argv, char **env) {
 }
 
 
+static void init_and_clock(){
 
+	//de-assert reset
+	if ( main_time != 100 ){
+	} else {
+		top->RSTn = 1;
+	}
+
+	//main clock
+	if ( main_time % 10 == 1 ) {
+		top->CLK = 1;
+	} else if ( main_time % 10 == 6 ) {
+		top->CLK = 0;
+	} 
+}

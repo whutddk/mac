@@ -84,7 +84,12 @@ class RegistersImp(outer: Registers)(implicit p: Parameters) extends LazyModuleI
     val rdData = RegInit(0.U(16.W))
     val isWR = RegInit(false.B)
     val div   = RegInit(10.U(8.W)); io.div := div
-    val noPre = RegInit(false.B); io.noPre := noPre   
+    val noPre = RegInit(false.B); io.noPre := noPre
+    val trigger = RegInit(false.B); io.trigger := trigger
+
+    when( trigger ){
+      trigger := false.B
+    }
 
     outer.configNode.regmap(
       ( 0 << 3 ) -> 
@@ -104,7 +109,7 @@ class RegistersImp(outer: Registers)(implicit p: Parameters) extends LazyModuleI
 
       ( 3 << 3 ) -> 
         RegFieldGroup("srcAddress", Some("srcAddress"), Seq(
-          RegField(32, srcAddress, RegFieldDesc("srcAddress", "srcAddress", reset=Some(0x81000000)))
+          RegField(32, srcAddress, RegFieldDesc("srcAddress", "srcAddress", reset=Some(0x80001000)))
         )),
 
       ( 4 << 3 ) ->
@@ -114,7 +119,7 @@ class RegistersImp(outer: Registers)(implicit p: Parameters) extends LazyModuleI
 
       ( 5 << 3 ) ->
         RegFieldGroup("destAddress", Some("destAddress"), Seq(
-          RegField(32, destAddress, RegFieldDesc("destAddress", "destAddress", reset=Some(0x82000000)))
+          RegField(32, destAddress, RegFieldDesc("destAddress", "destAddress", reset=Some(0x80002000)))
         )),
 
       ( 6 << 3 ) ->
@@ -125,7 +130,7 @@ class RegistersImp(outer: Registers)(implicit p: Parameters) extends LazyModuleI
 
       ( 7 << 3 ) ->
         RegFieldGroup("trigger", Some("trigger"), Seq(
-          RegField(1, 0.U,  RegWriteFn((valid, data) => { when ((valid & data) === 1.U) { io.trigger := true.B }; true.B }),  RegFieldDesc("trigger", "trigger", reset=Some(0))),
+          RegField(1, 0.U,  RegWriteFn((valid, data) => { when ((valid & data) === 1.U) { trigger := true.B }; true.B }),  RegFieldDesc("trigger", "trigger", reset=Some(0))),
         )),
         
 

@@ -127,5 +127,8 @@ class MacTileImp(outer: MacTile)(implicit p: Parameters) extends LazyModuleImp(o
   dma_bus.a.valid := mac.io.tile.A.valid
   dma_bus.a.bits  := mac.io.tile.A.bits
   mac.io.tile.A.ready := dma_bus.a.ready
+
+  mac.io.isPaddingEnable := true.B
+  mac.io.minFrameLength  := 64.U
 }
 

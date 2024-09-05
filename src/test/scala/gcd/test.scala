@@ -42,7 +42,7 @@ object testModule extends App {
     ChiselGeneratorAnnotation(() => { new MDIOCtrl })
   ))  
 
-  val cfg = new MacCfg
+  val cfg = new NewMacCfg
 
   (new chisel3.stage.ChiselStage).execute( Array("--show-registrations", "--full-stacktrace", "--target-dir", "generated/ethernet/", "-E", "verilog") ++ args, Seq(
       ChiselGeneratorAnnotation(() => {
