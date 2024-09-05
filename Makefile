@@ -7,27 +7,29 @@ compile:
 	mkdir -p ./generated/
 	cd ./rocket-chip/ && rm -f rocketchip.jar
 	cd ./rocket-chip/vsim && make verilog CONFIG=freechips.rocketchip.system.UserNewMacConfig
+	cp ./rocket-chip/vsim/generated-src/freechips.rocketchip.system.UserNewMacConfig/plusarg_reader.v ./generated/plusarg_reader.v
 	cp ./rocket-chip/vsim/generated-src/freechips.rocketchip.system.UserNewMacConfig.v ./generated/UserNewMacConfig.v
 	cp ./rocket-chip/vsim/generated-src/freechips.rocketchip.system.UserNewMacConfig.behav_srams.v ./generated/behav_srams.v
 # 	sbt "test:runMain test.testModule"
-
 
 
 ef: 
 	sbt "test:runMain test.testModule"
 
 VSimTop: 
-	rm -rf ./tb/build/
-	mkdir -p ./tb/build/
+	rm -rf ./build/
+	mkdir -p ./build/
+
 	verilator -Wno-fatal  \
 	--timescale "1 ns / 1 ps" \
-	-y ${PWD}/tb/ \
+	-y ${PWD}/generated/   \
+	-y ${PWD}/tb/verilator \
 	-y ${PWD}/tb/vtb/ \
 	--top-module SimTop \
 	--trace-fst \
-	--cc ./tb/behav_srams.v   \
-	--cc ./tb/UserFPGAConfig.v \
-	--cc ./tb/vtb/SimTop.v  \
+	--cc ./generated/behav_srams.v   \
+	--cc ./generated/UserNewMacConfig.v \
+	--cc ./tb/verilator/SimTop.v  \
 	+define+RANDOMIZE_GARBAGE_ASSIGN \
 	+define+RANDOMIZE_INVALID_ASSIGN \
 	+define+RANDOMIZE_REG_INIT \
@@ -35,13 +37,13 @@ VSimTop:
 	+define+RANDOMIZE_DELAY=0 \
 	+define+USE_POWER_PINS \
 	--exe --build \
-	${PWD}/tb/sim_main.cpp \
-	-Mdir ./tb/build/ \
+	${PWD}/tb/verilator/sim_main.cpp \
+	-Mdir ./build/ \
 	-j 30
 
 
 test:
-	./tb/build/VSimTop -w -l -f ./tb/sw/build/test
+	./build/VSimTop -w -l -f ./tb/sw/build/test
 
 
 
