@@ -5,7 +5,6 @@
 // #include "timer.h"
 #include "mac.h"
 
-volatile uint64_t *trigger     = (uint64_t*)( MAC_BASE + 7 << 3 );
 
 
 
@@ -21,7 +20,7 @@ int main()
 	uint64_t data = 0x0123456789ABCDEF;
 	volatile uint64_t* txBuf = (uint64_t*)(0x80001000);
 	volatile uint64_t* rxBuf = (uint64_t*)(0x80002000);
-
+	volatile uint64_t *trigger     = (uint64_t*)( 0x30000000 + (7 << 3) );
 
 
 
@@ -31,6 +30,7 @@ int main()
 		*(txBuf+i) = data;
 		data = data << 4 | data >> 60;
 	}
+
 
 	*trigger = 1;
 

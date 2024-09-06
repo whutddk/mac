@@ -72,9 +72,9 @@ class RegistersImp(outer: Registers)(implicit p: Parameters) extends LazyModuleI
     val isPaddingEnable = RegInit(true.B); io.isPaddingEnable := isPaddingEnable
     val minFrameLength  = RegInit( 64.U(8.W) ); io.minFrameLength := minFrameLength
     val ifg_delay       = RegInit( 12.U(8.W) ); io.ifg_delay := ifg_delay
-    val srcAddress  = RegInit( "h81000000".U(32.W) ); io.srcAddress := srcAddress
+    val srcAddress  = RegInit( "h80001000".U(32.W) ); io.srcAddress := srcAddress
     val txLen       = RegInit( 32.U(8.W)); io.txLen := txLen
-    val destAddress = RegInit( "h82000000".U(32.W) ); io.destAddress := destAddress
+    val destAddress = RegInit( "h80002000".U(32.W) ); io.destAddress := destAddress
     // val code        = RegInit( 0.U(8.W))
 
     val isMDIOreq = WireDefault(false.B)
