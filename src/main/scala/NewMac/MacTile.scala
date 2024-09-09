@@ -26,7 +26,9 @@ class MacTileIO(implicit p: Parameters) extends Bundle{
 
     val gmii = new Bundle{
       val tx = Output(new GMII_TX_Bundle)
+      val tclk = Input(Bool())
       val rx = Input(new GMII_RX_Bundle)
+      val rclk = Input(Bool())
     }
 
     val clkEn = Input(Bool())

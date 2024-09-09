@@ -126,6 +126,8 @@ int main(int argc, char **argv, char **env) {
 	
 	top->RSTn = 0;
 	top->CLK = 0;
+	top->tclk = 0;
+	top->rclk = 0;
 
 
 
@@ -172,5 +174,17 @@ static void init_and_clock(){
 		top->CLK = 1;
 	} else if ( main_time % 10 == 6 ) {
 		top->CLK = 0;
-	} 
+	}
+
+	if ( main_time % 100 == 10 ) {
+		top->tclk = 1;
+		top->rclk = 1;
+
+	} else if ( main_time % 100 == 60 ) {
+		top->tclk = 0;
+		top->rclk = 0;
+
+	}
+
+
 }

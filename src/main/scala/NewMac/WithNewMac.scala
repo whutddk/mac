@@ -37,7 +37,9 @@ trait WithNewMacMixModuleImp extends LazyModuleImp {
     val mdio = new MDIO
     val gmii = new Bundle{
       val tx = Output(new GMII_TX_Bundle)
-      val rx = Input(new GMII_RX_Bundle)      
+      val tclk = Input(Bool())
+      val rx = Input(new GMII_RX_Bundle)
+      val rclk = Input(Bool())
     }
 
   })

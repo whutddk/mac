@@ -32,6 +32,9 @@ module SimTop (
 	input CLK,
 	input RSTn,
 
+  input tclk,
+  input rclk
+
 );
 
 
@@ -236,7 +239,10 @@ ExampleRocketSystem i_rocket(
   .io_gmii_tx_tx_er(gmii_er),
   .io_gmii_rx_rxd(gmii_data),
   .io_gmii_rx_rx_dv(gmii_en),
-  .io_gmii_rx_rx_er(gmii_er)
+  .io_gmii_rx_rx_er(gmii_er),
+
+  .io_gmii_tclk(tclk),
+  .io_gmii_rclk(rclk)
 
 );
 

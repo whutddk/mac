@@ -30,10 +30,12 @@ abstract class DMA2MacBase(edge: TLEdgeOut)(implicit p: Parameters) extends NewM
     val isPaddingEnable = Input(Bool())
     val minFrameLength  = Input( UInt(8.W) )
 
-    val gmii = new Bundle{
-      val tx = Output(new GMII_TX_Bundle)
-      val rx = Input(new GMII_RX_Bundle)
-    }
+  val gmii = new Bundle{
+    val tx = Output(new GMII_TX_Bundle)
+    val tclk = Input(Bool())
+    val rx = Input(new GMII_RX_Bundle)
+    val rclk = Input(Bool())
+  }
 
     val clkEn = Input(Bool())
     val miiSel = Input(Bool())

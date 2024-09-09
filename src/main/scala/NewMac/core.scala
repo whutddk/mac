@@ -3,11 +3,17 @@ package NewMac
 import chisel3._
 import chisel3.util._
 
+import freechips.rocketchip.diplomacy._
+import org.chipsalliance.cde.config._
+import freechips.rocketchip.util._
+
 class CoreIO_Bundle extends Bundle{
 
   val gmii = new Bundle{
     val tx = Output(new GMII_TX_Bundle)
+    val tclk = Input(Bool())
     val rx = Input(new GMII_RX_Bundle)
+    val rclk = Input(Bool())
   }
 
   val axis = new Bundle{
@@ -30,15 +36,14 @@ class CoreIO_Bundle extends Bundle{
 
 
 
-class Core extends Module{
+class Core(implicit p: Parameters) extends NewMacModule{
   val io = IO(new CoreIO_Bundle)
 
 
-  val gmiiRx_AxisTx = Module(new GmiiRx_AxisTx )
-  val gmiiTx_AxisRx = Module(new GmiiTx_AxisRx )
+  val gmiiRx_AxisTx = withClockAndReset( io.gmii.rclk.asClock, reset ) { Module(new GmiiRx_AxisTx ) }
+  val gmiiTx_AxisRx = withClockAndReset( io.gmii.tclk.asClock, reset ) { Module(new GmiiTx_AxisRx ) }
 
   io.gmii.tx := gmiiTx_AxisRx.io.gmii
-  io.axis.rx <> gmiiTx_AxisRx.io.axis
 
   gmiiTx_AxisRx.io.clkEn := io.clkEn
   gmiiTx_AxisRx.io.miiSel := io.miiSel
@@ -46,7 +51,6 @@ class Core extends Module{
   gmiiTx_AxisRx.io.ifg_delay := io.ifg_delay
 
   gmiiRx_AxisTx.io.gmii := io.gmii.rx
-  gmiiRx_AxisTx.io.axis <> io.axis.tx
 
   gmiiRx_AxisTx.io.clkEn := io.clkEn
   gmiiRx_AxisTx.io.miiSel := io.miiSel
@@ -57,5 +61,35 @@ class Core extends Module{
 
   gmiiTx_AxisRx.io.isPaddingEnable := io.isPaddingEnable
   gmiiTx_AxisRx.io.minFrameLength  := io.minFrameLength
+
+
+
+
+
+
+  val req_ToAsync = Wire(new AsyncBundle(new AXIS_Bundle))
+  val resp_ToAsync = Wire(new AsyncBundle(new AXIS_Bundle))
+
+  io.axis.tx <> FromAsyncBundle( req_ToAsync, 2 )
+  resp_ToAsync <> ToAsyncBundle( io.axis.rx, AsyncQueueParams(sync=2) )
+
+  withClockAndReset( io.gmii.tclk.asClock, reset ) {
+    gmiiTx_AxisRx.io.axis <> FromAsyncBundle( resp_ToAsync, 2 )
+  }  
+
+  withClockAndReset( io.gmii.rclk.asClock, reset ) {
+    req_ToAsync <> ToAsyncBundle( gmiiRx_AxisTx.io.axis, AsyncQueueParams(sync=2) )
+
+  }  
+
+
+
+
+
+
+
+
+
+
 }
 
