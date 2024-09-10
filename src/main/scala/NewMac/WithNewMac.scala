@@ -75,7 +75,7 @@ trait WithNewMacMixModuleImp extends LazyModuleImp {
   mac.io.minFrameLength  := outer.macReg.module.io.minFrameLength
 
   mac.io.clkEn  := true.B
-  mac.io.miiSel := false.B
+  mac.io.miiSel := true.B
 
   mac.io.tile.D.bits  := dma_bus.d.bits
   mac.io.tile.D.valid := dma_bus.d.valid
