@@ -129,7 +129,30 @@ module SimTop (
 
 wire dmactive;
 
+  wire         trstn;
+  wire         tck;
+  wire         tms;
+  wire         tdi;
+  wire         tdo;
+  wire tdo_en;
 
+SimJTAG s_simJtag(
+  .clock(CLK),
+  .reset(~RSTn),
+  
+  .enable(1'b1),
+  .init_done(1'b1),
+
+  .jtag_TCK(tck),
+  .jtag_TMS(tms),
+  .jtag_TDI(tdi),
+  .jtag_TRSTn(trstn),
+
+  .jtag_TDO_data(tdo),
+  .jtag_TDO_driven(tdo_en),
+        
+  .exit()
+  );
 
 ExampleRocketSystem i_rocket(
   .clock(CLK),
@@ -138,12 +161,12 @@ ExampleRocketSystem i_rocket(
   .resetctrl_hartIsInReset_0(~RSTn),
   .debug_clock(CLK),
   .debug_reset(~RSTn),
-  .debug_systemjtag_jtag_TCK(1'b0),
-  .debug_systemjtag_jtag_TMS(1'b0),
-  .debug_systemjtag_jtag_TDI(1'b0),
-  .debug_systemjtag_jtag_TDO_data(),
-  .debug_systemjtag_jtag_TDO_driven(),
-  .debug_systemjtag_reset(~RSTn),
+  .debug_systemjtag_jtag_TCK(tck),
+  .debug_systemjtag_jtag_TMS(tms),
+  .debug_systemjtag_jtag_TDI(tdi),
+  .debug_systemjtag_jtag_TDO_data(tdo),
+  .debug_systemjtag_jtag_TDO_driven(tdo_en),
+  .debug_systemjtag_reset(~trstn),
   .debug_systemjtag_mfr_id(11'b0),
   .debug_systemjtag_part_number(16'b0),
   .debug_systemjtag_version(4'b0),

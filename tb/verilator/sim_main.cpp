@@ -144,13 +144,13 @@ int main(int argc, char **argv, char **env) {
 		if ( flag_waveEnable ) { tfp->dump(Verilated::time()); }
 #endif
 
-		if ( flag_limitEnable ) {
-			if ( main_time > 300000 ){
-				std::cout << "Timeout!!!!!" << std::endl;	
-				sim_exit();
-				return -1;
-			} 			
-		}
+		// if ( flag_limitEnable ) {
+		// 	if ( main_time > 300000 ){
+		// 		std::cout << "Timeout!!!!!" << std::endl;	
+		// 		sim_exit();
+		// 		return -1;
+		// 	} 			
+		// }
 
 		main_time ++;
 	}

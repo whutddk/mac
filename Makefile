@@ -30,6 +30,7 @@ VSimTop:
 	--cc ./generated/behav_srams.v   \
 	--cc ./generated/UserNewMacConfig.v \
 	--cc ./tb/verilator/SimTop.v  \
+	--cc ./tb/verilator/SimJTAG.v  \
 	+define+RANDOMIZE_GARBAGE_ASSIGN \
 	+define+RANDOMIZE_INVALID_ASSIGN \
 	+define+RANDOMIZE_REG_INIT \
@@ -38,6 +39,8 @@ VSimTop:
 	+define+USE_POWER_PINS \
 	--exe --build \
 	${PWD}/tb/verilator/sim_main.cpp \
+	${PWD}/tb/verilator/SimJTAG.cc \
+	${PWD}/tb/verilator/remote_bitbang.cc \
 	-Mdir ./build/ \
 	-j 30
 
