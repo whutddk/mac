@@ -67,18 +67,18 @@ class Core(implicit p: Parameters) extends NewMacModule{
 
 
 
-  val req_ToAsync = Wire(new AsyncBundle(new AXIS_Bundle))
-  val resp_ToAsync = Wire(new AsyncBundle(new AXIS_Bundle))
+  val req_ToAsync = Wire(new AsyncBundle(new AXIS_Bundle, params = AsyncQueueParams(depth=2, sync=2)))
+  val resp_ToAsync = Wire(new AsyncBundle(new AXIS_Bundle, params = AsyncQueueParams(depth=2, sync=2)))
 
   io.axis.tx <> FromAsyncBundle( req_ToAsync, 2 )
-  resp_ToAsync <> ToAsyncBundle( io.axis.rx, AsyncQueueParams(sync=2) )
+  resp_ToAsync <> ToAsyncBundle( io.axis.rx, AsyncQueueParams(depth=2, sync=2) )
 
   withClockAndReset( io.gmii.tclk.asClock, reset ) {
     gmiiTx_AxisRx.io.axis <> FromAsyncBundle( resp_ToAsync, 2 )
   }  
 
   withClockAndReset( io.gmii.rclk.asClock, reset ) {
-    req_ToAsync <> ToAsyncBundle( gmiiRx_AxisTx.io.axis, AsyncQueueParams(sync=2) )
+    req_ToAsync <> ToAsyncBundle( gmiiRx_AxisTx.io.axis, AsyncQueueParams(depth=2, sync=2) )
 
   }  
 
