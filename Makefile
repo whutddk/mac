@@ -49,22 +49,22 @@ test:
 
 
 sw:
-	riscv64-unknown-elf-gcc -Os -ggdb -march=rv64im -mabi=lp64 -Wall -mcmodel=medany -mexplicit-relocs \
+	riscv64-unknown-elf-gcc -Os -ggdb -march=rv32im -mabi=ilp32 -Wall -mcmodel=medany -mexplicit-relocs \
 	-I ./tb/sw/ -I ./tb/sw/src -I ./tb/sw/axi_gpio -I ./tb/sw/axi_uart -I ./tb/sw/axi_timer -I ./tb/sw/mac \
 	-c ./tb/sw/src/main.c \
 	-o ./tb/sw/build/main.o
 
-	riscv64-unknown-elf-gcc -Os -ggdb -march=rv64im -mabi=lp64 -Wall -mcmodel=medany -mexplicit-relocs \
+	riscv64-unknown-elf-gcc -Os -ggdb -march=rv32im -mabi=ilp32 -Wall -mcmodel=medany -mexplicit-relocs \
 	-I ./tb/sw/ -I ./tb/sw/src -I ./tb/sw/axi_gpio -I ./tb/sw/axi_uart -I ./tb/sw/axi_timer \
 	-c ./tb/sw/axi_uart/uart.c \
 	-o ./tb/sw/build/uart.o
 
-	riscv64-unknown-elf-gcc -Os -ggdb -march=rv64im -mabi=lp64 -Wall -mcmodel=medany -mexplicit-relocs -mcmodel=medany -mexplicit-relocs \
+	riscv64-unknown-elf-gcc -Os -ggdb -march=rv32im -mabi=ilp32 -Wall -mcmodel=medany -mexplicit-relocs -mcmodel=medany -mexplicit-relocs \
 	-I ./tb/sw/ -I ./tb/sw/src -I ./tb/sw/axi_gpio -I ./tb/sw/axi_uart -I ./tb/sw/axi_timer \
 	-c ./tb/sw/src/startup.S \
 	-o ./tb/sw/build/startup.o
 
-	riscv64-unknown-elf-gcc -Os -ggdb -march=rv64im -mabi=lp64 -Wall -mcmodel=medany -mexplicit-relocs -nostdlib -nodefaultlibs -nostartfiles \
+	riscv64-unknown-elf-gcc -Os -ggdb -march=rv32im -mabi=ilp32 -mcmodel=medany -mexplicit-relocs -nostdlib -nodefaultlibs -nostartfiles \
 	-T ./tb/sw/linker.lds \
 	./tb/sw/build/startup.o \
 	./tb/sw/build/uart.o \

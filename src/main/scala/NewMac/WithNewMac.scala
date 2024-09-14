@@ -22,7 +22,7 @@ trait WithNewMacMix { this: BaseSubsystem =>
     ))
   )))
 
-  sbus.coupleFrom("newMac_mst") { _ := TLBuffer() := TLWidthWidget(64 / 8) := tlClientNode }
+  sbus.coupleFrom("newMac_mst") { _ := TLBuffer() := TLWidthWidget(32 / 8) := tlClientNode }
   pbus.coupleTo(s"newMac_cfg")   { macReg.configNode   := TLFragmenter(pbus) := _ }
   ibus.fromSync := macReg.int_node   
 

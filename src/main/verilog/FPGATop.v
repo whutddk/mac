@@ -38,7 +38,7 @@ module FPGATop(
   (* X_INTERFACE_INFO = "xilinx.com:interface:aximm:1.0 mem WVALID" *)
   output        mem_axi4_0_w_valid,
   (* X_INTERFACE_INFO = "xilinx.com:interface:aximm:1.0 mem WDATA" *)
-  output [63:0] mem_axi4_0_w_bits_data,
+  output [31:0] mem_axi4_0_w_bits_data,
   (* X_INTERFACE_INFO = "xilinx.com:interface:aximm:1.0 mem WSTRB" *)
   output [7:0]  mem_axi4_0_w_bits_strb,
   (* X_INTERFACE_INFO = "xilinx.com:interface:aximm:1.0 mem WLAST" *)
@@ -80,7 +80,7 @@ module FPGATop(
   (* X_INTERFACE_INFO = "xilinx.com:interface:aximm:1.0 mem RID" *)
   input  [3:0]  mem_axi4_0_r_bits_id,
   (* X_INTERFACE_INFO = "xilinx.com:interface:aximm:1.0 mem RDATA" *)
-  input  [63:0] mem_axi4_0_r_bits_data,
+  input  [31:0] mem_axi4_0_r_bits_data,
   (* X_INTERFACE_INFO = "xilinx.com:interface:aximm:1.0 mem RRESP" *)
   input  [1:0]  mem_axi4_0_r_bits_resp,
   (* X_INTERFACE_INFO = "xilinx.com:interface:aximm:1.0 mem RLAST" *)
@@ -112,7 +112,7 @@ module FPGATop(
   (* X_INTERFACE_INFO = "xilinx.com:interface:aximm:1.0 mmio WVALID" *)
   output        mmio_axi4_0_w_valid,
   (* X_INTERFACE_INFO = "xilinx.com:interface:aximm:1.0 mmio WDATA" *)
-  output [63:0] mmio_axi4_0_w_bits_data,
+  output [31:0] mmio_axi4_0_w_bits_data,
   (* X_INTERFACE_INFO = "xilinx.com:interface:aximm:1.0 mmio WSTRB" *)
   output [7:0]  mmio_axi4_0_w_bits_strb,
   (* X_INTERFACE_INFO = "xilinx.com:interface:aximm:1.0 mmio WLAST" *)
@@ -154,7 +154,7 @@ module FPGATop(
   (* X_INTERFACE_INFO = "xilinx.com:interface:aximm:1.0 mmio RID" *)
   input  [3:0]  mmio_axi4_0_r_bits_id,
   (* X_INTERFACE_INFO = "xilinx.com:interface:aximm:1.0 mmio RDATA" *)
-  input  [63:0] mmio_axi4_0_r_bits_data,
+  input  [31:0] mmio_axi4_0_r_bits_data,
   (* X_INTERFACE_INFO = "xilinx.com:interface:aximm:1.0 mmio RRESP" *)
   input  [1:0]  mmio_axi4_0_r_bits_resp,
   (* X_INTERFACE_INFO = "xilinx.com:interface:aximm:1.0 mmio RLAST" *)

@@ -8,20 +8,74 @@
 
 
 
+int phy_init()
+{
+	volatile uint32_t *isMDIOreq     = (uint32_t*)( 0x30000000 + (8 << 3) );
+	volatile uint32_t *fiad          = (uint32_t*)( 0x30000000 + (9 << 3) );
+	volatile uint32_t *rgad          = (uint32_t*)( 0x30000000 + (10 << 3) );
+	volatile uint32_t *wrData        = (uint32_t*)( 0x30000000 + (11 << 3) );
+	volatile uint32_t *isWR          = (uint32_t*)( 0x30000000 + (12 << 3) );
+	volatile uint32_t *rdData        = (uint32_t*)( 0x30000000 + (13 << 3) );
+
+	*fiad     = 0x01;
+	*rgad     = 0x17;
+	*wrData   = 0x01;
+	*isWR     = 1;
+
+
+	*isMDIOreq     = 1;
+
+	return 0;
+
+}
+
+typedef struct
+{
+	uint32_t val_low;
+	uint32_t val_high;
+} riscv_machine_timer_t;
+#define CLINT_BASE_ADDRESS			0x2000000
+#define OFFSET_MTIME				0xbff8
+#define OFFSET_MTIMECMP				0x4000		
+void udelay(uint64_t us)
+{
+	static volatile riscv_machine_timer_t *mtime = (riscv_machine_timer_t *)(CLINT_BASE_ADDRESS + OFFSET_MTIME);
+	static volatile riscv_machine_timer_t *mtimecmp = (riscv_machine_timer_t *)(CLINT_BASE_ADDRESS + OFFSET_MTIMECMP);
+
+	uint64_t current_time;
+	uint64_t end_time;
+	int i;
+
+
+	current_time = mtime->val_low;
+	current_time |= ((uint64_t)mtime->val_high << 32);
+
+	//end_time = current_time + us * configCPU_CLOCK_HZ / 1000000;
+	end_time = current_time + (us >> 1);
+
+	do {
+		for (i = 0; i < 20; i++)
+			asm volatile("nop");
+
+		current_time = mtime->val_low;
+		current_time |= ((uint64_t)mtime->val_high << 32);
+	} while (current_time < end_time);
+}
+
 int main()
 {
 	// uart_init();
 
-	// print_uart("Hello World, RocketChip is now Waking Up!\r\n");
+	print_uart("Hello World, RocketChip is now Waking Up!\r\n");
 
 	// gpio_write( 0xfffffffa );
 
 	uint8_t i = 0;
-	uint64_t data = 0x0123456789ABCDEF;
-	volatile uint64_t* txBuf = (uint64_t*)(0x80001000);
-	volatile uint64_t* rxBuf = (uint64_t*)(0x80002000);
-	volatile uint64_t *trigger     = (uint64_t*)( 0x30000000 + (7 << 3) );
-	volatile uint64_t *srcAddr     = (uint64_t*)( 0x30000000 + (3 << 3) );
+	uint32_t data = 0x0123456789ABCDEF;
+	volatile uint32_t* txBuf = (uint32_t*)(0x80001000);
+	volatile uint32_t* rxBuf = (uint32_t*)(0x80002000);
+	volatile uint32_t *trigger     = (uint32_t*)( 0x30000000 + (7 << 3) );
+	volatile uint32_t *srcAddr     = (uint32_t*)( 0x30000000 + (3 << 3) );
 
 
 	static const uint8_t gdata[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x80, 0x00, 
@@ -35,6 +89,9 @@ int main()
 	// 	*(txBuf+i) = data;
 	// 	data = data << 4 | data >> 60;
 	// }
+
+	phy_init();
+	udelay(100);
 
 	*srcAddr = gdata;
 	*trigger = 1;

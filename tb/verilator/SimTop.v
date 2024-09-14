@@ -51,7 +51,7 @@ module SimTop (
   wire [3:0]  mem_axi4_0_aw_bits_qos;
   wire        mem_axi4_0_w_ready;
   wire        mem_axi4_0_w_valid;
-  wire [63:0] mem_axi4_0_w_bits_data;
+  wire [31:0] mem_axi4_0_w_bits_data;
   wire [7:0]  mem_axi4_0_w_bits_strb;
   wire        mem_axi4_0_w_bits_last;
   wire        mem_axi4_0_b_ready;
@@ -72,7 +72,7 @@ module SimTop (
   wire        mem_axi4_0_r_ready;
   wire        mem_axi4_0_r_valid;
   wire [3:0]  mem_axi4_0_r_bits_id;
-  wire [63:0] mem_axi4_0_r_bits_data;
+  wire [31:0] mem_axi4_0_r_bits_data;
   wire [1:0]  mem_axi4_0_r_bits_resp;
   wire        mem_axi4_0_r_bits_last;
 
@@ -89,7 +89,7 @@ module SimTop (
   wire [3:0]  mmio_axi4_0_aw_bits_qos;
   wire        mmio_axi4_0_w_ready;
   wire        mmio_axi4_0_w_valid;
-  wire [63:0] mmio_axi4_0_w_bits_data;
+  wire [31:0] mmio_axi4_0_w_bits_data;
   wire [7:0]  mmio_axi4_0_w_bits_strb;
   wire        mmio_axi4_0_w_bits_last;
   wire        mmio_axi4_0_b_ready;
@@ -110,7 +110,7 @@ module SimTop (
   wire        mmio_axi4_0_r_ready;
   wire        mmio_axi4_0_r_valid;
   wire [3:0]  mmio_axi4_0_r_bits_id;
-  wire [63:0] mmio_axi4_0_r_bits_data;
+  wire [31:0] mmio_axi4_0_r_bits_data;
   wire [1:0]  mmio_axi4_0_r_bits_resp;
   wire        mmio_axi4_0_r_bits_last;
 
@@ -255,7 +255,7 @@ ExampleRocketSystem i_rocket(
 
 
 
-axi_full_slv_sram # ( .DW(64), .AW(18) ) s_axi_full_slv_sram 
+axi_full_slv_sram # ( .DW(32), .AW(18) ) s_axi_full_slv_sram 
 (
 
 	.MEM_AWID   (mem_axi4_0_aw_bits_id),
@@ -368,9 +368,9 @@ initial begin
 
 	
 	for ( i = 0; i < DP; i = i + 1 ) begin
-		for ( by = 0; by < 8; by = by + 1 ) begin
-			if ( | mem[i*8+by] ) begin
-				`MEM[i][8*by +: 8] = mem[i*8+by];
+		for ( by = 0; by < 4; by = by + 1 ) begin
+			if ( | mem[i*4+by] ) begin
+				`MEM[i][8*by +: 8] = mem[i*4+by];
 			end
 			else begin
 				`MEM[i][8*by +: 8] = 8'h0;
@@ -382,10 +382,10 @@ initial begin
   $display("%x",`MEM[1]);
   $display("%x",`MEM[2]);
   $display("%x",`MEM[3]);
-  $display("%x",`MEM[4]);
-  $display("%x",`MEM[5]);
-  $display("%x",`MEM[6]);
-  $display("%x",`MEM[7]);
+  // $display("%x",`MEM[4]);
+  // $display("%x",`MEM[5]);
+  // $display("%x",`MEM[6]);
+  // $display("%x",`MEM[7]);
 
 end 
 

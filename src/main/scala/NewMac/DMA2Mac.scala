@@ -11,7 +11,7 @@ import freechips.rocketchip.tilelink._
 
 
 abstract class DMA2MacBase(edge: TLEdgeOut)(implicit p: Parameters) extends NewMacModule{
-  def dw = 64
+  def dw = 32
   val dmaEdge: TLEdgeOut = edge
 
   class DMA2MacIO_Bundle extends Bundle{

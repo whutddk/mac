@@ -58,7 +58,7 @@ class Registers()(implicit p: Parameters) extends LazyModule{
     address = Seq(AddressSet(0x30000000L, 0x000000ffL)),
     device = dtsdevice,
     concurrency = 1,
-    beatBytes = 64/8,
+    beatBytes = 32/8,
     executable = true
   )
   lazy val module = new RegistersImp(this)
