@@ -78,7 +78,7 @@ trait MDIOTransCtrl{ this: MDIOCtrlBase =>
   when( io.req.fire ){
     shiftReg := Cat( st, Mux( io.req.bits.isWR, "b01".U(2.W), "b10".U(2.W) ), io.req.bits.fiad, io.req.bits.rgad, ta, io.req.bits.data )
     shiftCnt := Mux( io.noPre, 32.U, 0.U )
-  } .elsewhen( mdcPos & shiftCnt < 64.U ){
+  } .elsewhen( mdcNeg & shiftCnt < 64.U ){
     shiftCnt := shiftCnt + 1.U
     when( shiftCnt >= 32.U ){
       shiftReg := Cat( shiftReg(30,0), io.mdio.mdi )
@@ -107,7 +107,7 @@ with MDIOTransCtrl{
 
   when( io.resp.fire ){
     respValid := false.B
-  } .elsewhen( shiftCnt === 64.U & mdcNeg ){
+  } .elsewhen( shiftCnt === 63.U & mdcNeg ){
     respValid := true.B
   }
 

@@ -17,13 +17,39 @@ int phy_init()
 	volatile uint32_t *isWR          = (uint32_t*)( 0x30000000 + (12 << 3) );
 	volatile uint32_t *rdData        = (uint32_t*)( 0x30000000 + (13 << 3) );
 
+
 	*fiad     = 0x01;
 	*rgad     = 0x17;
-	*wrData   = 0x01;
-	*isWR     = 1;
-
-
+	*wrData   = 0x00;
+	*isWR     = 0;
 	*isMDIOreq     = 1;
+
+	udelay(100);
+	uart_sendByte(0xaa );
+	uart_sendByte( (uint8_t) (*rdData) );
+	uart_sendByte(0x55 );
+
+
+	*fiad     = 0x01;
+	*rgad     = 0x17;
+	*wrData   = 0x03;
+	*isWR     = 1;
+	*isMDIOreq     = 1;
+
+
+
+	udelay(100);
+
+	*fiad     = 0x01;
+	*rgad     = 0x17;
+	*wrData   = 0x00;
+	*isWR     = 0;
+	*isMDIOreq     = 1;
+
+	udelay(100);
+	uart_sendByte(0xaa );
+	uart_sendByte( (uint8_t) (*rdData) );
+	uart_sendByte(0x55 );
 
 	return 0;
 
@@ -72,8 +98,8 @@ int main()
 
 	uint8_t i = 0;
 	uint32_t data = 0x0123456789ABCDEF;
-	volatile uint32_t* txBuf = (uint32_t*)(0x80001000);
-	volatile uint32_t* rxBuf = (uint32_t*)(0x80002000);
+	// volatile uint32_t* txBuf = (uint32_t*)(0x80001000);
+	// volatile uint32_t* rxBuf = (uint32_t*)(0x80002000);
 	volatile uint32_t *trigger     = (uint32_t*)( 0x30000000 + (7 << 3) );
 	volatile uint32_t *srcAddr     = (uint32_t*)( 0x30000000 + (3 << 3) );
 
@@ -91,7 +117,7 @@ int main()
 	// }
 
 	phy_init();
-	udelay(100);
+	udelay(50);
 
 	*srcAddr = gdata;
 	*trigger = 1;
