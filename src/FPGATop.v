@@ -1,7 +1,7 @@
 
 
 module FPGATop(
-	input         clock,
+  input         clock,
   input         reset,
   (* X_INTERFACE_INFO = "xilinx.com:interface:jtag:1.0 JTAG TCK" *)
   input         debug_systemjtag_jtag_TCK,
@@ -177,17 +177,29 @@ module FPGATop(
   input         macIO_mrxdv_pad_i,
   (* X_INTERFACE_INFO = "xilinx.com:interface:mii:1.0 MII RX_ER" *)
   input         macIO_mrxerr_pad_i,
-  (* X_INTERFACE_INFO = "xilinx.com:interface:mii:1.0 MII COL" *)
-  input         macIO_mcoll_pad_i,
-  (* X_INTERFACE_INFO = "xilinx.com:interface:mii:1.0 MII CRS" *)
-  input         macIO_mcrs_pad_i
+  
+  output [7:0] tx_mirror,
+  output [7:0] rx_mirror
 );
+
+
 
 
 wire active;
 wire mdi;
 wire mdo;
 wire mdoEn;
+
+// wire macIO_isLoopBack;
+// wire switch_rtx;
+
+// BUFGMUX_CTRL BUFGMUX_CTRL_inst (
+//       .O(switch_rtx),   // 1-bit output: Clock output
+//       .I0(macIO_mrx_clk_pad_i), // 1-bit input: Clock input (S=0)
+//       .I1(macIO_mtx_clk_pad_i), // 1-bit input: Clock input (S=1)
+//       .S(macIO_isLoopBack)    // 1-bit input: Clock select
+// );
+
 
 
 ExampleRocketSystem i_rocketChip(
@@ -284,21 +296,26 @@ ExampleRocketSystem i_rocketChip(
   .mmio_axi4_0_r_bits_resp(mmio_axi4_0_r_bits_resp),
   .mmio_axi4_0_r_bits_last(mmio_axi4_0_r_bits_last),
   .interrupts(2'b0),
-  .macIO_mdi(mdi),
-  .macIO_mdc(macIO_mdc),
-  .macIO_mdo(mdo),
-  .macIO_mdoEn(mdoEn),
-  .macIO_mtx_clk_pad_i(macIO_mtx_clk_pad_i),
-  .macIO_mtxd_pad_o(macIO_mtxd_pad_o),
-  .macIO_mtxen_pad_o(macIO_mtxen_pad_o),
-  .macIO_mtxerr_pad_o(),
-  .macIO_mrx_clk_pad_i(macIO_mrx_clk_pad_i),
-  .macIO_mrxd_pad_i(macIO_mrxd_pad_i),
-  .macIO_mrxdv_pad_i(macIO_mrxdv_pad_i),
-  .macIO_mrxerr_pad_i(macIO_mrxerr_pad_i),
-  .macIO_mcoll_pad_i(macIO_mcoll_pad_i),
-  .macIO_mcrs_pad_i(macIO_mcrs_pad_i)
+
+  .io_mdio_mdi(mdi),
+  .io_mdio_mdc(macIO_mdc),
+  .io_mdio_mdo(mdo),
+  .io_mdio_mdoEn(mdoEn),
+  .io_gmii_tx_txd(macIO_mtxd_pad_o),
+  .io_gmii_tx_tx_en(macIO_mtxen_pad_o),
+  .io_gmii_tx_tx_er(),
+  .io_gmii_rx_rxd({4'b0,macIO_mrxd_pad_i}),
+//    .io_gmii_rx_rx_dv(macIO_mrxdv_pad_i),
+  .io_gmii_rx_rx_dv(1'b0),
+  .io_gmii_rx_rx_er(macIO_mrxerr_pad_i),
+  .io_gmii_tclk(macIO_mtx_clk_pad_i),
+  .io_gmii_rclk(macIO_mrx_clk_pad_i)
+
+
 );
+
+
+
 
 
  IOBUF #(
@@ -312,5 +329,19 @@ ExampleRocketSystem i_rocketChip(
       .I(mdo),     // Buffer input
       .T(~mdoEn)      // 3-state enable input, high=input, low=output
    );
+
+
+
+assign tx_mirror[3:0] = macIO_mtxd_pad_o;
+assign tx_mirror[4]   = macIO_mtx_clk_pad_i;
+assign tx_mirror[5]   = macIO_mtxen_pad_o;
+assign tx_mirror[6]   = macIO_mdc;
+assign tx_mirror[7]   = mdo;
+
+assign rx_mirror[3:0] = macIO_mrxd_pad_i;
+assign rx_mirror[4] = macIO_mrx_clk_pad_i;
+assign rx_mirror[5] = macIO_mrxdv_pad_i;
+assign rx_mirror[6] = macIO_mrxerr_pad_i;
+assign rx_mirror[7] = mdi;
 
 endmodule
