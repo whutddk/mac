@@ -52,7 +52,7 @@ module SimTop (
   wire        mem_axi4_0_w_ready;
   wire        mem_axi4_0_w_valid;
   wire [31:0] mem_axi4_0_w_bits_data;
-  wire [7:0]  mem_axi4_0_w_bits_strb;
+  wire [3:0]  mem_axi4_0_w_bits_strb;
   wire        mem_axi4_0_w_bits_last;
   wire        mem_axi4_0_b_ready;
   wire        mem_axi4_0_b_valid;
@@ -90,7 +90,7 @@ module SimTop (
   wire        mmio_axi4_0_w_ready;
   wire        mmio_axi4_0_w_valid;
   wire [31:0] mmio_axi4_0_w_bits_data;
-  wire [7:0]  mmio_axi4_0_w_bits_strb;
+  wire [3:0]  mmio_axi4_0_w_bits_strb;
   wire        mmio_axi4_0_w_bits_last;
   wire        mmio_axi4_0_b_ready;
   wire        mmio_axi4_0_b_valid;

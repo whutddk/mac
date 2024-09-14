@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#define UART_BASE 0x20600000U
+#define UART_BASE 0x60000000U
 
 
 

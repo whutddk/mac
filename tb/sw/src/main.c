@@ -64,7 +64,7 @@ void udelay(uint64_t us)
 
 int main()
 {
-	// uart_init();
+	uart_init();
 
 	print_uart("Hello World, RocketChip is now Waking Up!\r\n");
 
