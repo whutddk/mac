@@ -191,8 +191,14 @@ trait DMA2MacRxBuff{ this: DMA2MacBase =>
 
 trait DMA2MacTxBuff{ this: DMA2MacBase =>
 
+  val txFifoDeqReady = RegInit(true.B); txFifo.io.deq.ready := txFifoDeqReady
 
-  txFifo.io.deq.ready := ~isTxBusy | ( emitCnt.andR & mac.io.axis.rx.fire )
+  when( txFifo.io.deq.fire ){
+    txFifoDeqReady := false.B
+  } .elsewhen( ~isTxBusy | ( emitCnt.andR & mac.io.axis.rx.fire ) ){
+    txFifoDeqReady := true.B
+  }
+  // txFifo.io.deq.ready := ~isTxBusy | ( emitCnt.andR & mac.io.axis.rx.fire )
   mac.io.axis.rx.valid := isTxBusy
   mac.io.axis.rx.bits.tdata := dataEmit >> (emitCnt << 3)
   mac.io.axis.rx.bits.tlast := isTxBusy & isTxEnd & emitCnt.andR & isTxFifoEmpty
