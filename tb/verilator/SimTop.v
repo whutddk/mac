@@ -116,7 +116,7 @@ module SimTop (
 
 
 
-  reg        mdio_mdi;
+  reg        mdio_mdi = 0;
   wire       mdio_mdc;
   wire       mdio_mdo;
   wire       mdio_mdoEn;
@@ -248,7 +248,9 @@ ExampleRocketSystem i_rocket(
 
 
 
-
+always @( posedge mdio_mdc ) begin
+  mdio_mdi <= $random;
+end
 
 
 
