@@ -83,7 +83,7 @@ class RegistersImp(outer: Registers)(implicit p: Parameters) extends LazyModuleI
     val wrData = RegInit(0.U(16.W))
     val rdData = RegInit(0.U(16.W))
     val isWR = RegInit(false.B)
-    val div   = RegInit(10.U(8.W)); io.div := div
+    val div   = RegInit(20.U(8.W)); io.div := div
     val noPre = RegInit(false.B); io.noPre := noPre
     val trigger = RegInit(false.B); io.trigger := trigger
 
@@ -192,10 +192,12 @@ class RegistersImp(outer: Registers)(implicit p: Parameters) extends LazyModuleI
   }
 
   io.mdioReq.valid := mdioReqValid
-  io.mdioReq.bits.fiad := fiad
-  io.mdioReq.bits.rgad := rgad
-  io.mdioReq.bits.data := wrData
-  io.mdioReq.bits.isWR := isWR
+  io.mdioReq.bits.fiad := Mux(io.mdioReq.valid, fiad, 0.U)
+  io.mdioReq.bits.rgad := Mux(io.mdioReq.valid, rgad, 0.U)
+  io.mdioReq.bits.data := Mux(io.mdioReq.valid, wrData, 0.U)
+  io.mdioReq.bits.isWR := io.mdioReq.valid & isWR
+
+
 
   io.mdioResp.ready := true.B
 
