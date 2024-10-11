@@ -13,8 +13,8 @@ compile:
 # 	sbt "test:runMain test.testModule"
 
 
-ef: 
-	sbt "test:runMain test.testModule"
+# ef: 
+# 	sbt "test:runMain test.testModule"
 
 VSimTop: 
 	rm -rf ./build/
@@ -71,7 +71,7 @@ sw:
 	./tb/sw/build/main.o \
 	-o ./tb/sw/build/test.elf
 
-	riscv64-unknown-elf-objcopy -O binary ./tb/sw/build/test.elf  ./tb/sw/build/test.bin
+	riscv64-unknown-elf-objcopy -ggdb -O binary ./tb/sw/build/test.elf  ./tb/sw/build/test.bin
 
 	riscv64-unknown-elf-objdump --disassemble-all --disassemble-zeroes --section=.text --section=.text.startup --section=.text.init --section=.data --section=.bss --section=.rodata ./tb/sw/build/test.elf > ./tb/sw/build/test.dump
 
@@ -84,22 +84,22 @@ fst:
 
 
 
-ethernet:
-	rm -f ./generated/ethernet/*
-	cd ./rocket-chip/ && rm -f rocketchip.jar
-	sbt "test:runMain test.testModule"
+# ethernet:
+# 	rm -f ./generated/ethernet/*
+# 	cd ./rocket-chip/ && rm -f rocketchip.jar
+# 	sbt "test:runMain test.testModule"
 
 
-tb:
-	cp ./generated/ethernet/MacTile.v ./tb
-	cp ./generated/ethernet/plusarg_reader.v ./tb
-	iverilog -Wall \
-	-o ./build/wave.iverilog  \
-	-y ./tb  \
-	-I ./tb  \
-	-D RANDOMIZE_REG_INIT \
-	./tb/macTile_tb.v 
-	vvp  -N ./build/wave.iverilog -lxt2
+# tb:
+# 	cp ./generated/ethernet/MacTile.v ./tb
+# 	cp ./generated/ethernet/plusarg_reader.v ./tb
+# 	iverilog -Wall \
+# 	-o ./build/wave.iverilog  \
+# 	-y ./tb  \
+# 	-I ./tb  \
+# 	-D RANDOMIZE_REG_INIT \
+# 	./tb/macTile_tb.v 
+# 	vvp  -N ./build/wave.iverilog -lxt2
 
-vcd:
-	gtkwave ./build/wave.vcd &
+# vcd:
+# 	gtkwave ./build/wave.vcd &
