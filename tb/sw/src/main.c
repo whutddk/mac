@@ -19,7 +19,7 @@ int phy_init()
 
 
 	*fiad     = 0x01;
-	*rgad     = 0x04;
+	*rgad     = 0x17;
 	*wrData   = 0x00;
 	*isWR     = 0;
 	*isMDIOreq     = 1;
@@ -49,7 +49,7 @@ int phy_init()
 	udelay(100);
 
 	*fiad     = 0x01;
-	*rgad     = 0x05;
+	*rgad     = 0x17;
 	*wrData   = 0x00;
 	*isWR     = 0;
 	*isMDIOreq     = 1;
