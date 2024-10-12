@@ -249,7 +249,7 @@ ExampleRocketSystem i_rocket(
 
 
 always @( posedge mdio_mdc ) begin
-  mdio_mdi <= $random;
+  mdio_mdi <= #10 $random;
 end
 
 

@@ -112,7 +112,7 @@ with MDIOTransCtrl{
   }
 
   io.resp.valid := respValid
-  io.resp.bits.data  := shiftReg(15,0)
+  io.resp.bits.data  := shiftReg(16,1) //shift one more bits
 
 
 }

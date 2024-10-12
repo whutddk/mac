@@ -19,16 +19,24 @@ int phy_init()
 
 
 	*fiad     = 0x01;
-	*rgad     = 0x17;
+	*rgad     = 0x04;
 	*wrData   = 0x00;
 	*isWR     = 0;
 	*isMDIOreq     = 1;
 
 	udelay(100);
 	uart_sendByte(0xaa );
-	uart_sendByte( (uint8_t) (*rdData) );
+	uart_sendByte( (uint8_t) ((*rdData & 0xff00) >> 8) );
+	uart_sendByte( (uint8_t) (*rdData & 0x00ff) );
 	uart_sendByte(0x55 );
 
+	// uint8_t rdData0;
+	// uint8_t rdData1;
+
+	// rdData0 = (uint8_t) ((*rdData & 0xff00) >> 8);
+	// rdData1 = (uint8_t) (*rdData & 0x00ff);
+	// *wrData   = rdData0;
+	// *wrData   = rdData1;
 
 	*fiad     = 0x01;
 	*rgad     = 0x17;
@@ -41,15 +49,23 @@ int phy_init()
 	udelay(100);
 
 	*fiad     = 0x01;
-	*rgad     = 0x17;
+	*rgad     = 0x05;
 	*wrData   = 0x00;
 	*isWR     = 0;
 	*isMDIOreq     = 1;
 
 	udelay(100);
+
+
 	uart_sendByte(0xaa );
-	uart_sendByte( (uint8_t) (*rdData) );
+	uart_sendByte( (uint8_t) ((*rdData & 0xff00) >> 8) );
+	uart_sendByte( (uint8_t) (*rdData & 0x00ff) );
 	uart_sendByte(0x55 );
+
+	// rdData0 = (uint8_t) ((*rdData & 0xff00) >> 8);
+	// rdData1 = (uint8_t) (*rdData & 0x00ff);
+	// *wrData   = rdData0;
+	// *wrData   = rdData1;
 
 	return 0;
 

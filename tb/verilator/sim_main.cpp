@@ -176,11 +176,11 @@ static void init_and_clock(){
 		top->CLK = 0;
 	}
 
-	if ( main_time % 100 == 10 ) {
+	if ( main_time % 30 == 5 ) {
 		top->tclk = 1;
 		top->rclk = 1;
 
-	} else if ( main_time % 100 == 60 ) {
+	} else if ( main_time % 30 == 17 ) {
 		top->tclk = 0;
 		top->rclk = 0;
 
