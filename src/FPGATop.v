@@ -301,20 +301,31 @@ ExampleRocketSystem i_rocketChip(
   .io_mdio_mdc(macIO_mdc),
   .io_mdio_mdo(mdo),
   .io_mdio_mdoEn(mdoEn),
+  
+  /*
+  .io_gmii_tx_txd(txdata),
+  .io_gmii_tx_tx_en(txen),
+  .io_gmii_tx_tx_er(),
+  .io_gmii_rx_rxd(txdata),
+//    .io_gmii_rx_rx_dv(macIO_mrxdv_pad_i),
+  .io_gmii_rx_rx_dv(txen),
+  .io_gmii_rx_rx_er(macIO_mrxerr_pad_i),
+  .io_gmii_tclk(macIO_mtx_clk_pad_i),
+  .io_gmii_rclk(macIO_mtx_clk_pad_i)
+  */
+
   .io_gmii_tx_txd(macIO_mtxd_pad_o),
   .io_gmii_tx_tx_en(macIO_mtxen_pad_o),
   .io_gmii_tx_tx_er(),
   .io_gmii_rx_rxd({4'b0,macIO_mrxd_pad_i}),
-//    .io_gmii_rx_rx_dv(macIO_mrxdv_pad_i),
-  .io_gmii_rx_rx_dv(1'b0),
+  .io_gmii_rx_rx_dv(macIO_mrxdv_pad_i),
+//  .io_gmii_rx_rx_dv(1'b0),
   .io_gmii_rx_rx_er(macIO_mrxerr_pad_i),
   .io_gmii_tclk(macIO_mtx_clk_pad_i),
   .io_gmii_rclk(macIO_mrx_clk_pad_i)
 
 
 );
-
-
 
 
 
