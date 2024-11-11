@@ -24,11 +24,11 @@ int phy_init()
 	*isWR     = 0;
 	*isMDIOreq     = 1;
 
-	udelay(100);
-	uart_sendByte(0xaa );
-	uart_sendByte( (uint8_t) ((*rdData & 0xff00) >> 8) );
-	uart_sendByte( (uint8_t) (*rdData & 0x00ff) );
-	uart_sendByte(0x55 );
+	// udelay(100);
+	// uart_sendByte(0xaa );
+	// uart_sendByte( (uint8_t) ((*rdData & 0xff00) >> 8) );
+	// uart_sendByte( (uint8_t) (*rdData & 0x00ff) );
+	// uart_sendByte(0x55 );
 
 	// uint8_t rdData0;
 	// uint8_t rdData1;
@@ -46,13 +46,13 @@ int phy_init()
 
 	udelay(200);
 
-	*fiad     = 0x01;
-	*rgad     = 0x00;
-	*wrData    = (*rdData | 0x4000);
-	*isWR      = 1;
-	*isMDIOreq = 1;
+	// *fiad     = 0x01;
+	// *rgad     = 0x00;
+	// *wrData    = (*rdData | 0x4000);
+	// *isWR      = 1;
+	// *isMDIOreq = 1;
 
-	udelay(200);
+	// udelay(200);
 
 
 
@@ -75,10 +75,10 @@ int phy_init()
 	udelay(200);
 
 
-	uart_sendByte(0xaa );
-	uart_sendByte( (uint8_t) ((*rdData & 0xff00) >> 8) );
-	uart_sendByte( (uint8_t) (*rdData & 0x00ff) );
-	uart_sendByte(0x55 );
+	// uart_sendByte(0xaa );
+	// uart_sendByte( (uint8_t) ((*rdData & 0xff00) >> 8) );
+	// uart_sendByte( (uint8_t) (*rdData & 0x00ff) );
+	// uart_sendByte(0x55 );
 
 	// rdData0 = (uint8_t) ((*rdData & 0xff00) >> 8);
 	// rdData1 = (uint8_t) (*rdData & 0x00ff);
@@ -124,9 +124,9 @@ void udelay(uint64_t us)
 
 int main()
 {
-	uart_init();
+	// uart_init();
 
-	print_uart("Hello World, RocketChip is now Waking Up!\r\n");
+	// print_uart("Hello World, RocketChip is now Waking Up!\r\n");
 
 	// gpio_write( 0xfffffffa );
 
@@ -137,12 +137,14 @@ int main()
 	volatile uint32_t *trigger     = (uint32_t*)( 0x30000000 + (7 << 3) );
 	volatile uint32_t *srcAddr     = (uint32_t*)( 0x30000000 + (3 << 3) );
 	volatile uint32_t *txLen       = (uint32_t*)( 0x30000000 + (4 << 3) );
+	volatile uint32_t *isPadding   = (uint32_t*)( 0x30000000 + (0 << 3) );
 
-	static const uint8_t gdata[] = {
+	static const uint8_t gdata[4*16] = {
 					0xff, 0xff, 0xff, 0xff,
 					0xff, 0xff, 0x00, 0x01,
+
 					0x02, 0x03, 0x04, 0x05,
-					0x80, 0x00, 0x00, 0x01,
+					0x08, 0x00, 0x00, 0x01,
 					0x02, 0x03, 0x04, 0x05,
 					0x06, 0x07, 0x08, 0x09,
 					0x0a, 0x0b, 0x0c, 0x0d,
@@ -160,6 +162,20 @@ int main()
 					0x3a, 0x3b, 0x3c, 0x3d,
 					0x3e, 0x3f};
 
+					// 0xff, 0xff, 0xff, 0xff,
+					// 0xff, 0xff, 0x9a, 0x60,
+					// 0x82, 0x9d, 0x3b, 0x8b,
+					// 0x08, 0x00, 0x45, 0x00,
+					// 0x00, 0x24, 0x71, 0x9d,
+					// 0x00, 0x00, 0x80, 0x11,
+					// 0x00, 0x00, 0xa9, 0xfe,
+					// 0x81, 0xd2, 0xa9, 0xfe,
+					// 0xff, 0xff, 0xd4, 0x23,
+					// 0x05, 0xfe, 0x00, 0x10,
+					// 0xb1, 0x67, 0x54, 0x43,
+					// 0x46, 0x32, 0x04, 0x00,
+					// 0x00, 0x00};
+
 	// for ( i = 0; i < 255; i++ )
 	// {
 	// 	*(txBuf+i) = data;
@@ -167,9 +183,11 @@ int main()
 	// }
 
 	phy_init();
-	udelay(50);
+	// udelay(50);
 
+	*isPadding = 1;
 	*srcAddr = gdata;
+	*txLen = 16;
 	*trigger = 1;
 
 	// volatile uint32_t *DBG_END = (uint32_t*)( 0x60000010 );
