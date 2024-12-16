@@ -34,22 +34,22 @@ object testModule extends App {
       ChiselGeneratorAnnotation(() => { new GmiiRx_AxisTx })
     ))
 
-  (new chisel3.stage.ChiselStage).execute( Array("--target-dir", "generated/ethernet/", "-E", "verilog" ) ++ args, Seq(
-    ChiselGeneratorAnnotation(() => { new Core })
-  ))  
+  // (new chisel3.stage.ChiselStage).execute( Array("--target-dir", "generated/ethernet/", "-E", "verilog" ) ++ args, Seq(
+  //   ChiselGeneratorAnnotation(() => { new Core })
+  // ))  
 
-  (new chisel3.stage.ChiselStage).execute( Array("--target-dir", "generated/ethernet/", "-E", "verilog" ) ++ args, Seq(
-    ChiselGeneratorAnnotation(() => { new MDIOCtrl })
-  ))  
+  // (new chisel3.stage.ChiselStage).execute( Array("--target-dir", "generated/ethernet/", "-E", "verilog" ) ++ args, Seq(
+  //   ChiselGeneratorAnnotation(() => { new MDIOCtrl })
+  // ))  
 
-  val cfg = new NewMacCfg
+  // val cfg = new NewMacCfg
 
-  (new chisel3.stage.ChiselStage).execute( Array("--show-registrations", "--full-stacktrace", "--target-dir", "generated/ethernet/", "-E", "verilog") ++ args, Seq(
-      ChiselGeneratorAnnotation(() => {
-    val soc = LazyModule(new MacTile()(cfg))
-    soc.module
-  })
-  ))
+  // (new chisel3.stage.ChiselStage).execute( Array("--show-registrations", "--full-stacktrace", "--target-dir", "generated/ethernet/", "-E", "verilog") ++ args, Seq(
+  //     ChiselGeneratorAnnotation(() => {
+  //   val soc = LazyModule(new MacTile()(cfg))
+  //   soc.module
+  // })
+  // ))
 
 // import Wrapeer._
 

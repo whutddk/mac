@@ -39,7 +39,7 @@ trait WithAccMacMix { this: BaseSubsystem =>
     beatBytes = 32 / 8
   )))
 // AXI4Fragmenter() :=
-  pbus.coupleTo("accMac_slv") { axiDataNode := AXI4UserYanker() := AXI4IdIndexer(4) :=  AXI4Deinterleaver(32/8) := TLToAXI4() := _ }
+  pbus.coupleTo("accMac_slv") { axiDataNode := AXI4UserYanker() := AXI4IdIndexer(4) :=  AXI4Deinterleaver(32/8) := TLToAXI4() := TLFragmenter(4, pbus.blockBytes, holdFirstDeny = true) := TLWidthWidget(pbus.beatBytes) := _ }
   pbus.coupleTo("accMac_cfg")  { apbcfgNode := TLToAPB() := TLFragmenter(pbus) := _ }
 
 

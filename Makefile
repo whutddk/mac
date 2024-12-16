@@ -10,7 +10,9 @@ compile:
 	cp ./rocket-chip/vsim/generated-src/freechips.rocketchip.system.UserNewMacConfig/plusarg_reader.v ./generated/plusarg_reader.v
 	cp ./rocket-chip/vsim/generated-src/freechips.rocketchip.system.UserNewMacConfig.v ./generated/UserNewMacConfig.v
 	cp ./rocket-chip/vsim/generated-src/freechips.rocketchip.system.UserNewMacConfig.behav_srams.v ./generated/behav_srams.v
-# 	sbt "test:runMain test.testModule"
+
+mdl:
+	sbt "test:runMain test.testModule"
 
 
 # ef: 
